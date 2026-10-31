@@ -1,6 +1,6 @@
 namespace Workflow.Domain.Enums;
 
-// workflow-module.md §5.6 — Any: 1 người bấm là bước xong. All: mọi Approver đều phải bấm.
+// Any: one approval completes the step. All: every Approver must approve.
 public enum ApproverMode
 {
     Any = 1,

@@ -17,8 +17,7 @@ namespace Attendance.Application.Dtos.Employees
         // adjust their own accumulation later (see Attendance.OTForm/Employee adjust-accumulation).
         public string? UserName { get; set; }
 
-        // Nullable (2026-08-08) — bắt buộc/cấm tuỳ theo TerminalLevel của JobTitleId, validate ở
-        // EmployeeService.ValidateOrganizationAssignmentAsync (xem docs §Cây chức vụ).
+        // Required or forbidden depending on the JobTitle's TerminalLevel (EmployeeService.ValidateOrganizationAssignmentAsync).
         public int? GroupId { get; set; }
 
         public int? DepartmentId { get; set; }
@@ -28,8 +27,7 @@ namespace Attendance.Application.Dtos.Employees
 
         public int? JobTitleId { get; set; }
 
-        // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — nullable, để trống = dùng mặc định chung
-        // (2026-08-26, xem Employee.cs).
+        // Null = use the global default.
         [Range(1, 744, ErrorMessage = "Giới hạn giờ OT/tháng riêng phải từ 1 đến 744")]
         public decimal? CustomMonthlyOtHourLimit { get; set; }
 

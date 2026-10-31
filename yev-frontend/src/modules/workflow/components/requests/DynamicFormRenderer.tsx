@@ -32,7 +32,7 @@ export function parseOptions(json: string | null): OptionRow[] {
             return parsed.map((x) => ({ value: String(x.value ?? ""), label: String(x.label ?? "") }));
         }
     } catch {
-        // OptionsJson hỏng — coi như rỗng, không chặn render cả form.
+        // Malformed OptionsJson: treat as empty rather than breaking the whole form.
     }
     return [];
 }
@@ -54,10 +54,8 @@ export function toDateTimeLocalValue(iso: string | null | undefined): string {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Đánh giá điều kiện client-side (workflow-module.md §5.3) — CHỈ để UX, BE luôn đánh giá lại lúc nộp
-// (WorkflowRequestService.EvaluateConditions/ValidateAndNormalizeDataJsonAsync), không tin FE. Mirror
-// đúng thuật toán BE: gom theo TargetFieldId rồi theo Effect, trong 1 Effect gom tiếp theo LogicGroup
-// (AND trong group, OR giữa group), Show/Hide/Require/ReadOnly đánh giá ĐỘC LẬP nhau.
+// UX only, BE re-evaluates on submit. Mirrors BE: group by target then effect, AND within a LogicGroup,
+// OR across groups; Show/Hide/Require/ReadOnly are evaluated independently.
 export interface FieldFlags {
     visible: boolean;
     required: boolean;
@@ -114,8 +112,7 @@ function evaluateSingleCondition(condition: FormFieldConditionDto, fieldsByKey: 
     }
 }
 
-// Exported để DocumentFormRenderer.tsx (chế độ tài liệu, workflow-module.md §1.5) dùng chung đúng 1
-// thuật toán — không chép lại, tránh lệch dần với BE.
+// Exported so DocumentFormRenderer shares the exact algorithm and can't drift from BE.
 export function evaluateFlags(fields: FormFieldDto[], conditions: FormFieldConditionDto[], data: Record<string, JsonValue>): Map<number, FieldFlags> {
     const fieldsById = new Map(fields.map((f) => [f.id, f]));
     const result = new Map<number, FieldFlags>();
@@ -149,9 +146,7 @@ export function evaluateFlags(fields: FormFieldDto[], conditions: FormFieldCondi
     return result;
 }
 
-// Dựng màn điền đơn động theo FormFields sống (Draft, trước khi FormSchemaJson tồn tại) — dùng chung
-// cho mọi loại đơn, đúng tinh thần cốt lõi của module (workflow-module.md §0: "không cần lập trình
-// viên cho từng loại đơn mới"). 14 FieldDataType, quy ước JSON theo §5.8.
+// Renders from live FormFields (Draft, before FormSchemaJson exists) for any form type.
 export default function DynamicFormRenderer({ fields, conditions, value, onChange, disabled, employeeOptions, orgUnitOptions }: DynamicFormRendererProps) {
     const t = useTranslations("Workflow.WorkflowRequest");
     const sortedFields = useMemo(() => [...fields].sort((a, b) => a.sortOrder - b.sortOrder), [fields]);

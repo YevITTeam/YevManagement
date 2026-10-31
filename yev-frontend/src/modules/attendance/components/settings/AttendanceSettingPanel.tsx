@@ -38,10 +38,8 @@ const fieldClassName =
 const numberFieldClassName = `${fieldClassName} w-20`;
 const unitSuffixClassName = "text-xs text-[#8a8f94]";
 
-// "Cấu hình" tab of the Danh mục screen. No permission check here: the whole tab already sits behind
-// Attendance.Department.Create (Admin only), unlike the CRUD lists whose screens are open wider.
-// Not a List (no table, no "Thêm mới") but implements ListHandle so CategoryManagement.tsx can drive
-// the shared "Làm mới" button — openCreate() is a no-op.
+// No permission check: the whole settings tab is already Admin-only. Implements ListHandle only so
+// CategoryManagement can drive the shared refresh button; openCreate() is a no-op.
 const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function AttendanceSettingPanel(
     { onLoadingChange },
     ref

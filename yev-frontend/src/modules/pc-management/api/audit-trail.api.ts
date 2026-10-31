@@ -2,8 +2,7 @@ import { api } from "@/lib/client";
 import type { AuditTrailDto } from "@/modules/pc-management/types/audit-trail.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Route /AuditTrail — docs/asset-module.md §4 Chỉ đọc, ghi tự động ở BE mỗi lần Create/Update/
-// Delete/Restore bất kỳ entity Asset nào. Permission Asset.AuditTrail.View (Admin gán riêng).
+// Read-only; BE writes entries on every Asset entity create/update/delete/restore. Needs Asset.AuditTrail.View.
 const ENDPOINTS = {
     AUDIT_TRAIL: {
         getAuditTrailPageNation: "/AuditTrail/grid-list",
@@ -16,8 +15,7 @@ export interface GetAuditTrailPageNationParams {
     pageSize?: number;
     tableName?: string;
     recordId?: number;
-    // Tìm gần đúng (contains) theo tên đối tượng bị tác động (docs §7b.1) — ô search "tìm theo
-    // mã máy / IP".
+    // Contains-match on the affected record name.
     recordName?: string;
     action?: string;
     changedBy?: string;
@@ -44,8 +42,7 @@ export const AuditTrailApi = {
         const response = await api.get<ApiResponseWithPageNation<AuditTrailDto>>(url);
         return response.data;
     },
-    // Dùng cho tab "Lịch sử" trong màn chi tiết 1 bản ghi (vd 1 Device cụ thể) — không phân trang,
-    // mới nhất trước (docs §7b.2).
+    // For a single record's History tab: unpaged, newest first.
     getAuditTrailByRecord: async (tableName: string, recordId: number) => {
         const query = new URLSearchParams({ tableName, recordId: String(recordId) });
         const response = await api.get<ApiResponse<AuditTrailDto[]>>(

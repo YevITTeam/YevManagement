@@ -56,45 +56,25 @@ namespace CompanySystem.HostApi.Configurations
             );
 
 
-            // Hàng đợi tác vụ nền dùng chung (vd gửi email duyệt OT sau khi Create/Approve đã commit
-            // xong DB) — tên "Queue" không khớp quy ước Repository/UnitOfWork/Service nên Scrutor
-            // không tự quét, phải đăng ký tay (cùng lý do với ILlmChatClient bên dưới). Singleton vì
-            // Channel phải là 1 instance DUY NHẤT dùng chung giữa mọi request (producer) và
-            // QueuedHostedService (consumer, cũng chạy Singleton) — xem Program.cs.
+            // Registered manually (name doesn't match the Scrutor scan); singleton so producers and QueuedHostedService share one channel.
             services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 
-            // Register IHttpContextAccessor
             services.AddHttpContextAccessor();
             // MyClaimsTransformation caches its per-request reverse-DNS lookup here (see the class for why).
             services.AddMemoryCache();
             services.AddSingleton<IAuthSnapshotCache, AuthSnapshotCache>();
             services.AddScoped<IClaimsTransformation, MyClaimsTransformation>();
 
-            // AI Chat -> LM Studio typed HttpClient (docs/docs-be/asset-module.md §1.18). Not picked up by the
-            // Scrutor scan above (class name ends in "Client", not Repository/UnitOfWork/Service) —
-            // needs BaseAddress/Timeout, so it's registered explicitly instead.
-            // ONE registration serves every module that runs a tool-calling chat (Asset AI Chat +
-            // Attendance AI Chat) — the client lives in Shared.* and takes each module's tool
-            // catalogue as a parameter, so there is nothing module-specific to register twice.
-            // Was IOllamaChatClient/OllamaChatClient/AiChatSettings:OllamaBaseUrl before the internal
-            // AI server moved from Ollama to LM Studio (2026-08-24).
+            // Registered explicitly: the Scrutor scan skips "*Client" names and this needs BaseAddress/Timeout.
+            // One registration serves every module's tool-calling chat.
             services.AddHttpClient<ILlmChatClient, LmStudioChatClient>((_, client) =>
             {
                 var baseUrl = configuration["AiChatSettings:LmStudioBaseUrl"] ?? "http://localhost:1234/v1";
-                // LM Studio's OpenAI-compatible base URL carries a real path segment ("/v1") that must
-                // be PRESERVED, not replaced — HttpClient.BaseAddress + a relative request URI only
-                // appends correctly when BaseAddress ends with "/"; without the trailing slash, .NET's
-                // URI combining rules replace the last segment instead (the request in
-                // LmStudioChatClient relies on this by using a relative, no-leading-slash URI).
+                // Trailing slash keeps the "/v1" segment; without it relative URIs replace the last segment.
                 if (!baseUrl.EndsWith('/')) baseUrl += "/";
                 client.BaseAddress = new Uri(baseUrl);
-                // HttpClient.Timeout áp dụng cho TOÀN BỘ thời gian đọc xong response, không chỉ tới lúc
-                // nhận header đầu — dù LmStudioChatClient dùng HttpCompletionOption.ResponseHeadersRead,
-                // 1 câu hỏi cần tới 3 vòng gọi tool (mỗi vòng lại 1 SendAsync riêng, được cấp lại đủ
-                // ngần này giây) vẫn có thể vượt mốc cũ 120s ở 1 vòng nếu model cục bộ trả lời dài hoặc
-                // máy chạy LM Studio đang tải nặng — khi đó HttpClient tự hủy nửa chừng, FE nhận lỗi kết
-                // nối dù model vẫn đang chạy bình thường, đúng kiểu "lúc được lúc không" (2026-07-27,
-                // nâng + cho cấu hình qua AiChatSettings:TimeoutSeconds để tinh chỉnh không cần build lại).
+                // Timeout covers reading the whole response and each tool round gets it anew; long local-model answers
+                // exceeded 120s, so it is higher and configurable.
                 var timeoutSeconds = configuration.GetValue<int?>("AiChatSettings:TimeoutSeconds") ?? 300;
                 client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
             });

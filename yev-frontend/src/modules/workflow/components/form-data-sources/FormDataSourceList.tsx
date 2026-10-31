@@ -84,8 +84,7 @@ export default function FormDataSourceList() {
     const handleSubmitForm = async (values: FormDataSourceFormValues) => {
         setIsSaving(true);
         try {
-            // connectionName/sqlText chỉ có ý nghĩa với SourceKind=SqlQuery — BE chặn tạo/sửa loại
-            // này ở Pha 2A (workflow-module.md §3.2) nên FE luôn gửi null cho cả hai.
+            // connectionName/sqlText only apply to SqlQuery, which BE refuses to create/update, so always null.
             const payload = { ...values, connectionName: null, sqlText: null };
             if (formMode === "create") {
                 await FormDataSourceApi.createFormDataSource(payload);

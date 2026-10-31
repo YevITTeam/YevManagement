@@ -6,8 +6,7 @@ import { ipStatusDotClasses, ipStatusLabels } from "./ip-status";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 
-// docs/asset-module.md §4 — PUT /api/IpAddress/bulk-status: status chỉ nhận 0/1,
-// updateNote=false (mặc định) giữ nguyên note riêng từng IP.
+// Status accepts only 0/1; updateNote=false keeps each IP's own note.
 export interface IpBulkStatusFormValues {
     status: "0" | "1";
     updateNote: boolean;

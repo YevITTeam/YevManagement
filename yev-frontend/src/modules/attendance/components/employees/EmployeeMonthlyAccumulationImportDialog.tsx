@@ -18,11 +18,7 @@ interface EmployeeMonthlyAccumulationImportDialogProps {
     exportFilter: EmployeeExportFilter;
 }
 
-// Import lũy kế OT theo tháng, tổng quát cho MỌI Phòng ban (2026-09-03) — KHÔNG có bước Preview/Confirm
-// riêng (chỉ điều chỉnh CHÊNH LỆCH lũy kế của nhân viên đã tồn tại, cùng cơ chế
-// ProductionEmployeeImportDialog "Áp dụng lũy kế" nhưng tự đọc file thay vì tái dùng rows đã Preview).
-// Permission Attendance.EmployeeAccumulation.Import (đã có sẵn, tự động cấp cho Người phụ trách BẤT KỲ
-// Phòng ban nào) — gate hiển thị nút mở dialog này ở EmployeeList.tsx.
+// No preview step: it only adjusts the accumulation delta of existing employees, reading the file directly.
 export default function EmployeeMonthlyAccumulationImportDialog({
     isOpen,
     onClose,

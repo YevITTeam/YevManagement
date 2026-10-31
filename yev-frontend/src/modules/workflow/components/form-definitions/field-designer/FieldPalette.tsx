@@ -29,8 +29,6 @@ function PaletteItem({ dataType }: { dataType: number }) {
     );
 }
 
-// Bảng chọn kiểu ô — mỗi kiểu là 1 useDraggable riêng, kéo thả thẳng vào FieldCanvas (workflow-module.md
-// §8 Pha 2C — chọn mức tương tác "kéo thẳng từ palette", không phải click-để-thêm).
 export default function FieldPalette() {
     const t = useTranslations("Workflow.FormDefinition");
 

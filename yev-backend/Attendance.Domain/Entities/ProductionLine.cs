@@ -2,11 +2,8 @@ using System.Collections.Generic;
 
 namespace Attendance.Domain.Entities;
 
-// Reference data for khối chuyền (Chế tạo), imported from Thong_Tin_Line_Team.xlsx.
-// Deliberately independent of Department/Group/Employee for now — the relationship
-// between Line/Team/CongDoan and the office org tree has not been decided yet.
-// Team <-> Line is now a real FK (2026-08-21); CongDoan stays a raw string for now —
-// deferred until its relationship is decided (user request: "công đoạn để sau").
+// Imported from Thong_Tin_Line_Team.xlsx; deliberately not linked to the office org tree, and CongDoan stays a raw
+// string until its relationship is decided.
 public partial class ProductionLine
 {
     public int Id { get; set; }

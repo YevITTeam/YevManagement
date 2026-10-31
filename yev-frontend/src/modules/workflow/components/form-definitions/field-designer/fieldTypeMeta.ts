@@ -17,8 +17,7 @@ import {
 } from "lucide-react";
 import { FieldDataType } from "@/modules/workflow/types/form-field.dto";
 
-// Icon + nhãn mặc định cho từng FieldDataType — dùng chung cho palette lẫn từng dòng field trong
-// canvas, để 1 kiểu ô luôn hiện cùng 1 icon ở mọi nơi.
+// Shared by palette and canvas rows so a type always shows the same icon.
 export const FIELD_TYPE_META: Record<number, { icon: LucideIcon; labelKey: string }> = {
     [FieldDataType.Text]: { icon: Type, labelKey: "typeText" },
     [FieldDataType.TextArea]: { icon: AlignLeft, labelKey: "typeTextArea" },

@@ -1,5 +1,4 @@
-// Danh sách 53 mã permission là cố định (seed qua migration BE) — FE chỉ đọc, không tạo/sửa/xoá Permission.
-// Xem docs/identity-module.md §6
+// Permission codes are fixed (seeded by BE migrations); FE is read-only.
 export interface PermissionDto {
     id: number;
     code: string;
@@ -7,8 +6,7 @@ export interface PermissionDto {
     description: string;
 }
 
-// GET /api/Permission/all trả nhóm 2 cấp Module > Entity (2026-07-11, đổi từ mảng phẳng).
-// Các endpoint permission khác (getByRole, getUserOverrides, getUserEffective...) vẫn trả PermissionDto[] phẳng như cũ.
+// Only GET /api/Permission/all is grouped Module > Entity; other permission endpoints return flat PermissionDto[].
 export interface PermissionEntityGroupDto {
     entity: string;
     permissions: PermissionDto[];
@@ -19,23 +17,19 @@ export interface PermissionModuleGroupDto {
     entities: PermissionEntityGroupDto[];
 }
 
-// Override permission riêng theo User — đè lên permission suy ra từ Role của họ.
-// isGranted=false: đang bị THU HỒI riêng dù Role có cấp. isGranted=true: đang được CẤP THÊM riêng dù Role không cấp.
-// Xem docs/identity-module.md §6
+// Per-user override on top of role permissions: isGranted=false revokes, true grants extra.
 export interface UserPermissionOverrideDto {
     permissionId: number;
     code: string;
     module: string;
     description: string;
     isGranted: boolean;
-    // true = dòng này do Attendance (JobTitlePermission) tự động cấp theo Chức vụ đang giữ, KHÔNG
-    // phải Admin cấp tay — FE loại các dòng này khỏi payload PUT để tránh "chiếm" chúng thành override
-    // tay mỗi khi Admin lưu màn này cho lý do khác (2026-08-10, xem UserPermissionOverrideManager.tsx).
+    // Auto-granted by the Attendance job title; FE excludes these from the PUT payload so saving
+    // doesn't convert them into manual overrides.
     isAutoGranted: boolean;
 }
 
-// body PUT /api/Permission/user/{userId} — TOÀN BỘ override sau cùng (thay thế hết override cũ).
-// 1 permission id không được xuất hiện ở cả 2 mảng cùng lúc (BE trả 400).
+// Full replacement set; an id in both arrays gets a 400.
 export interface UpdateUserPermissionOverridesDto {
     grantPermissionIds: number[];
     denyPermissionIds: number[];

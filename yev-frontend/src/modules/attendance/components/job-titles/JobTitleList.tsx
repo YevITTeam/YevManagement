@@ -40,11 +40,8 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
     const [deletingJobTitle, setDeletingJobTitle] = useState<JobTitleDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    // Kéo-thả đổi Cấp độ (RankOrder) — chỉ có ý nghĩa khi đang xem ĐỦ toàn bộ chức vụ active trên 1
-    // trang (không lọc từ khoá, không phân trang), vì lưu thứ tự gửi lên BE nguyên bộ Id đang hiển thị
-    // (xem JobTitleApi.reorderJobTitles/JobTitleService.ReorderAsync — BE validate khớp đúng tập hợp
-    // đang có). Kéo xong CHƯA lưu ngay — đánh dấu dirty, người dùng bấm "Lưu thứ tự" mới gọi API, cùng
-    // pattern với ApprovalStepManager.tsx (isDeptDirty/isGroupDirty).
+    // Reorder only when every active title is shown (no keyword, single page): saving sends the full id set,
+    // which BE validates against the existing titles.
     const canReorder = !appliedKeyword && !hasPreviousPage && !hasNextPage && jobTitles.length > 1;
     const [isOrderDirty, setIsOrderDirty] = useState(false);
     const [isSavingOrder, setIsSavingOrder] = useState(false);

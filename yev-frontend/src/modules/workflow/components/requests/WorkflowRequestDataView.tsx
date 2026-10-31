@@ -5,7 +5,7 @@ import { FieldDataType } from "@/modules/workflow/types/form-field.dto";
 interface WorkflowRequestDataViewProps {
     schema: FormSchemaSnapshot;
     data: Record<string, JsonValue>;
-    /** true = layout in (không cần khung viền/màu nền, chỉ chữ) */
+    /** true = print layout: no borders/backgrounds, text only */
     printMode?: boolean;
 }
 
@@ -20,14 +20,13 @@ function parseOptions(json: string | null): OptionRow[] {
         const parsed = JSON.parse(json);
         if (Array.isArray(parsed)) return parsed.map((x) => ({ value: String(x.value ?? ""), label: String(x.label ?? "") }));
     } catch {
-        // bỏ qua, coi như không có option
+        // ignore, treat as no options
     }
     return [];
 }
 
-// print: bắt buộc kèm md: — trang in dùng bề rộng @page (A4 ~718px ở 96dpi) để tính media query, hẹp
-// hơn breakpoint `md` (768px) nên `md:col-span-*` không kích hoạt lúc in, khiến mọi field rớt về
-// `col-span-3` (1 cột) dù trên màn hình vẫn lên đúng 2-3 cột — vá bằng cách ép lại rõ ràng cho print.
+// print: needs md: too because the print width (A4 ~718px) is below the md breakpoint,
+// so md:col-span-* never applies when printing.
 const COLUMN_SPAN_CLASS: Record<number, string> = {
     1: "col-span-3 md:col-span-1 print:col-span-1",
     2: "col-span-3 md:col-span-2 print:col-span-2",
@@ -83,14 +82,9 @@ function formatValue(dataType: number, raw: JsonValue, optionsJson: string | nul
     }
 }
 
-// Hiển thị TĨNH dữ liệu 1 đơn đã nộp — dùng cho trang chi tiết (Submitted/InProgress/Approved/...) và
-// bản in (§5.7). KHÔNG cần đánh giá lại điều kiện ẩn/hiện: field bị Hide lúc nộp đã có DataJson = null
-// sẵn (WorkflowRequestService.ValidateAndNormalizeDataJsonAsync), field null hiện "—" nên tự nhiên
-// không nổi bật, không cần logic ẩn thêm ở đây.
+// Hidden fields were already nulled on submit, so no condition re-evaluation is needed here.
 export default function WorkflowRequestDataView({ schema, data, printMode }: WorkflowRequestDataViewProps) {
-    // Chế độ tài liệu (workflow-module.md §1.5) — layout đã snapshot lúc nộp, giữ y hệt file Word gốc.
-    // Thay mỗi <span data-field-key> bằng giá trị đã điền, KHÔNG cần lưới/ColumnSpan vì vị trí đã nằm
-    // sẵn trong chính layoutHtml.
+    // Document mode: layout snapshotted at submit; each <span data-field-key> is replaced with its value.
     if (schema.layoutHtml) {
         const fieldsByKey = new Map(schema.fields.map((f) => [f.fieldKey, f]));
         const options: HTMLReactParserOptions = {

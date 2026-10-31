@@ -20,7 +20,7 @@ const ENDPOINTS = {
 } as const;
 
 export const ProductionEmployeeImportApi = {
-    // multipart/form-data — field "file". Chỉ đọc, không ghi DB.
+    // Read-only, no DB writes.
     previewImport: async (file: File) => {
         const formData = new FormData();
         formData.append("file", file);
@@ -30,7 +30,7 @@ export const ProductionEmployeeImportApi = {
         );
         return response.data;
     },
-    // Gửi lại NGUYÊN "rows" từ Preview — BE tự re-validate lại từ đầu.
+    // Re-send the preview rows unchanged; BE re-validates from scratch.
     confirmImport: async (rows: ProductionEmployeeImportRowDto[]) => {
         const response = await api.post<ApiResponse<ProductionEmployeeImportConfirmResultDto>>(
             ENDPOINTS.PRODUCTION_EMPLOYEE_IMPORT.confirm,
@@ -38,8 +38,7 @@ export const ProductionEmployeeImportApi = {
         );
         return response.data;
     },
-    // Bước riêng, tách khỏi confirmImport — chỉ ai có quyền Attendance.EmployeeAccumulation.Import mới
-    // gọi được (đụng lũy kế OT ảnh hưởng lương).
+    // Separate step gated by Attendance.EmployeeAccumulation.Import, since accumulation affects payroll.
     applyAccumulation: async (year: number, month: number, rows: ProductionEmployeeImportRowDto[]) => {
         const response = await api.post<ApiResponse<ProductionEmployeeAccumulationResultDto>>(
             ENDPOINTS.PRODUCTION_EMPLOYEE_IMPORT.applyAccumulation,

@@ -2,8 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Attendance.Application.Dtos.ProductionEmployeeImports
 {
-    // Bước riêng, tách khỏi Confirm cấu trúc (2026-08-27, theo yêu cầu người dùng — đụng lũy kế OT là
-    // dữ liệu ảnh hưởng lương nên phải cho chọn tay Tháng/Năm áp dụng, không tự suy theo ngày hôm nay).
+    // Separate from structure Confirm: accumulation affects payroll, so the target month/year is chosen explicitly.
     public class ApplyProductionEmployeeAccumulationDto
     {
         [Required(ErrorMessage = "Năm áp dụng không được để trống")]

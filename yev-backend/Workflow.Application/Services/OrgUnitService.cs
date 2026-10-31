@@ -61,8 +61,7 @@ namespace Workflow.Application.Services
                 predicate: x => !x.IsDeleted,
                 selector: x => new { x.Id, x.ParentId })).ToDictionary(x => x.Id, x => x.ParentId);
 
-            // Nạp kèm "ai đang giữ chức gì" ngay trong 1 lần gọi cây, tránh người dùng phải rời màn
-            // cây sang màn Nhân sự chỉ để xem — chỉ tính nhân sự còn hoạt động (workflow-module.md §10).
+            // Members loaded with the tree so admins see who holds which position; active employees only.
             var memberRows = await _unitOfWork.EmployeeOrgUnits.FindWithIncludesAsync(
                 x => !x.IsDeleted && !x.Employee.IsDeleted && x.Employee.IsActive,
                 x => x.Employee, x => x.JobTitle!);
@@ -241,7 +240,6 @@ namespace Workflow.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // Chặn việc kéo-thả biến 1 đơn vị con thành cha của chính tổ tiên nó (vòng lặp trong cây).
         private static void GuardAgainstCycle(IReadOnlyDictionary<int, OrgUnit> unitsById, int movingId, int newParentId)
         {
             var cursor = newParentId;

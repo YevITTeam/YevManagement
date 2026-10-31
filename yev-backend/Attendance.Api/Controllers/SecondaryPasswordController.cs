@@ -16,7 +16,7 @@ namespace Attendance.Api.Controllers
             _secondaryPasswordService = secondaryPasswordService;
         }
 
-        // Mỗi user xem trạng thái mật khẩu cấp 2 của CHÍNH mình — KHÔNG bao giờ trả hash/plaintext.
+        // Caller's own status only; never returns the hash or plaintext.
         [RequirePermission("Attendance.SecondaryPassword.Update")]
         [HttpGet("me")]
         public async Task<ActionResult<ApiResponse<SecondaryPasswordStatusDto>>> GetMine()
@@ -25,9 +25,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Đăng ký/cập nhật mật khẩu cấp 2 của CHÍNH mình — KHÔNG áp dụng ngay: gửi email xác nhận cho
-        // chính người gọi, chỉ có hiệu lực sau khi bấm xác nhận (xem 2 action "confirm" bên dưới) —
-        // chống trường hợp ai đó chiếm phiên đăng nhập rồi đổi mật khẩu cấp 2 hộ.
+        // Not applied immediately: takes effect only after email confirmation, so a hijacked session can't change it.
         [RequirePermission("Attendance.SecondaryPassword.Update")]
         [HttpPut("me")]
         public async Task<ActionResult<ApiResponse<bool>>> RequestUpsertMine([FromBody] UpsertSecondaryPasswordDto request)
@@ -36,9 +34,7 @@ namespace Attendance.Api.Controllers
             return Success(true, "Đã gửi email xác nhận thiết lập mật khẩu cấp 2 — vui lòng kiểm tra hộp thư trong 30 phút.");
         }
 
-        // 2 action công khai bên dưới phục vụ trang xác nhận nhỏ mà FE mở khi người dùng bấm link
-        // trong email (KHÔNG cần đăng nhập SPA) — token tự nó là thông tin xác thực duy nhất, cùng
-        // pattern UserSignatureController (xem docs/attendance-module.md).
+        // Public endpoints for the email confirmation link; the token is the only credential.
         [AllowAnonymous]
         [HttpGet("confirm/{token}")]
         public async Task<ActionResult<ApiResponse<SecondaryPasswordConfirmationPreviewDto>>> GetPendingConfirmation(string token)

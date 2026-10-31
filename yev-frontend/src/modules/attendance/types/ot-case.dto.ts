@@ -4,7 +4,6 @@ export interface OtCaseDto {
     description: string | null;
     descriptionJp: string | null;
     requireSignature: boolean;
-    // JobTitleTerminalLevel (docs/attendance-module.md §API) — chỉ 1/2/3 hợp lệ (DepartmentManager/
-    // WorkshopManager/GeneralDirector).
+    // JobTitleTerminalLevel; only 1/2/3 are valid.
     requiredApprovalLevel: number;
 }

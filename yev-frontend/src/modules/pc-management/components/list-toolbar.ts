@@ -1,6 +1,4 @@
-// Cho phép trang wrapper có tab (Quản lý IP, Quản lý phần mềm) đặt nút
-// "Làm mới" / "Thêm mới" cùng hàng với tiêu đề, nhưng vẫn điều khiển được
-// danh sách của tab đang mở.
+// Lets tabbed wrapper pages put refresh/add buttons beside the title while controlling the active tab's list.
 export interface ListHandle {
     refresh: () => void;
     openCreate: () => void;

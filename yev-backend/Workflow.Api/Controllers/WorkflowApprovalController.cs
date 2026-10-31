@@ -6,12 +6,8 @@ using Workflow.Application.Interfaces.Service;
 
 namespace Workflow.Api.Controllers
 {
-    // Duyệt qua email, không đăng nhập (Pha 4C — workflow-module.md §3.3, §6). Token trong URL là
-    // credential DUY NHẤT (Workflow không có secondary password như Attendance) — kênh BỔ SUNG cho 2
-    // nút Duyệt/Từ chối trong app, KHÔNG thay thế. Mirror OtFormController's email-confirm actions
-    // (Attendance) nhưng tách riêng controller thay vì gộp vào WorkflowRequestController vì toàn bộ
-    // action ở đây [AllowAnonymous] — giữ tách bạch rõ ràng "controller nào cần JWT" khỏi
-    // WorkflowRequestController (mọi action còn lại đều sau RequirePermission).
+    // Email approval without login: the URL token is the only credential. Kept separate from
+    // WorkflowRequestController so every [AllowAnonymous] action lives in one controller.
     public class WorkflowApprovalController : WorkflowBaseController
     {
         private readonly IWorkflowRequestService _workflowRequestService;

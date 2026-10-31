@@ -2,11 +2,10 @@ export interface DeviceTypeDto {
     id: number;
     typeCode: string;
     typeName: string;
-    // null = không thuộc phạm vi kiểm tra hằng ngày qua QR (0=Server/1=Network/2=Ups).
+    // null = outside the daily QR check (0=Server/1=Network/2=Ups).
     serverCheckCategory?: number | null;
     serverCheckCategoryText?: string | null;
-    // true = thiết bị loại này phải quét QR khi kiểm tra hằng ngày; false = hệ thống tự ping lúc kết thúc phiên.
+    // false = the system pings it when the session ends instead of a QR scan.
     requiresQrScan?: boolean;
-    // true = loại này được đưa vào đợt kiểm kê thiết bị (asset-module.md §1.22).
     includedInInventory?: boolean;
 }

@@ -1,10 +1,7 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 export const AUTH_TOKEN_KEY = "yev_auth_token";
-// LƯU Ý: chỉ lưu JWT ở đây — bắt buộc vì `fetchClient` là hàm thuần (không phải React component/hook)
-// nên không thể đọc từ React Context. Thông tin user (fullName, roles, permissions...) KHÔNG lưu ở
-// localStorage vì đây là dữ liệu nhạy cảm hơn, có thể đọc được bởi bất kỳ script nào chạy trên trang
-// (XSS, extension độc hại) và tồn tại vô thời hạn trên đĩa — thay vào đó giữ trong React Context
-// (bộ nhớ JS, mất khi đóng tab/reload), xem `src/modules/auth/context/AuthContext.tsx`.
+// Only the JWT lives here because `fetchClient` is not a hook and can't read React Context. User profile data
+// stays in memory (AuthContext) instead of localStorage, which any script (XSS, extensions) can read.
 
 const getStoredToken = (): string | null => {
   if (typeof window === "undefined") {
@@ -46,11 +43,8 @@ const handleUnauthorized = () => {
 
 const WINDOWS_LOGIN_ENDPOINT = "/Auth/windows-login";
 
-// Windows Negotiate/NTLM là handshake gắn với 1 kết nối — nếu nhiều request cùng lúc bị 401 (vd trang
-// Quản lý PC gọi song song device/branch/supplier/device-type...) mà MỖI request tự ý bắn 1 lần
-// `POST /Auth/windows-login` riêng, trình duyệt phải xử lý nhiều handshake NTLM chồng chéo cùng lúc →
-// hay gặp hiện tượng liên tục hiện popup nhập mật khẩu domain mà không bao giờ đăng nhập xong.
-// Dồn toàn bộ lời gọi đồng thời về ĐÚNG 1 request thật duy nhất, các lời gọi khác chỉ đợi ăn theo kết quả.
+// Negotiate/NTLM is a per-connection handshake: concurrent 401s each firing windows-login cause overlapping
+// handshakes and endless domain password popups, so all callers share one in-flight request.
 let pendingWindowsLogin: Promise<unknown> | null = null;
 
 const requestWindowsLogin = async (): Promise<unknown> => {
@@ -89,15 +83,13 @@ const requestWindowsLogin = async (): Promise<unknown> => {
   }
 };
 
-// Dùng cho AuthApi.windowsLogin() — đi qua đúng 1 cơ chế single-flight với nhánh auto re-login bên dưới.
+// Shares the same single-flight as the 401 auto re-login path.
 export const windowsLogin = requestWindowsLogin;
 
 const LOGIN_ENDPOINT = "/Auth/login";
 
-// Đăng nhập bằng form username/password tự viết (trang /login) — khác windowsLogin ở chỗ đây là
-// request JSON thường (không "credentials: include", không phải handshake Negotiate), BE tự xác
-// thực bằng cách bind vào AD (docs/identity-module.md §6). Mirror lại đúng cách đọc payload/lưu
-// token của requestWindowsLogin ở trên để 2 luồng đăng nhập cho ra cùng 1 shape kết quả.
+// Plain JSON login (BE binds to AD), not a Negotiate handshake; mirrors requestWindowsLogin's payload/token
+// handling so both flows return the same shape.
 const requestPasswordLogin = async (userName: string, password: string): Promise<unknown> => {
   const response = await fetch(`${BASE_URL}${LOGIN_ENDPOINT}`, {
     method: "POST",
@@ -151,9 +143,8 @@ const extractTokenFromPayload = (payload: unknown): string | null => {
   return null;
 };
 
-// Lớp vận chuyển dùng chung: gắn Bearer token, tự re-login + retry đúng 1 lần khi gặp 401, rồi
-// TRẢ VỀ Response còn nguyên body. Ai gọi tự quyết định đọc body kiểu gì — `fetchClient` parse JSON
-// một lần, còn `postStream` giữ nguyên body làm stream để đọc dần (NDJSON của AI Chat).
+// Shared transport: Bearer token, one re-login + retry on 401, and returns the Response with body unread
+// so callers can parse JSON or stream it.
 const fetchWithAuth = async (
   endpoint: string,
   options: RequestInit = {}
@@ -192,7 +183,6 @@ const fetchClient = async <T>(
   const response = await fetchWithAuth(endpoint, options);
   let payload: unknown = null;
 
-  // Đọc dữ liệu từ response (bao gồm cả response gốc hoặc response sau khi retry)
   const finalContentType = response.headers.get("content-type") ?? "";
   if (response.status !== 204) {
     if (finalContentType.includes("application/json")) {
@@ -202,9 +192,8 @@ const fetchClient = async <T>(
     }
   }
 
-  // Bắt các lỗi còn lại. 401 = token hết hạn/không hợp lệ ngay cả sau khi re-login → xoá token, buộc đăng nhập lại.
-  // 403 = token còn hợp lệ nhưng Role của user thiếu permission cho hành động này (docs/identity-module.md §6) —
-  // KHÔNG xoá token, vì đăng nhập lại (cùng user Windows) sẽ vẫn ra permission y hệt, chỉ gây mất session vô ích.
+  // 401 after re-login means the token is invalid → clear it. 403 keeps the token: re-login as the same
+  // Windows user would yield the same permissions and just lose the session.
   if (!response.ok) {
     if (response.status === 401) {
       handleUnauthorized();
@@ -213,7 +202,6 @@ const fetchClient = async <T>(
     throw new Error(errorBody || `API Error: ${response.status}`);
   }
 
-  // Trích xuất Token (nếu api trả về có token)
   const authToken = extractTokenFromPayload(payload);
   if (authToken) {
     persistToken(authToken);
@@ -223,11 +211,8 @@ const fetchClient = async <T>(
   return (payload ?? {}) as T;
 };
 
-// POST trả về Response còn nguyên body để đọc dần (streaming) thay vì parse sẵn như `api.post`.
-// Dùng cho endpoint trả `application/x-ndjson` (hiện chỉ có AI Chat: POST /AiChat/stream) — parse
-// hết body một lần sẽ mất ý nghĩa của stream (phải đợi AI trả lời xong mới hiện được chữ nào).
-// Lỗi TRƯỚC khi stream bắt đầu (400 validate, 401/403) vẫn là JSON thường → bóc và ném như `api.*`
-// để `getApiErrorMessage` xử lý đồng nhất; chỉ khi 2xx mới trả Response cho caller tự đọc.
+// Returns the raw Response so NDJSON can be read incrementally. Errors before the stream starts are plain
+// JSON and are thrown like `api.*` so `getApiErrorMessage` handles them uniformly.
 export const postStream = async (
   url: string,
   data?: unknown,
@@ -255,29 +240,22 @@ export const postStream = async (
   return response;
 };
 
-// Kết quả tải file nhị phân (POST multipart nhận về file, không phải JSON) — vd file .xlsx báo cáo.
 export interface BlobDownloadResult {
   blob: Blob;
-  // Tên file BE gợi ý qua header Content-Disposition (BE set bằng `File(bytes, contentType,
-  // fileDownloadName)` của ASP.NET Core) — null nếu thiếu header hoặc CORS chưa "expose" header
-  // này (xem WithExposedHeaders trong Program.cs phía BE), lúc đó caller tự đặt tên mặc định.
+  // From Content-Disposition; null if missing or not exposed via CORS (WithExposedHeaders), caller picks a default.
   fileName: string | null;
-  // Header thô của response — dùng đọc thêm header tuỳ endpoint (vd X-Missing-Device-Count của
-  // báo cáo đối chiếu Tanium) mà không cần thêm 1 field riêng cho từng endpoint.
+  // Raw headers for endpoint-specific extras (e.g. X-Missing-Device-Count).
   headers: Headers;
 }
 
 const extractFileNameFromContentDisposition = (headerValue: string | null): string | null => {
   if (!headerValue) return null;
-  // Chỉ cần khớp `filename="..."` (BE luôn sinh tên file thuần ASCII, không cần xử lý biến thể
-  // filename*=UTF-8''... của RFC 5987).
+  // BE always emits ASCII filenames, so RFC 5987 filename*= is not handled.
   const match = /filename="?([^";]+)"?/i.exec(headerValue);
   return match ? match[1] : null;
 };
 
-// POST multipart/form-data, nhận về Blob thay vì JSON — dùng cho endpoint trả file tải xuống (vd
-// POST /DeviceConfigurationImport/missing-devices-report trả file .xlsx báo cáo đối chiếu Tanium).
-// Lỗi TRƯỚC khi bắt đầu ghi file (400 validate, 401/403) vẫn là JSON thường, bóc y hệt `postStream`.
+// Errors before the file body (400, 401/403) are still JSON and are unwrapped like `postStream`.
 export const postFormForBlob = async (
   url: string,
   formData: FormData,
@@ -308,9 +286,6 @@ export const postFormForBlob = async (
   return { blob, fileName, headers: response.headers };
 };
 
-// GET nhận về Blob thay vì JSON — dùng cho endpoint tải file đính kèm (vd GET
-// /WorkflowRequest/attachments/{id}/download, BE trả bằng PhysicalFile(...)). Lỗi xử lý y hệt
-// `postFormForBlob`, chỉ khác method.
 export const getForBlob = async (url: string, options?: RequestInit): Promise<BlobDownloadResult> => {
   const response = await fetchWithAuth(url, { ...options, method: "GET" });
 
@@ -333,9 +308,8 @@ export const getForBlob = async (url: string, options?: RequestInit): Promise<Bl
   return { blob, fileName, headers: response.headers };
 };
 
-// Cho phép tầng trên biết ĐÃ có phiên đăng nhập hay chưa để chọn cách lấy hồ sơ user: còn token thì
-// gọi `GET /Auth/me` (Bearer, âm thầm), chưa có mới phải `windows-login` (Negotiate → có thể bị trình
-// duyệt hỏi tài khoản domain). Chỉ trả về sự hiện diện của token, không dùng để đọc/parse nội dung JWT.
+// Lets callers pick GET /Auth/me (silent) when a token exists instead of windows-login, which may prompt
+// for domain credentials. Only signals presence; never parse the JWT.
 export const getAuthToken = (): string | null => getStoredToken();
 
 export const setAuthToken = (token: string | null) => {
@@ -357,8 +331,7 @@ export const api = {
       body: data ? JSON.stringify(data) : undefined,
     }),
 
-  // Dùng cho upload file (multipart/form-data) — KHÔNG JSON.stringify body, để browser tự set
-  // Content-Type kèm boundary. fetchClient đã né set Content-Type khi body instanceof FormData.
+  // No JSON.stringify so the browser sets Content-Type with the multipart boundary.
   postForm: <T>(url: string, formData: FormData, options?: RequestInit) =>
     fetchClient<T>(url, {
       ...options,

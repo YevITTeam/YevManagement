@@ -3,12 +3,8 @@ using Workflow.Application.Interfaces.Service;
 
 namespace Workflow.Infrastructure.Services
 {
-    // Lưu file đính kèm trên đĩa cục bộ của máy chạy CompanySystem.HostApi (workflow-module.md §3.3
-    // WorkflowAttachments "file nằm trên đĩa") — chưa hỗ trợ multi-instance/network share, đủ dùng cho
-    // 1 server hiện tại (Pha 4B, 2026-08-26 §10). Thư mục gốc cấu hình qua appsettings
-    // AppSettings:WorkflowAttachmentStoragePath; nếu để trống, mặc định "App_Data/WorkflowAttachments"
-    // tính từ AppContext.BaseDirectory (thư mục build output — production nên trỏ ra 1 đường dẫn tuyệt
-    // đối bên ngoài thư mục build để không mất file khi redeploy).
+    // Local disk only (single server, no network share). Default root under AppContext.BaseDirectory is lost on redeploy,
+    // so production should set AppSettings:WorkflowAttachmentStoragePath to an absolute path outside the build folder.
     public class WorkflowAttachmentStorageService : IWorkflowAttachmentStorage
     {
         private readonly string _rootPath;

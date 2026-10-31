@@ -1,12 +1,10 @@
-// Xem docs/asset-module.md §4 — import thanh lý hàng loạt từ file 1 cột "Mã máy".
-// Chỉ đổi status máy đang "Chờ thanh lý" (2) sang "Đã thanh lý" (3), không tạo/xoá thiết bị.
+// Only moves devices from Pending liquidation (2) to Liquidated (3); never creates or deletes devices.
 
-// Dữ liệu thô 1 dòng file — dùng chung cho response preview và request confirm.
+// Raw row data, shared by the preview response and the confirm request.
 export interface DeviceLiquidationImportRowDto {
     deviceCode: string;
 }
 
-// Item trả về từ bước preview — thêm Id đã tra sẵn + trạng thái hiện tại + kết quả validate.
 export interface DeviceLiquidationImportPreviewRowDto extends DeviceLiquidationImportRowDto {
     rowNumber: number;
     resolvedDeviceId: number | null;

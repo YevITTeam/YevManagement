@@ -1,6 +1,5 @@
-// Quyền cần có để vào từng trang /ot/* — dùng chung cho menu bên trái (OtManagerSidebar) và chặn vào
-// thẳng URL (OtAccessGuard) để hai nơi không lệch nhau. Có 1 TRONG các quyền là vào được. BE vẫn luôn
-// enforce lại ở từng API, đây chỉ là lớp ẩn/chặn UI.
+// Shared by OtManagerSidebar and OtAccessGuard so menu and URL guard never diverge; any one permission grants
+// access. UI-only gate, BE enforces again.
 export const OT_CATEGORIES_PERMISSIONS = [
     "Attendance.Department.Create",
     "Attendance.Group.Create",
@@ -20,12 +19,9 @@ export const OT_CATEGORIES_PERMISSIONS = [
     "Attendance.ProductionOtReport.View",
 ];
 
-// Khớp theo tiền tố đường dẫn (không gồm locale); mục đầu tiên khớp sẽ được dùng.
+// Prefix match without locale; first match wins.
 export const OT_ROUTE_PERMISSIONS: { prefix: string; permissions: string[] }[] = [
-    // Create/CreateProduction là 2 quyền TÁCH RỜI (xem attendance-module.md §Cây chức vụ & Cây duyệt) — Line
-    // Leader chỉ có CreateProduction (không có Create) vẫn phải vào được màn này để tạo đơn theo chuyền
-    // (2026-09-28, sửa lỗi thật: route guard trước đây chỉ khớp Create, chặn thẳng trước khi kịp vào
-    // trang dù CreateOtFormPage.tsx đã tự chuyển sang tab "Theo chuyền" đúng cho trường hợp này).
+    // Create and CreateProduction are separate: Line Leaders with only CreateProduction must still reach this page.
     // Manager-and-above is enforced by the API (OtOverview/access); Approve is only the cheap UI gate.
     { prefix: "/ot/overview", permissions: ["Attendance.OTForm.Approve"] },
     { prefix: "/ot/create", permissions: ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"] },

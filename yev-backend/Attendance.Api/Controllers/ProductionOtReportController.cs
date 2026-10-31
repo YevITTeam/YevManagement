@@ -6,7 +6,7 @@ using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
 {
-    // 2 báo cáo theo ngày cho đơn "dưới chuyền" đã Hoàn tất — xem docs/docs-be/attendance-module.md §Báo cáo & export dưới chuyền theo ngày.
+    // Daily reports for completed production-line OT forms.
     public class ProductionOtReportController : BaseController
     {
         private readonly IProductionOtReportService _productionOtReportService;
@@ -24,8 +24,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Trả file .xlsx trực tiếp, KHÔNG bọc ApiResponse<T> — cùng pattern
-        // ProductionEmployeeExportController.Export.
+        // Returns the .xlsx directly, not ApiResponse<T>.
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("hours-report-excel")]
         public async Task<IActionResult> ExportHoursReport([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
@@ -42,8 +41,7 @@ namespace Attendance.Api.Controllers
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
-        // 2 export mới (2026-09-03c) — độc lập với 2 export ở trên, tên file theo đúng quy tắc thật
-        // (xem ProductionOtReportService.BuildRealFileNameAsync).
+        // File names follow the real naming rule (ProductionOtReportService.BuildRealFileNameAsync).
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("qry-export-excel")]
         public async Task<IActionResult> ExportQryExportExcel([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
@@ -60,8 +58,7 @@ namespace Attendance.Api.Controllers
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
-        // Dữ liệu nền cho phiếu YEV-22-024 xuất hàng loạt — FE tự gọi GET /api/OtForm/{PrimaryOtFormId}
-        // cho phần chữ ký/lý do, chỉ lấy danh sách nhân viên gộp từ đây (2026-09-03c).
+        // Employee rows only; the FE loads signatures/reasons via GET /api/OtForm/{PrimaryOtFormId}.
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("ticket-batch")]
         public async Task<ActionResult<ApiResponse<List<ProductionTicketBatchGroupDto>>>> GetTicketBatch([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)

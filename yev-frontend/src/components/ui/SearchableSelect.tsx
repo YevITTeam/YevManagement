@@ -8,18 +8,12 @@ import { ChevronDown, X } from "lucide-react";
 const inputClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// Combobox dùng chung toàn app (2026-08-10, chuyển từ modules/attendance/components/job-titles/ ra
-// đây vì ngày càng nhiều màn cần): gõ để lọc, click chọn, Escape/blur để đóng. Không phụ thuộc thư
-// viện ngoài. Dùng cho các dropdown chọn master data có thể nhiều lựa chọn (Bộ phận/Nhóm/Chi
-// nhánh/Loại thiết bị/NCC/Lý do...) — KHÔNG dùng cho enum cố định ít lựa chọn (trạng thái, có/không...),
-// bắt gõ tìm cho danh sách 2-3 mục chỉ gây phiền, ngược lại với mục đích cải thiện UX (yêu cầu người
-// dùng 2026-08-10, xem docs/docs-fe/DESIGN_SYSTEM.md §4.3).
+// For master-data dropdowns with many options; not for small fixed enums, where typing to search only adds friction.
 
 export interface SelectOption {
     value: number;
-    /** Nội dung hiển thị trên dòng đã chọn + từng row trong dropdown */
     label: string;
-    /** Chuỗi lowercase dùng để filter; thường rộng hơn label (thêm mã, tên không dấu…) */
+    /** Lowercase filter text; usually broader than label (code, unaccented name...). */
     searchText: string;
 }
 
@@ -29,7 +23,7 @@ interface SearchableSelectProps {
     onChange: (v: number | "") => void;
     placeholder: string;
     disabled?: boolean;
-    /** Override className của ô trigger — mặc định dùng kích thước chuẩn (h-10). */
+    /** Overrides the trigger className (default size h-10). */
     triggerClassName?: string;
     /** Fired as the user types (and with "" on open/close) so a caller can fetch matching options from the server. */
     onQueryChange?: (query: string) => void;
@@ -60,10 +54,8 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
     const listboxId = useId();
     const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
 
-    // Tính vị trí panel theo toạ độ thật của trigger trên viewport (dùng cho position: fixed) — gọi
-    // trong `open()` lúc click, KHÔNG trong effect (setState đồng bộ trong effect bị React Compiler
-    // cấm, xem frontend-conventions.md §3). Tự tính chiều cao còn lại theo viewport và lật lên trên nếu khoảng
-    // trống phía dưới quá hẹp, giống combobox chuẩn.
+    // Called from open() on click, not in an effect: React Compiler forbids synchronous setState in effects.
+    // Flips upward when space below is too small.
     function computePosition(): PanelPosition | null {
         const trigger = containerRef.current;
         if (!trigger) return null;
@@ -84,10 +76,7 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
         };
     }
 
-    // Đóng khi click ra ngoài / cuộn trang / đổi cỡ cửa sổ — panel đã portal ra <body> + position: fixed
-    // theo toạ độ tính lúc mở, nên cuộn/resize thì đóng luôn thay vì định vị lại (giống RowActionsMenu.tsx,
-    // cùng pattern menu "3 chấm" dùng portal). Effect chỉ gắn khi đang mở, setState nằm trong callback của
-    // sự kiện DOM — không phải gọi đồng bộ trong thân effect.
+    // Panel is portaled with position: fixed from coordinates taken at open, so scroll/resize closes it instead of repositioning.
     useEffect(() => {
         if (!isOpen) return;
         function handleOutside(e: MouseEvent) {
@@ -95,9 +84,7 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
             if (containerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
             close();
         }
-        // Scroll gắn ở capture phase trên window nên bắt được CẢ sự kiện cuộn bên trong chính <ul> của
-        // panel (dropdown) — phải loại trừ, không thì cuộn danh sách bên trong cũng bị coi là "cuộn
-        // trang" và tự đóng ngay lập tức.
+        // Capture-phase listener also sees scrolls inside the panel's own list; ignore those or it closes instantly.
         function handleScroll(e: Event) {
             const target = e.target as Node;
             if (panelRef.current?.contains(target)) return;
@@ -129,7 +116,6 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
         setPanelPosition(computePosition());
         setIsOpen(true);
         setQuery("");
-        // Focus input sau khi render
         setTimeout(() => inputRef.current?.focus(), 0);
     }
 
@@ -147,7 +133,6 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
 
     return (
         <div ref={containerRef} className="relative">
-            {/* Trigger */}
             <div
                 role="combobox"
                 aria-expanded={isOpen}
@@ -167,8 +152,7 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
                 />
             </div>
 
-            {/* Dropdown — portal ra <body>, position: fixed theo panelPosition đã tính lúc mở (computePosition)
-                nên không bị modal cha cắt mất dù trigger nằm sát đáy dialog. */}
+            {/* Portaled to <body> with position: fixed so a parent modal can't clip it. */}
             {isOpen &&
                 panelPosition &&
                 typeof document !== "undefined" &&
@@ -184,7 +168,6 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
                         }}
                         className="z-[100] flex flex-col overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-lg"
                     >
-                        {/* Ô tìm kiếm */}
                         <div className="shrink-0 border-b border-[#f1f5f9] p-2">
                             <input
                                 ref={inputRef}
@@ -199,7 +182,6 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
                             />
                         </div>
 
-                        {/* Option: bỏ chọn */}
                         {value !== "" && (
                             <button
                                 onMouseDown={() => selectOption("")}
@@ -209,7 +191,6 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
                             </button>
                         )}
 
-                        {/* Danh sách — chiếm hết phần còn lại trong panelPosition.maxHeight, tự cuộn riêng */}
                         <ul id={listboxId} role="listbox" className="flex-1 overflow-y-auto">
                             {filtered.length === 0 ? (
                                 <li className="px-3 py-4 text-center text-sm text-[#8a8f94]">
@@ -232,7 +213,6 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
                             )}
                         </ul>
 
-                        {/* Đếm kết quả khi đang lọc */}
                         {query.trim() !== "" && (
                             <div className="shrink-0 border-t border-[#f1f5f9] px-3 py-1.5 text-right text-xs text-[#8a8f94]">
                                 {filtered.length} kết quả

@@ -19,7 +19,6 @@ import type {
 } from "@/modules/attendance/types/ot-form.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Route /OtForm — docs/attendance-module.md §API (đã cập nhật 2026-07-16: thêm PUT sửa đơn + email-confirm public).
 const ENDPOINTS = {
     OT_FORM: {
         getMyCreateScopes: "/OtForm/my-create-scopes",
@@ -51,13 +50,11 @@ const ENDPOINTS = {
 export interface GetOtFormListParams {
     pageIndex?: number;
     pageSize?: number;
-    // Lọc theo OtForm.date (bao gồm cả 2 đầu mút, chuỗi "yyyy-MM-dd") và status (giá trị enum
-    // OtFormStatus) — cả 3 optional, dùng chung cho các hàm danh sách bên dưới (2026-08-06).
+    // Date range is inclusive ("yyyy-MM-dd"); all filters are optional and shared by the list functions below.
     fromDate?: string;
     toDate?: string;
     status?: number;
-    // Lọc theo Bộ phận/Nhóm cho đơn văn phòng và Line/Team/Nhóm ca cho đơn dưới chuyền (2026-09-04) —
-    // cả 5 field optional, giờ dùng chung cho MỌI hàm danh sách bên dưới (kể cả getAllForms).
+    // Department/group for office forms, Line/Team/shift group for production forms.
     groupId?: number;
     departmentId?: number;
     productionLineId?: number;
@@ -72,7 +69,7 @@ function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListPa
     if (params?.pageSize) query.set("PageSize", String(params.pageSize));
     if (params?.fromDate) query.set("FromDate", params.fromDate);
     if (params?.toDate) query.set("ToDate", params.toDate);
-    // status=0 (Pending) là giá trị hợp lệ — không được dùng truthy check kẻo rớt mất (frontend-conventions.md §2).
+    // status=0 (Pending) is valid — no truthy check.
     if (params?.status !== undefined) query.set("Status", String(params.status));
     if (params?.groupId !== undefined) query.set("GroupId", String(params.groupId));
     if (params?.departmentId !== undefined) query.set("DepartmentId", String(params.departmentId));
@@ -84,36 +81,31 @@ function appendOtFormListParams(query: URLSearchParams, params?: GetOtFormListPa
 }
 
 export const OtFormApi = {
-    // (Các) Bộ phận/Phòng ban CHÍNH user được phép tạo đơn — gọi TRƯỚC khi mở màn "Tạo đơn tăng ca"
-    // để tự điền sẵn/khoá dropdown thay vì bắt chọn lại từ toàn bộ danh sách (docs §4.0a).
+    // Lets the create screen prefill/lock the department dropdowns.
     getMyCreateScopes: async () => {
         const response = await api.get<ApiResponse<MyCreateScopeItemDto[]>>(ENDPOINTS.OT_FORM.getMyCreateScopes);
         return response.data;
     },
-    // (Những) tổ hợp Team/Line/Nhóm ca CHÍNH user đang là Line Leader — gọi TRƯỚC khi mở tab "Theo
-    // chuyền" để tự điền sẵn/khoá cứng 3 dropdown Team/Line/Nhóm ca (2026-09-28).
+    // Lets the production tab prefill/lock the Team/Line/shift-group dropdowns.
     getMyProductionCreateScopes: async () => {
         const response = await api.get<ApiResponse<MyProductionCreateScopeItemDto[]>>(ENDPOINTS.OT_FORM.getMyProductionCreateScopes);
         return response.data;
     },
-    // Frontend proactive conflict check
     checkOverlap: async (data: CheckOtFormOverlapDto) => {
         const response = await api.post<ApiResponse<number[]>>(ENDPOINTS.OT_FORM.checkOverlap, data);
         return response.data;
     },
-    // Response 201, data trả về OtFormDto đầy đủ luôn — không cần gọi lại getOtFormById (docs §4.1).
+    // Returns the full OtFormDto; no need to refetch.
     createOtForm: async (data: CreateOtFormDto) => {
         const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.createOtForm, data);
         return response.data;
     },
-    // Chỉ chính người tạo, chỉ khi còn Pending — data trả về OtFormDto đầy đủ (docs §4.1b).
+    // Creator only, while still Pending; returns the full OtFormDto.
     updateOtForm: async (id: number, data: UpdateOtFormDto) => {
         const response = await api.put<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.updateOtForm(id), data);
         return response.data;
     },
-    // Loại 1 nhân viên khỏi đơn ngay trên màn Duyệt (JWT, khôi phục 2026-09-30) — KHÔNG cần
-    // secondaryPassword. Dùng đúng luật "candidate bước Pending hiện tại" nên khác updateOtForm (chỉ
-    // người tạo mới gọi được cho đơn theo Nhóm) — xem RemoveOtFormEmployeeDto.
+    // No secondary password; allowed for candidates of the current Pending step, unlike updateOtForm (creator only).
     removeOtFormEmployee: async (id: number, data: RemoveOtFormEmployeeDto) => {
         const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.removeOtFormEmployee(id), data);
         return response.data;
@@ -126,8 +118,7 @@ export const OtFormApi = {
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
         return response.data;
     },
-    // BE tự lọc theo bước hiện tại (StepOrder nhỏ nhất còn Pending) mà user gọi API là candidate —
-    // FE không truyền tham số lọc cấp (docs §4.2).
+    // BE filters by the current step (lowest pending StepOrder) where the caller is a candidate.
     getPendingApprovals: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
         appendOtFormListParams(query, params);
@@ -136,13 +127,11 @@ export const OtFormApi = {
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
         return response.data;
     },
-    // Đếm nhanh số đơn đang chờ CHÍNH user gọi duyệt — dùng cho badge sidebar (2026-08-19), không
-    // phân trang/không tải danh sách, chỉ 1 số nguyên.
+    // Count only, for the sidebar badge.
     getPendingApprovalsCount: async () => {
         const response = await api.get<ApiResponse<number>>(ENDPOINTS.OT_FORM.getPendingApprovalsCount);
         return response.data;
     },
-    // Lịch mini ở màn Duyệt hàng loạt — số đơn chưa duyệt theo TỪNG ngày (2026-09-04).
     getPendingApprovalDates: async (fromDate: string, toDate: string) => {
         const query = new URLSearchParams({ fromDate, toDate });
         const response = await api.get<ApiResponse<PendingApprovalDateCountDto[]>>(
@@ -150,8 +139,7 @@ export const OtFormApi = {
         );
         return response.data;
     },
-    // Lịch sử đơn CHÍNH user gọi đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 Role,
-    // vá lỗ hổng UX đơn biến mất khỏi pending-submissions/pending-approvals sau khi xử lý (docs §4.2b).
+    // Forms the caller already signed/approved/rejected, which otherwise vanish from the pending lists.
     getMyActions: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
         appendOtFormListParams(query, params);
@@ -160,8 +148,7 @@ export const OtFormApi = {
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
         return response.data;
     },
-    // Đơn mà chính user gọi API CÓ TÊN trong danh sách tăng ca (OtFormEmployee), bất kể có phải người
-    // tạo/ký/duyệt hay không — trả rỗng (không lỗi) nếu account chưa được gán Employee.userName (§4.2c).
+    // Forms listing the caller as an OT employee; empty (not an error) if the account has no linked Employee.
     getMyParticipations: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
         appendOtFormListParams(query, params);
@@ -172,8 +159,7 @@ export const OtFormApi = {
         const response = await api.get<ApiResponseWithPageNation<OtFormListItemDto>>(url);
         return response.data;
     },
-    // "Tất cả đơn" — Admin xem toàn bộ đơn tăng ca, không lọc theo user gọi API (2026-09-04, gate bằng
-    // Attendance.OTForm.ViewAll).
+    // Unfiltered by caller; gated by Attendance.OTForm.ViewAll.
     getAllForms: async (params?: GetOtFormListParams) => {
         const query = new URLSearchParams();
         appendOtFormListParams(query, params);
@@ -202,12 +188,12 @@ export const OtFormApi = {
         const response = await api.post<ApiResponse<BulkOtFormActionResultItemDto[]>>(ENDPOINTS.OT_FORM.bulkReject, data);
         return response.data;
     },
-    // Admin xoá đơn kẹt vĩnh viễn trong chuỗi duyệt — chặn ở BE nếu đơn đã Completed (2026-08-08).
+    // For forms stuck in the approval chain; BE rejects Completed forms.
     deleteOtForm: async (id: number, data: DeleteOtFormDto) => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.deleteOtForm(id), data);
         return response.data;
     },
-    // Duyệt/Từ chối qua link email — public, [AllowAnonymous] (docs §4.6).
+    // Public [AllowAnonymous] email-link approval.
     getOtFormByEmailToken: async (token: string) => {
         const response = await api.get<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.emailConfirmGet(token));
         return response.data;

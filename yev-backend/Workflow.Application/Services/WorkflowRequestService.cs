@@ -16,19 +16,13 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Application.Services
 {
-    // Engine nộp/duyệt đơn (workflow-module.md §5.1, §5.5, §5.6) — Pha 3B-1, chỉ BE, chưa có FE render
-    // form động/inbox duyệt (để dành Pha 3B-2). Mọi thao tác đọc entity đều query trực tiếp theo FK
-    // (KHÔNG dùng navigation .Include) — mirror pattern đã dùng cho FormRoutes ở Pha 3A vì
-    // IGenericRepository chỉ hỗ trợ Include 1 cấp, không đủ cho cây Request->Steps->Participants.
+    // Entities are queried by FK rather than .Include because IGenericRepository supports only one Include level,
+    // not enough for Request -> Steps -> Participants.
     public class WorkflowRequestService : BaseService<IWorkflowUnitOfWork>, IWorkflowRequestService
     {
         private static readonly JsonElement NullElement = JsonDocument.Parse("null").RootElement;
 
-        // Khớp casing mặc định của ASP.NET Core cho phần còn lại của response (không cấu hình
-        // AddJsonOptions riêng ở Program.cs => camelCase mặc định) — BuildFormSchemaJson serialize thủ
-        // công bằng JsonSerializer.Serialize (không đi qua pipeline response) nên phải tự set policy
-        // này, nếu không FormSchemaJson sẽ lộ PascalCase (FieldKey/LabelVn/...) khác hẳn phần còn lại
-        // của WorkflowRequestDto khi trả cho FE.
+        // BuildFormSchemaJson serializes outside the response pipeline, so camelCase must be set here to match the rest of the DTO.
         private static readonly JsonSerializerOptions CamelCaseOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
         private static readonly Expression<Func<WorkflowRequest, WorkflowRequestListItemDto>> ToListItemDtoExpr = x => new WorkflowRequestListItemDto
@@ -64,7 +58,6 @@ namespace Workflow.Application.Services
             _configuration = configuration;
         }
 
-        // Pha 3B-2: 3 endpoint đọc phục vụ FE nộp/duyệt đơn — workflow-module.md §6 quyết định đi kèm.
         public async Task<List<AvailableFormDto>> GetAvailableFormsAsync(int? currentUserId)
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
@@ -289,9 +282,7 @@ namespace Workflow.Application.Services
             return await _unitOfWork.WorkflowRequests.ToPagedResponseAsync(query.OrderByDescending(x => x.CreatedAt), pageIndex, pageSize, ToListItemDtoExpr);
         }
 
-        // 10 bước bắt buộc của workflow-module.md §5.1, toàn bộ trong 1 transaction tường minh (RequestCode
-        // sinh bằng raw SQL có khoá dòng — WorkflowSequenceRepository.GetNextSequenceAsync — chạy chung
-        // connection/transaction với các INSERT còn lại của DbContext).
+        // Runs in one explicit transaction; RequestCode comes from raw SQL with a row lock sharing the same connection.
         public async Task<WorkflowRequestDto> SubmitAsync(int id, int? currentUserId)
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
@@ -311,7 +302,7 @@ namespace Workflow.Application.Services
             // 2. FormAccesses
             await GuardFormAccessAsync(form.Id, currentEmployeeId);
 
-            // 2b. RequireAttachment (Pha 4B) — form bắt buộc đính kèm mà chưa có file nào thì chặn nộp.
+            // 2b. RequireAttachment
             if (form.RequireAttachment)
             {
                 var hasAttachment = (await _unitOfWork.WorkflowAttachments.FindAsync(a => a.WorkflowRequestId == entity.Id && !a.IsDeleted)).Any();
@@ -319,7 +310,7 @@ namespace Workflow.Application.Services
                     throw new DomainException("Đơn này yêu cầu phải có ít nhất 1 file đính kèm trước khi nộp.");
             }
 
-            // 3. Validate + chuẩn hoá DataJson theo FormFields, có tính điều kiện ẩn/hiện/bắt buộc
+            // 3. Validate + normalize DataJson against FormFields, honoring show/hide/require conditions
             var fields = (await _unitOfWork.FormFields.FindAsync(x => x.FormDefinitionId == form.Id && !x.IsDeleted)).OrderBy(x => x.SortOrder).ToList();
             var conditions = await _unitOfWork.FormFieldConditions.FindWithIncludesAsync(
                 x => !x.IsDeleted && x.TargetField.FormDefinitionId == form.Id, x => x.TargetField);
@@ -327,7 +318,7 @@ namespace Workflow.Application.Services
             var incomingData = ParseDataJson(entity.DataJson);
             var normalizedData = await ValidateAndNormalizeDataJsonAsync(fields, conditions, incomingData);
 
-            // 4. Chọn nhánh
+            // 4. Pick route
             var routes = (await _unitOfWork.FormRoutes.FindAsync(x => x.FormDefinitionId == form.Id && !x.IsDeleted)).ToList();
             var (selectedRoute, routeSnapshot) = SelectRoute(form.RouteConditionType, routes, normalizedData, form.RouteNumericFieldKey, form.RouteClassFieldKey);
             if (selectedRoute is null)
@@ -348,8 +339,7 @@ namespace Workflow.Application.Services
 
             var currentEmployee = (await _unitOfWork.Employees.GetByIdAsync(currentEmployeeId)).OrThrowNotFound("Nhân sự", currentEmployeeId);
 
-            // 6. Resolve người duyệt cho mọi bước — làm TRƯỚC khi mở transaction để nếu chặn thì
-            // không giữ transaction/khoá WorkflowSequences vô ích (§5.1 bước 5: "chặn nộp ngay").
+            // 6. Resolve approvers for every step before opening the transaction, so a rejection doesn't hold the sequence lock.
             var stepBuilds = new List<(FormApprovalStep Config, int NodeOrgUnitId, List<(int EmployeeId, ParticipantRole Role, string? ResolvedFromJobTitle)> Resolved)>();
             foreach (var step in routeSteps)
             {
@@ -375,7 +365,7 @@ namespace Workflow.Application.Services
 
                 var minConfigStepOrder = routeSteps.Min(s => s.StepOrder);
 
-                // 8. Tạo WorkflowRequestSteps + Participants
+                // 8. Create WorkflowRequestSteps + Participants
                 var stepOrgUnitIds = stepBuilds.Select(b => b.NodeOrgUnitId).Distinct().ToList();
                 var orgUnitsById = (await _unitOfWork.OrgUnits.FindAsync(x => stepOrgUnitIds.Contains(x.Id)))
                     .ToDictionary(x => x.Id);
@@ -383,7 +373,7 @@ namespace Workflow.Application.Services
                 foreach (var build in stepBuilds)
                 {
                     orgUnitsById.TryGetValue(build.NodeOrgUnitId, out var orgUnit);
-                    // Offset +1: xem comment trong WorkflowRequestStep.cs.
+                    // +1 offset: see WorkflowRequestStep.cs.
                     var snapshotStepOrder = build.Config.StepOrder + 1;
                     var wfStep = new WorkflowRequestStep
                     {
@@ -431,8 +421,7 @@ namespace Workflow.Application.Services
                 throw;
             }
 
-            // Pha 4C: gửi email cho Approver của bước Current đầu tiên — CHỦ Ý gọi SAU khi transaction
-            // đã commit xong (không giữ transaction mở trong lúc gọi SMTP/render template).
+            // Notify after commit so the transaction isn't held open during SMTP/template rendering.
             var firstCurrentStep = entity.WorkflowRequestSteps.FirstOrDefault(s => s.Status == StepStatus.Current);
             if (firstCurrentStep is not null)
                 await NotifyStepApproversAsync(firstCurrentStep, entity);
@@ -454,20 +443,15 @@ namespace Workflow.Application.Services
             return await ApplyApprovalAsync(entity, currentStep, currentEmployeeId, currentEmployee.FullName, onBehalfOf, request.Comment, request.SignatureImageBase64, currentUserId);
         }
 
-        // Pha 4C: duyệt qua email (workflow-module.md §6) — token TỰ LÀ credential (ApproverEmployeeId đã
-        // chốt sẵn từ lúc gửi mail), không qua ResolveActingCapabilityAsync/delegation. Vẫn phải tự tra
-        // lại bước Current THẬT của đơn (LoadPendingApprovalContextAsync) thay vì tin StepOrder đã
-        // snapshot trong token — mirror Attendance.ApproveByEmailTokenAsync: nếu người khác đã xử lý
-        // xong bước này trước khi link được bấm, ApplyApprovalAsync tự báo lỗi rõ ràng qua
-        // "Không tìm thấy người duyệt tương ứng ở bước này." (participant của bước MỚI không còn khớp).
+        // The token is the credential (approver fixed at send time), so no delegation resolution. The real Current step is
+        // reloaded rather than trusting the token's StepOrder; if someone already acted, ApplyApprovalAsync fails cleanly.
         public async Task<WorkflowRequestDto> ApproveByEmailTokenAsync(string token, EmailApproveRequestDto request)
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: true);
             var (entity, currentStep) = await LoadPendingApprovalContextAsync(emailToken.WorkflowRequestId);
             var actingEmployee = (await _unitOfWork.Employees.GetByIdAsync(emailToken.ApproverEmployeeId)).OrThrowNotFound("Nhân sự", emailToken.ApproverEmployeeId);
 
-            // Trang public không có UI chọn ảnh chữ ký — tự lấy từ EmployeeSignatures (Pha 4A) nếu bước
-            // yêu cầu, mirror Attendance (ApproveByEmailTokenAsync pull UserSignature theo ApproverUserName).
+            // The public page has no signature picker, so use the stored EmployeeSignature when the step requires one.
             string? signatureImageBase64 = null;
             if (currentStep.RequireSignatureSnapshot)
             {
@@ -666,8 +650,7 @@ namespace Workflow.Application.Services
 
             var newStepOrder = request.InsertAfterStepOrder + 1;
 
-            // Đánh lại StepOrder các bước từ vị trí chèn trở đi — xử lý từ StepOrder LỚN NHẤT giảm dần
-            // để tránh đụng UNIQUE (WorkflowRequestId, StepOrder) giữa chừng vòng lặp.
+            // Renumber from the highest StepOrder down to avoid hitting UNIQUE (WorkflowRequestId, StepOrder) mid-loop.
             foreach (var s in steps.Where(s => s.StepOrder >= newStepOrder).OrderByDescending(s => s.StepOrder))
             {
                 s.StepOrder += 1;
@@ -731,8 +714,7 @@ namespace Workflow.Application.Services
             entity.CompletedAt = now;
             _unitOfWork.WorkflowRequests.Update(entity);
 
-            // Bước đang Current phải chuyển khỏi Current, nếu không "Chờ tôi duyệt"
-            // (GetPendingMyApprovalAsync) sẽ tiếp tục hiện đơn đã hủy — bug tự bắt được lúc test HTTP.
+            // The Current step must leave Current, otherwise the cancelled request still shows in "pending my approval".
             var currentStep = (await LoadStepsAsync(id)).FirstOrDefault(s => s.Status == StepStatus.Current);
             if (currentStep is not null)
             {
@@ -755,8 +737,7 @@ namespace Workflow.Application.Services
             return await GetByIdAsync(id, currentUserId, true);
         }
 
-        // Pha 4B: đính kèm file (workflow-module.md §6). Chủ đơn được thêm/xoá xuyên suốt tới khi đơn
-        // kết thúc (quyết định 2026-08-26 §10) — người duyệt chỉ xem/tải, không tự thêm được.
+        // Owner may add/remove until the request ends; approvers can only view/download.
         public async Task<WorkflowRequestDto> UploadAttachmentAsync(int workflowRequestId, Stream content, string originalFileName, string contentType, long fileSizeBytes, int? currentUserId)
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
@@ -820,8 +801,7 @@ namespace Workflow.Application.Services
             _unitOfWork.WorkflowAttachments.Update(attachment);
             await _unitOfWork.SaveChangesAsync();
 
-            // Xoá file vật lý SAU KHI DB commit thành công — DB lỡ lỗi thì file vẫn còn, không mất mát;
-            // ngược lại (xoá đĩa trước) mà DB lỗi sẽ để lại dòng metadata trỏ tới file đã không còn.
+            // Delete the file only after DB commit: a DB failure then keeps the file instead of leaving dangling metadata.
             _attachmentStorage.Delete(attachment.RelativePath);
 
             return await GetByIdAsync(entity.Id, currentUserId, true);
@@ -850,12 +830,8 @@ namespace Workflow.Application.Services
 
         // ===================== Helpers =====================
 
-        // Dùng chung cho GetByIdAsync + DownloadAttachmentAsync (§7 luật "Ai xem được đơn này?" — người
-        // tạo, participants (kể cả Viewer), hoặc có Request.ViewAll).
-        // hasViewAll=true PHẢI thoát ngay, KHÔNG được resolve currentEmployeeId trước — kênh email (Pha
-        // 4C) gọi GetByIdAsync(id, currentUserId: null, hasViewAll: true) vì không có JWT; resolve
-        // employee trước khi check hasViewAll sẽ luôn throw "Không xác định được người dùng hiện tại"
-        // (currentUserId null) dù đáng lẽ không cần đọc currentUserId trong nhánh này.
+        // Viewers: creator, participants (incl. Viewer) or Request.ViewAll. hasViewAll must return before resolving the
+        // employee: the email channel calls this with currentUserId = null.
         private async Task GuardCanViewRequestAsync(WorkflowRequest entity, int? currentUserId, bool hasViewAll)
         {
             if (hasViewAll) return;
@@ -871,7 +847,7 @@ namespace Workflow.Application.Services
                 throw new DomainException("Bạn không có quyền xem đơn này.");
         }
 
-        // Đính kèm: chỉ chủ đơn, chỉ khi đơn chưa ở trạng thái kết thúc (quyết định 2026-08-26 §10).
+        // Owner only, and only while the request is not finished.
         private static void GuardCanEditAttachments(WorkflowRequest entity, int currentEmployeeId)
         {
             if (entity.CreatedByEmployeeId != currentEmployeeId)
@@ -885,9 +861,6 @@ namespace Workflow.Application.Services
             return (await _unitOfWork.WorkflowRequestSteps.FindAsync(s => s.WorkflowRequestId == workflowRequestId)).OrderBy(s => s.StepOrder).ToList();
         }
 
-        // Dùng chung cho ApproveAsync/RejectAsync (JWT) + ApproveByEmailTokenAsync/RejectByEmailTokenAsync
-        // (Pha 4C) — load + validate đúng 1 lần "đơn đang chờ duyệt, bước Current là bước nào" thay vì
-        // lặp lại ở 4 chỗ.
         private async Task<(WorkflowRequest Entity, WorkflowRequestStep CurrentStep)> LoadPendingApprovalContextAsync(int id)
         {
             var entity = (await _unitOfWork.WorkflowRequests.GetByIdAsync(id)).OrThrowNotFound("Đơn", id);
@@ -901,10 +874,8 @@ namespace Workflow.Application.Services
             return (entity, currentStep);
         }
 
-        // Lõi thật của Duyệt (§5.5) — dùng chung cho kênh JWT (đã qua ResolveActingCapabilityAsync,
-        // actorEmployeeId = người đang đăng nhập) và kênh email Pha 4C (token tự xác định
-        // actorEmployeeId, onBehalfOfEmployeeId luôn null — không có ủy quyền qua email). currentUserId
-        // chỉ dùng để trả về DTO cuối (null hợp lệ vì GetByIdAsync gọi với hasViewAll=true).
+        // Shared by the JWT channel (actor already resolved, may act on behalf) and email channel (token fixes actor,
+        // no delegation). currentUserId may be null since the DTO is read with hasViewAll = true.
         private async Task<WorkflowRequestDto> ApplyApprovalAsync(
             WorkflowRequest entity, WorkflowRequestStep currentStep, int actorEmployeeId, string actorFullName,
             int? onBehalfOfEmployeeId, string? comment, string? signatureImageBase64, int? currentUserId)
@@ -988,7 +959,6 @@ namespace Workflow.Application.Services
             return await GetByIdAsync(entity.Id, currentUserId, true);
         }
 
-        // Lõi thật của Từ chối — mirror ApplyApprovalAsync, đơn giản hơn (không có bước kế/chữ ký).
         private async Task<WorkflowRequestDto> ApplyRejectionAsync(
             WorkflowRequest entity, WorkflowRequestStep currentStep, int actorEmployeeId, string actorFullName,
             int? onBehalfOfEmployeeId, string comment, int? currentUserId)
@@ -1020,8 +990,7 @@ namespace Workflow.Application.Services
             return await GetByIdAsync(entity.Id, currentUserId, true);
         }
 
-        // Pha 4C: xác thực token duyệt qua email (workflow-module.md §3.3) — requireUnused=false cho
-        // GetByEmailTokenAsync (xem lại vẫn được dù đã dùng, mirror Attendance), true cho hành động ghi.
+        // requireUnused = false only for viewing, so an already-used link can still be opened.
         private async Task<WorkflowRequestEmailToken> ResolveEmailTokenAsync(string token, bool requireUnused)
         {
             var emailToken = await _unitOfWork.WorkflowRequestEmailTokens.FirstOrDefaultAsync(x => x.Token == token);
@@ -1035,10 +1004,8 @@ namespace Workflow.Application.Services
             return emailToken;
         }
 
-        // Pha 4C: gửi email cho các Approver của bước VỪA chuyển thành Current (gọi từ SubmitAsync sau
-        // commit + ApplyApprovalAsync sau SaveChanges — KHÔNG bao giờ trong lúc transaction còn mở).
-        // Mỗi Approver 1 token riêng; thiếu Email thì bỏ qua người đó — best-effort, 1 người thiếu Email
-        // không được chặn người khác/chặn cả luồng Submit/Approve chính (mirror EmployeeSignatureService).
+        // Never call inside an open transaction. Best-effort: one token per approver, those without Email are skipped
+        // so one missing address can't block others or the main flow.
         private async Task NotifyStepApproversAsync(WorkflowRequestStep step, WorkflowRequest entity)
         {
             var participants = await _unitOfWork.WorkflowRequestStepParticipants.FindAsync(
@@ -1097,30 +1064,20 @@ namespace Workflow.Application.Services
                 }
                 catch (FileNotFoundException)
                 {
-                    // Thiếu file template — bỏ qua gửi mail cho người này, không chặn luồng chính.
+                    // Missing template: skip this recipient without blocking the main flow.
                 }
             }
         }
 
-        // Role trong FormAccesses là cross-DB -> Identity.Roles (§1.4), Workflow không query được DB
-        // Identity nên chỉ check được Employee trực tiếp + OrgUnit của nhân sự — đủ cho luồng chính,
-        // Role-based access tạm thời KHÔNG được validate ở BE (để dành pha sau nếu thực sự cần).
+        // Roles live in Identity's DB, so role-based access is not validated here; only Employee and OrgUnit targets.
         private async Task GuardFormAccessAsync(int formDefinitionId, int currentEmployeeId)
         {
             if (!await HasFormAccessAsync(formDefinitionId, currentEmployeeId))
                 throw new DomainException("Bạn không có quyền tạo đơn loại này.");
         }
 
-        // Tách khỏi GuardFormAccessAsync (Pha 3B-2) để dùng lại ở GetAvailableFormsAsync (liệt kê thay
-        // vì chặn) — cùng 1 luật FormAccesses (Employee trực tiếp / OrgUnit của nhân sự), Role bỏ qua
-        // (cross-DB, đã ghi rõ giới hạn ở SubmitAsync).
-        // Quyết định 2026-08-26 (phát hiện lúc nhân sự phòng IT không thấy form nào để tạo — xem
-        // workflow-module.md §10): cấp FormAccesses cho 1 OrgUnit CHA thì LAN XUỐNG mọi OrgUnit con
-        // cháu — nhân sự thuộc bất kỳ đơn vị nào trong cây con của OrgUnit được cấp đều coi là có
-        // quyền. Trước đó so khớp ĐÚNG-1-CẤP (OrgUnitId đúng bằng OrgUnitId của nhân sự), không lan
-        // truyền — khiến cấp quyền cho 1 đơn vị lớn (vd "Xưởng Dĩ An") không có tác dụng với các phòng
-        // ban con thật sự tạo đơn (vd "IT"). Duyệt ngược từ OrgUnit của nhân sự lên gốc qua ParentId,
-        // khớp bất kỳ nút nào (kể cả chính nó) với OrgUnitId đã cấp quyền.
+        // Role targets are ignored (cross-DB). An access granted to an OrgUnit cascades to all descendant units,
+        // so walk up the employee's unit via ParentId and match any ancestor (including itself).
         private async Task<bool> HasFormAccessAsync(int formDefinitionId, int currentEmployeeId)
         {
             var accesses = await _unitOfWork.FormAccesses.FindAsync(x => x.FormDefinitionId == formDefinitionId && !x.IsDeleted);
@@ -1148,7 +1105,7 @@ namespace Workflow.Application.Services
             {
                 var current = (int?)startId;
                 var hops = 0;
-                while (current is int cur && hops++ < 50) // guard chống vòng lặp ParentId (dữ liệu hỏng)
+                while (current is int cur && hops++ < 50) // guards against corrupted ParentId cycles
                 {
                     if (grantedOrgUnitIds.Contains(cur)) return true;
                     current = parentById.GetValueOrDefault(cur);
@@ -1163,9 +1120,7 @@ namespace Workflow.Application.Services
             return candidates.FirstOrDefault(x => (x.ValidFrom == null || x.ValidFrom <= now) && (x.ValidTo == null || x.ValidTo >= now));
         }
 
-        // §5.5: xác định node (Fixed = OrgUnitId của bước, ApplicantUnit = đơn vị chính người nộp) rồi
-        // resolve từng participant. Approver bắt buộc phải ra được người có UserId khác NULL; Viewer
-        // thiếu người thì bỏ qua, không chặn.
+        // Approvers must resolve to someone with a non-null UserId; missing Viewers are skipped.
         private async Task<(int NodeOrgUnitId, List<(int EmployeeId, ParticipantRole Role, string? ResolvedFromJobTitle)> Resolved)> ResolveStepParticipantsAsync(
             FormApprovalStep step, List<FormApprovalStepParticipant> configParticipants, int? applicantOrgUnitId, DateTime now)
         {
@@ -1216,7 +1171,7 @@ namespace Workflow.Application.Services
             return (nodeOrgUnitId.Value, resolved);
         }
 
-        // §5.2: xét route theo SortOrder tăng dần, lấy route đầu tiên khớp; không khớp gì -> IsDefault.
+        // First matching route by SortOrder, else the IsDefault route.
         private static (FormRoute? Route, string? Snapshot) SelectRoute(
             RouteConditionType type, List<FormRoute> routes, Dictionary<string, JsonElement> data, string? numericKey, string? classKey)
         {
@@ -1259,13 +1214,8 @@ namespace Workflow.Application.Services
             return parts.Count == 0 ? null : string.Join("; ", parts);
         }
 
-        // Ai được duyệt bước hiện tại (§5.6): chính người có dòng Approver ở bước đó, HOẶC đang là
-        // DelegateEmployeeId của 1 ApprovalDelegations còn hiệu lực mà DelegatorEmployeeId nằm trong
-        // danh sách Approver — chỉ 1 cấp (không tự bắc cầu qua nhiều ApprovalDelegations).
-        // requestedOnBehalfOfEmployeeId: bắt buộc chỉ định khi người gọi VỪA là Approver trực tiếp
-        // VỪA là Delegate của người khác cùng bước — nếu không chỉ định, 2 khả năng đó không tự phân
-        // biệt được (phát hiện lúc test HTTP: gọi Approve lần 2 để "duyệt thay" bị hiểu nhầm thành
-        // "duyệt lại chính mình" rồi báo lỗi "đã duyệt rồi").
+        // Can act as a direct Approver or as Delegate of an active delegation from an Approver (single level only).
+        // requestedOnBehalfOfEmployeeId disambiguates when the caller is both, otherwise "approve on behalf" reads as a re-approve.
         private async Task<(bool CanAct, int? OnBehalfOfEmployeeId)> ResolveActingCapabilityAsync(
             int workflowRequestStepId, int formDefinitionId, int currentEmployeeId, DateTime now, int? requestedOnBehalfOfEmployeeId)
         {
@@ -1288,8 +1238,7 @@ namespace Workflow.Application.Services
             return (false, null);
         }
 
-        // §5.3: đánh giá theo TargetFieldId, gom theo LogicGroup (AND trong group, OR giữa group) —
-        // TÁCH RIÊNG theo từng Effect (Show/Hide/Require/ReadOnly kích hoạt độc lập với nhau).
+        // Grouped by LogicGroup (AND within, OR across), evaluated separately per Effect.
         private static Dictionary<int, (bool Visible, bool Required, bool ReadOnly)> EvaluateConditions(
             List<FormField> fields, IReadOnlyList<FormFieldCondition> conditions, Dictionary<string, JsonElement> data)
         {
@@ -1366,8 +1315,7 @@ namespace Workflow.Application.Services
         private static bool TryParseDecimal(string? text, out decimal value) =>
             decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out value);
 
-        // Chỉ lúc Submit mới validate/chuẩn hoá đầy đủ (§5.1 bước 3) — Draft giữ nguyên dữ liệu client
-        // gửi (có thể thiếu/sai), không chặn lưu nháp.
+        // Full validation only on Submit; drafts keep whatever the client sent.
         private async Task<Dictionary<string, JsonElement>> ValidateAndNormalizeDataJsonAsync(
             List<FormField> fields, IReadOnlyList<FormFieldCondition> conditions, Dictionary<string, JsonElement> incoming)
         {
@@ -1428,7 +1376,7 @@ namespace Workflow.Application.Services
             _ => true
         };
 
-        // §5.8 luật 4: BE tự tra code/name theo id, KHÔNG tin name FE gửi lên.
+        // Code/name are looked up by id; names sent by the FE are not trusted.
         private async Task<JsonElement> NormalizeEmployeeOrOrgUnitValueAsync(FieldDataType dataType, JsonElement value)
         {
             if (!value.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.Number)
@@ -1464,8 +1412,7 @@ namespace Workflow.Application.Services
 
         private static object? ParseJsonOrNull(string? json) => json is null ? null : JsonSerializer.Deserialize<JsonElement>(json);
 
-        // FormSchemaJson snapshot theo FieldKey, không theo Id (Pha 3B-1 quyết định #7) — ổn định dù
-        // FormFields đổi Id sau này.
+        // Snapshot keyed by FieldKey, not Id, so it stays stable if field Ids change.
         private static string BuildFormSchemaJson(List<FormField> fields, IReadOnlyList<FormFieldCondition> conditions, string? layoutHtml)
         {
             var fieldKeyById = fields.ToDictionary(f => f.Id, f => f.FieldKey);
@@ -1495,9 +1442,7 @@ namespace Workflow.Application.Services
                     c.Effect,
                     c.LogicGroup
                 }).ToList(),
-                // Snapshot layout tại thời điểm nộp (workflow-module.md §1.5) — đơn cũ luôn in đúng
-                // layout đã dùng lúc nộp dù FormDefinition.LayoutHtml sau này bị sửa/xoá. NULL = form
-                // ở chế độ lưới, render theo Fields+ColumnSpan như trước đây (không đổi hành vi cũ).
+                // Layout snapshot at submit so old requests always print as submitted; null = grid mode (Fields + ColumnSpan).
                 LayoutHtml = layoutHtml
             };
             return JsonSerializer.Serialize(snapshot, CamelCaseOptions);
@@ -1603,8 +1548,7 @@ namespace Workflow.Application.Services
             };
         }
 
-        // Mirror FormDefinitionService.ResolveCurrentEmployeeIdAsync — 2 service độc lập, không share
-        // helper riêng tư giữa các file Service khác nhau (đúng quy ước module này).
+        // Duplicated per Service on purpose: the module doesn't share private helpers across Services.
         private async Task<int> ResolveCurrentEmployeeIdAsync(int? currentUserId)
         {
             if (currentUserId is null)

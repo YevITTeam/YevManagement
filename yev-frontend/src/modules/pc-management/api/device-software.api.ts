@@ -20,7 +20,6 @@ const ENDPOINTS = {
 } as const;
 
 export const DeviceSoftwareApi = {
-    // Danh sách phần mềm đã cài trên 1 thiết bị.
     getDeviceSoftwareByDevice: async (deviceId: number) => {
         const response = await api.get<ApiResponse<DeviceSoftwareDeviceDto[]>>(
             ENDPOINTS.DEVICE_SOFTWARE.getDeviceSoftwareByDevice(deviceId)
@@ -28,7 +27,6 @@ export const DeviceSoftwareApi = {
         return response.data;
     },
 
-    // Thêm 1 phần mềm vào thiết bị (đơn lẻ).
     createDeviceSoftware: async (deviceSoftwareData: CreateUpdateDeviceSoftwareDto) => {
         const response = await api.post<ApiResponse<DeviceSoftwareDeviceDto>>(
             ENDPOINTS.DEVICE_SOFTWARE.createDeviceSoftware,
@@ -37,7 +35,7 @@ export const DeviceSoftwareApi = {
         return response.data;
     },
 
-    // Sửa key/ngày cài của 1 phần mềm đã cài (đơn lẻ). Body cần đủ deviceId + softwareId.
+    // Body needs both deviceId and softwareId.
     updateDeviceSoftware: async (deviceSoftwareData: CreateUpdateDeviceSoftwareDto) => {
         const response = await api.put<ApiResponse<boolean>>(
             ENDPOINTS.DEVICE_SOFTWARE.updateDeviceSoftware,
@@ -46,7 +44,7 @@ export const DeviceSoftwareApi = {
         return response.data;
     },
 
-    // Gỡ 1 phần mềm khỏi thiết bị (khoá kép deviceId + softwareId).
+    // Composite key deviceId + softwareId.
     deleteDeviceSoftware: async (deviceId: number, softwareId: number) => {
         const response = await api.delete<ApiResponse<boolean>>(
             ENDPOINTS.DEVICE_SOFTWARE.deleteDeviceSoftware(deviceId, softwareId)
@@ -54,7 +52,7 @@ export const DeviceSoftwareApi = {
         return response.data;
     },
 
-    // Danh sách toàn bộ phần mềm kèm cờ isSelected — dựng dialog picker checkbox.
+    // All software with an isSelected flag, for the checkbox picker.
     getDeviceSoftwarePicker: async (deviceId: number) => {
         const response = await api.get<ApiResponse<DeviceSoftwarePickerDto[]>>(
             ENDPOINTS.DEVICE_SOFTWARE.getDeviceSoftwarePicker(deviceId)
@@ -62,7 +60,7 @@ export const DeviceSoftwareApi = {
         return response.data;
     },
 
-    // Lưu hàng loạt sau khi tick — gửi toàn bộ danh sách đang tick, server tự tính diff.
+    // Send the full ticked list; the server computes the diff.
     syncDeviceSoftware: async (syncData: DeviceSoftwareSyncDto) => {
         const response = await api.put<ApiResponse<DeviceSoftwareDeviceDto[]>>(
             ENDPOINTS.DEVICE_SOFTWARE.syncDeviceSoftware,

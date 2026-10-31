@@ -1,8 +1,6 @@
 namespace Workflow.Application.Interfaces.Repository
 {
-    // KHÔNG kế thừa IGenericRepository<T> — WorkflowSequences có PK composite (SequenceKey, Year),
-    // không có Id surrogate nên các thao tác CRUD chuẩn của GenericRepository không áp dụng được.
-    // Chỉ cần đúng 1 thao tác cấp số atomic (workflow-module.md §5.4).
+    // Not an IGenericRepository<T>: composite PK (SequenceKey, Year) with no surrogate Id; only an atomic allocate is needed.
     public interface IWorkflowSequenceRepository
     {
         Task<int> GetNextSequenceAsync(string sequenceKey, int year);

@@ -1,4 +1,4 @@
-// Khớp asset-module.md §4 "Bản mới nhất" = !isDeleted, versionCode lớn nhất (tính phía BE).
+// "Latest" = non-deleted release with the highest versionCode, computed by BE.
 export interface AppReleaseDto {
     id: number;
     versionCode: number;
@@ -8,7 +8,7 @@ export interface AppReleaseDto {
     changelog: string | null;
 }
 
-// Body POST/PUT — id dùng cho PUT, POST bỏ qua.
+// id is used by PUT and ignored by POST.
 export interface CreateUpdateAppReleaseDto {
     id: number;
     versionCode: number;

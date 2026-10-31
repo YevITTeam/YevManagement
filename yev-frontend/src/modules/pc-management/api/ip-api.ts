@@ -46,8 +46,7 @@ export interface GetIpPrefixPageNationParams {
 }
 
 export const IpApi = {
-    // docs/asset-module.md §4 — IpAddress không còn POST/DELETE thủ công
-    // (2026-07-11): chỉ sinh hàng loạt qua POST /IpPrefix, dọn qua DELETE /IpPrefix/{id}.
+    // IpAddresses are only created/removed via IpPrefix (no manual POST/DELETE).
     getIpAddressPageNation: async (params?: GetIpAddressPageNationParams) => {
         const query = new URLSearchParams();
         if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));
@@ -73,7 +72,7 @@ export const IpApi = {
         const response = await api.get<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.getIpAddressById(id));
         return response.data;
     },
-    // docs/asset-module.md §4 — PUT chỉ đổi được status + note.
+    // PUT only changes status + note.
     updateIpAddress: async (id: number, data: IpAddressUpdateDto) => {
         const response = await api.put<ApiResponse<IpAddressDto>>(ENDPOINTS.IP_ADDRESS.updateIpAddress(id), {
             id,
@@ -81,8 +80,7 @@ export const IpApi = {
         });
         return response.data;
     },
-    // docs/asset-module.md §4 — đổi status (chỉ 0/1) cho nhiều IP cùng lúc, không fail cả lô.
-    // Trả nguyên envelope (không bóc `.data`) vì FE cần dùng `message` server dịch sẵn cho toast.
+    // Bulk status (0/1 only) with partial success; returns the full envelope since the toast uses the server message.
     updateIpAddressBulkStatus: async (data: IpAddressBulkStatusDto) => {
         return api.put<ApiResponse<IpAddressBulkStatusResultDto>>(
             ENDPOINTS.IP_ADDRESS.updateIpAddressBulkStatus,
@@ -115,12 +113,12 @@ export const IpApi = {
         const response = await api.get<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.getIpPrefixById(id));
         return response.data;
     },
-    // docs/asset-module.md §4 — tạo prefix tự sinh 254 IpAddress con (.1-.254, bỏ .0/.255).
+    // Generates 254 child IpAddresses (.1-.254).
     createIpPrefix: async (ipPrefixData: IpPrefixCreateDto) => {
         const response = await api.post<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.createIpPrefix, ipPrefixData);
         return response.data;
     },
-    // docs/asset-module.md §4 (2026-07-13) — cho sửa Chi nhánh + cấu hình mạng, không sửa prefix.
+    // Branch and network config are editable; the prefix itself is not.
     updateIpPrefix: async (id: number, ipPrefixData: IpPrefixUpdateDto) => {
         const response = await api.put<ApiResponse<IpPrefixDto>>(ENDPOINTS.IP_PREFIX.updateIpPrefix(id), {
             id,

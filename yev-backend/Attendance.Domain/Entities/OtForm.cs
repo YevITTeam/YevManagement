@@ -7,15 +7,10 @@ public partial class OtForm
 {
     public int Id { get; set; }
 
-    // Nullable khi IsProductionForm = true (đơn "theo chuyền", Chế tạo) — đơn loại này không gắn 1
-    // Group cố định (Employee.GroupId của người tạo/người tham gia có thể khác nhau, xem
-    // ProductionApprovalStep) — 2026-08-24. Đơn "theo Nhóm" (văn phòng, IsProductionForm = false)
-    // vẫn bắt buộc có GroupId như trước.
+    // Null for production forms (participants may come from different groups); required for office forms.
     public int? GroupId { get; set; }
 
-    // true = đơn tạo theo chế độ "chuyền" (chọn người qua ProductionEmployee, không qua Group cố
-    // định) — quyết định tường minh, KHÔNG suy ngầm từ GroupId == null, để mọi nơi đọc dữ liệu (báo
-    // cáo, in PDF, danh sách đơn...) biết chắc loại đơn mà không cần đoán qua giá trị null.
+    // Explicit flag so readers never infer the form type from GroupId == null.
     public bool IsProductionForm { get; set; }
 
     public int DepartmentId { get; set; }
@@ -39,40 +34,25 @@ public partial class OtForm
 
     public int NumberOfEmployee { get; set; }
 
-    // The form creator — stores UserName (Identity.User lives in a different DB, and the JWT has no
-    // numeric UserId claim, only UserName), following the same convention as
-    // Asset.Domain.Models.AuditTrail.ChangedBy.
+    // UserName, not an id: Identity users live in another DB and the JWT carries no numeric UserId.
     public string CreatedByUserName { get; set; } = null!;
 
-    // Snapshot of the JWT's "FullName" claim at the time the form was created — so every display
-    // (list/detail) can always show the user's name instead of the raw UserName, same reasoning as
-    // OtFormApprovalHistory.ApproverFullName.
+    // Snapshot of the JWT FullName at creation.
     public string? CreatedByFullName { get; set; }
 
-    // Thời điểm tạo đơn (UTC) — dùng làm "thời gian ký" hiển thị trên bản in cho trường hợp tự ký
-    // (CreatorSignatureImage, không có OtFormApprovalHistory tương ứng để lấy ActionAt) — xem
-    // OtFormPrintView.tsx SignatureCell (2026-08-20).
+    // Also serves as the signing time printed for the creator's self-signature (no history row exists for it).
     public DateTime CreatedAt { get; set; }
 
-    // Snapshot ảnh chữ ký của CHÍNH người tạo đơn (từ UserSignature lúc tạo) — chỉ có giá trị khi
-    // JobTitleApprovalChainService đánh giá người tạo đã ở cấp cao hơn/bằng MỌI Chức vụ trung gian
-    // "Bắt buộc ký" đã cấu hình cho Phòng ban (không còn ai khác để ký ô "Người đề nghị" thay họ) —
-    // xem ResolveApprovalChainResultDto.RequiresCreatorSelfSign, OtFormService.CreateAsync (2026-08-08,
-    // theo yêu cầu người dùng). "Người chịu trách nhiệm" dùng chung field này qua fallback
-    // createdByFullName có sẵn ở OtFormPrintView.tsx, không cần field riêng.
+    // Set only when the creator ranks at or above every required-signature intermediate title, so nobody else can sign for them.
     public byte[]? CreatorSignatureImage { get; set; }
 
-    // Stores the Attendance.Domain.Enums.OtFormStatus enum as an int (following the same convention as
-    // Asset.Domain.Entities.Device.Status).
+    // Attendance.Domain.Enums.OtFormStatus.
     public int Status { get; set; }
 
     public bool IsDeleted { get; set; }
 
-    // Admin xoá đơn thủ công (2026-08-08) — dùng cho đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate ở 1
-    // bước, không có cách resolve lại) vì candidate đã snapshot 1 lần lúc tạo. Chỉ Admin có quyền
-    // (Attendance.OTForm.Delete), chỉ áp dụng cho đơn CHƯA Completed (đơn Completed đã cộng lũy kế thật,
-    // xoá sẽ làm sai số liệu — chặn ở Service). Set cùng lúc với IsDeleted=true, giữ nguyên toàn bộ dữ
-    // liệu đơn (soft-delete, không mất audit trail — xem OtFormEmployee.RemovedAt cùng triết lý).
+    // Admin hard-stop for forms stuck on a step with no candidates; Completed forms cannot be deleted because
+    // their hours are already accumulated. Soft-delete keeps the audit trail.
     public string? DeletedByUserName { get; set; }
 
     public string? DeletedByFullName { get; set; }
@@ -81,8 +61,7 @@ public partial class OtForm
 
     public string? DeleteReason { get; set; }
 
-    // "Đơn tổng" this form was swept into, once it reaches OtFormStatus.Pending (awaiting Department
-    // Manager) — null until the daily sweep picks it up (see docs/attendance-module.md — §Đơn tổng).
+    // Null until the daily batch sweep picks the form up.
     public int? OtFormBatchId { get; set; }
 
     public virtual Group? Group { get; set; }
@@ -107,12 +86,8 @@ public partial class OtForm
 
     public virtual ICollection<OtFormApprovalEmailToken> OtFormApprovalEmailTokens { get; set; } = new List<OtFormApprovalEmailToken>();
 
-    // Chuỗi bước duyệt đã snapshot lúc tạo đơn (2026-08-07, Giai đoạn 3.1) — xem OtFormApprovalStep.
     public virtual ICollection<OtFormApprovalStep> ApprovalSteps { get; set; } = new List<OtFormApprovalStep>();
 
-    // Cảnh báo suy luận chuỗi lúc tạo đơn (Phòng ban chưa cấu hình đủ cây duyệt / thiếu người giữ
-    // đúng Chức vụ) — snapshot 1 lần, không tính lại (2026-08-07). Null nếu chuỗi đầy đủ. Không tự
-    // fallback về cơ chế cũ — đơn vẫn được tạo nhưng "kẹt" ở bước không có candidate nào, Admin phải bổ
-    // sung cấu hình rồi mới đi tiếp (xem docs/attendance-module.md §Cây chức vụ, plan §3 quyết định #10).
+    // Snapshot at creation; null when the chain is complete. A form with a missing step stays stuck until Admin fixes the config.
     public string? ApprovalChainWarning { get; set; }
 }

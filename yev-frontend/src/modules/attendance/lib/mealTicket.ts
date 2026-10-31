@@ -1,9 +1,7 @@
 import type { AttendanceSettingDto } from "@/modules/attendance/types/attendance-setting.dto";
 
-// Redesign 3 bậc phiếu ăn (2026-08-26, chốt với người dùng — xem docs/attendance-module.md §Phiếu ăn).
-// Mirror OtFormService.CalculateOtHours/CalculateMealTicketType bên BE — BE là nguồn chân lý cho đơn
-// đã lưu (OtFormEmployeeDto.actualHours/mealTicketType), các hàm ở đây chỉ dùng để PREVIEW lúc đang
-// tạo đơn (CreateOtFormPage.tsx), khi OtFormEmployee chưa tồn tại để BE tính.
+// Mirrors BE OtFormService.CalculateOtHours/CalculateMealTicketType for create-form preview only;
+// BE stays the source of truth for saved forms.
 export const MEAL_TICKET_NONE = 0;
 export const MEAL_TICKET_SECONDARY = 1;
 export const MEAL_TICKET_MAIN = 2;
@@ -14,7 +12,7 @@ function toMinutes(time: string): number {
     return h * 60 + m;
 }
 
-// BE trả TimeOnly "HH:mm:ss", input giờ tạo đơn là "HH:mm" — cắt về chung "HH:mm" để so khớp.
+// BE TimeOnly is "HH:mm:ss", form inputs are "HH:mm".
 function normalizeTime(time: string): string {
     return time.length >= 5 ? time.slice(0, 5) : time;
 }
@@ -27,8 +25,7 @@ function computeRawHours(startTime: string, endTime: string): number {
     return Math.round(((endMinutes - startMinutes) / 60) * 100) / 100;
 }
 
-// Ca OT khớp ĐÚNG khung sớm (mặc định 6h-8h, không phải chỉ overlap) — đặc cách không trừ giờ nghỉ ăn
-// + luôn phiếu Phụ, bất kể DidEat/độ dài ca (chốt với người dùng 2026-08-26).
+// Exact match of the early window (not overlap): no meal-break deduction and always a secondary ticket.
 export function isEarlyMealWindowOt(startTime: string, endTime: string, setting: AttendanceSettingDto): boolean {
     return (
         normalizeTime(startTime) === normalizeTime(setting.earlyMealWindowStartTime) &&
@@ -36,7 +33,7 @@ export function isEarlyMealWindowOt(startTime: string, endTime: string, setting:
     );
 }
 
-// Giờ tính lũy kế/hiển thị: chỉ người có ăn mới bị trừ mealBreakDeductionHours (ngoài khung sớm).
+// Only employees who ate get the meal-break deduction (outside the early window).
 export function computeActualHours(startTime: string, endTime: string, didEat: boolean, setting: AttendanceSettingDto): number {
     const raw = computeRawHours(startTime, endTime);
     if (isEarlyMealWindowOt(startTime, endTime, setting)) return raw;

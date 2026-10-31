@@ -6,7 +6,7 @@ namespace Asset.Application.Interfaces.Service
     {
         Task<List<InventoryAssignmentDto>> GetAllAsync();
 
-        // Xưởng của user đang đăng nhập; null = chưa được phân công.
+        // Null = not assigned.
         Task<InventoryAssignmentDto?> GetMyAssignmentAsync();
 
         Task<InventoryAssignmentDto> SaveAsync(SaveInventoryAssignmentDto request);

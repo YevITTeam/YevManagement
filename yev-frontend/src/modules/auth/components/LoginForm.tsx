@@ -22,8 +22,7 @@ export default function LoginForm() {
     const searchParams = useSearchParams();
     const { loginWithPassword, loginWithWindows } = useAuth();
 
-    // Lazy init — chỉ đọc localStorage 1 lần lúc mount, không dùng useEffect (không có gì để "đồng bộ lại"
-    // khi state khác đổi, xem frontend-conventions.md §3 "you-might-not-need-an-effect").
+    // Lazy init reads localStorage once; nothing to resync later, so no effect.
     const [userName, setUserName] = useState(() =>
         typeof window === "undefined" ? "" : window.localStorage.getItem(REMEMBERED_USERNAME_KEY) ?? ""
     );

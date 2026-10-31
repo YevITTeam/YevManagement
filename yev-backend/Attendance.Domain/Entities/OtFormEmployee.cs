@@ -2,7 +2,7 @@ using System;
 
 namespace Attendance.Domain.Entities;
 
-// List of employees participating in an OtForm along with each person's actual OT hours — composite key (OtFormId, EmployeeId).
+// Composite key (OtFormId, EmployeeId).
 public partial class OtFormEmployee
 {
     public int OtFormId { get; set; }
@@ -13,54 +13,35 @@ public partial class OtFormEmployee
 
     public TimeOnly EndTime { get; set; }
 
-    // Có dùng phiếu ăn (ăn tại công ty) hay không — chỉ có ý nghĩa khi giờ OT thực tế của người này
-    // (EndTime - StartTime) >= AttendanceSetting.MainMealTicketMinHours; dưới ngưỡng thì field này
-    // không được dùng tới ở đâu cả. Nhập lúc tạo đơn, sửa được cùng lúc với EndTime tới trước khi
-    // Trưởng phòng duyệt (xem OtFormService.UpdateAsync — Sửa đơn: giới hạn chỉ sửa thực tích).
-    // Khi Completed, nếu đủ ngưỡng mà DidEat=false thì +30 phút vào lũy kế (MonthToDate/YearToDate) —
-    // xem AccumulateEmployeeHoursAsync. Không liên quan ProcessPart.IsEat (cờ "có phục vụ ăn" chung
-    // cho cả đơn, người lập đơn tick tay, không theo từng người).
+    // Per-employee meal flag; unrelated to ProcessPart.IsEat, which is a form-level flag.
     public bool DidEat { get; set; }
 
     public string? NoteVn { get; set; }
 
     public string? NoteJp { get; set; }
 
-    // Snapshot of Employee.ProjectedMonthToDate/ProjectedYearToDate (NOT MonthToDate/YearToDate —
-    // changed 2026-08-06) at the moment this row was added to the form, BEFORE this form's own hours
-    // were reserved into the projected total — frozen so viewing an old form always shows "how much
-    // this person already had pending (including OTHER not-yet-decided forms) right before this one",
-    // not whatever the Employee's projected accumulation happens to be right now (same principle as
-    // OtFormApprovalHistory.SignatureImage/ApproverFullName being snapshots, not live joins).
+    // Snapshot of the projected totals before this form's own hours were reserved, so old forms keep showing
+    // what was pending at the time.
     public decimal MonthToDate { get; set; }
 
     public decimal YearToDate { get; set; }
 
-    // === Removed-by-approver block (see docs/attendance-module.md — Loại nhân viên khỏi đơn) ===
-    // An approver who disagrees with ONE person out of many no longer has to reject the whole form:
-    // they drop that person and approve the rest. This is a SOFT removal (the row stays) — the form is
-    // a legal document, so who was dropped, by whom, at which level and why must remain traceable
-    // forever. Everything downstream (accumulation, NumberOfEmployee, the printed PDF) filters on
-    // IsRemoved; nothing hard-deletes the row.
+    // Soft removal by an approver: the form is a legal document, so who was dropped and why must stay traceable.
+    // Accumulation, NumberOfEmployee and the PDF all filter on IsRemoved.
     public bool IsRemoved { get; set; }
 
     public string? RemovedByUserName { get; set; }
 
     public string? RemovedByFullName { get; set; }
 
-    // StepOrder (OtFormApprovalStep) the remover was acting at when they dropped this person
-    // (2026-08-07, Giai đoạn 3.1 — thay cho ApprovalLevel cũ, xem docs/attendance-module.md
-    // §Cây chức vụ). Tên field giữ nguyên "RemovedAtLevel" để không phải đổi FE/DTO đang dùng.
+    // Holds the remover's StepOrder; name kept to avoid breaking FE/DTO.
     public int? RemovedAtLevel { get; set; }
 
     public DateTime? RemovedAt { get; set; }
 
     public string? RemoveReason { get; set; }
 
-    // Snapshot từ ProductionEmployee tại thời điểm thêm vào đơn (chỉ có giá trị khi OtForm.IsProductionForm
-    // = true, tức đơn "theo chuyền") — ProductionEmployee đổi hàng ngày nên đơn đã tạo phải giữ đúng dữ
-    // liệu lúc đó, không đọc lại ProductionEmployee hiện tại (2026-08-24, cùng nguyên tắc snapshot với
-    // MonthToDate/YearToDate ở trên).
+    // Snapshots from ProductionEmployee (production forms only), which changes daily.
     public string? CongDoanSnapshot { get; set; }
 
     public string? TaskNameSnapshot { get; set; }

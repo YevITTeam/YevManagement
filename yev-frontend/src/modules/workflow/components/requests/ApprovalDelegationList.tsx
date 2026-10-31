@@ -21,8 +21,7 @@ function toDateInputValue(iso: string): string {
     return iso.slice(0, 10);
 }
 
-// Ủy quyền duyệt thay (代理承認) — workflow-module.md §3.4/§5.6. DelegatorEmployeeId luôn resolve =
-// người dùng hiện tại ở BE, FE chỉ chọn DelegateEmployeeId (mirror comment ở CreateUpdateApprovalDelegationDto).
+// BE always resolves the delegator to the current user; FE only picks the delegate.
 export default function ApprovalDelegationList() {
     const t = useTranslations("Workflow.WorkflowRequest");
     const tCommon = useTranslations("Common");

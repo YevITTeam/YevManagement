@@ -7,13 +7,8 @@ namespace Asset.Application.Interfaces.Service
         Task<DeviceConfigurationImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string? fileName = null);
         Task<DeviceConfigurationImportConfirmResultDto> ConfirmAsync(ConfirmDeviceConfigurationImportDto request);
 
-        // Đối chiếu: parse lại đúng file Tanium vừa chọn (không phụ thuộc Preview/Confirm đã chạy
-        // hay chưa) và trả về file .xlsx liệt kê các Device đang Status=InUse mà KHÔNG khớp được
-        // với dòng nào trong file — xem chi tiết luật ở DeviceConfigurationImportService.
-        // deviceCodePrefixes: danh sách tiền tố mã máy do người dùng nhập (VD "YDC","YDF","YLC") —
-        // chỉ Device có DeviceCode bắt đầu bằng 1 trong các tiền tố này mới được đối chiếu; rỗng/null
-        // = không lọc theo tiền tố (giữ hành vi cũ, lấy toàn bộ Device InUse).
-        // Same reconciliation as the Excel report, returned as rows for the on-screen report.
+        // Reparses the Tanium file independently of Preview/Confirm and lists InUse devices missing from it.
+        // deviceCodePrefixes limits which DeviceCodes are reconciled; null/empty = all InUse devices.
         Task<List<DeviceMissingInTaniumDto>> GetMissingDevicesAsync(Stream excelFileStream, string? fileName = null, IEnumerable<string>? deviceCodePrefixes = null);
 
         Task<DeviceMissingInTaniumReportDto> BuildMissingDevicesReportAsync(Stream excelFileStream, string? fileName = null, IEnumerable<string>? deviceCodePrefixes = null);

@@ -6,7 +6,6 @@ using Shared.Application.Wrapper;
 
 namespace Asset.Api.Controllers
 {
-    // Phân công user ↔ xưởng cho kiểm kê thiết bị (asset-module.md §1.22).
     public class InventoryAssignmentController : BaseController
     {
         private readonly IInventoryAssignmentService _assignmentService;

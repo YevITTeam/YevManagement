@@ -12,10 +12,7 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Bulk import Employees (upsert by Code — Code is unique: if the code already exists, update
-    // FirstName/LastName/GroupId; otherwise create new) with automatic creation of Department/Group
-    // if the code doesn't exist yet (real HR data usually lists Department/Group directly on the
-    // same row as the employee, with no separate file).
+    // Upserts employees by Code and auto-creates missing Department/Group, since HR files list them on the same row.
     public class EmployeeImportService : BaseService<IAttendanceUnitOfWork>, IEmployeeImportService
     {
         private readonly IDepartmentAccessGuard _departmentAccessGuard;
@@ -47,8 +44,7 @@ namespace Attendance.Application.Services
 
         public async Task<EmployeeImportConfirmResultDto> ConfirmAsync(ConfirmEmployeeImportDto request, string userName, bool isAdmin)
         {
-            // Re-validate from scratch against the current DB data (don't trust the Resolved*/IsNew*
-            // fields sent by the client) — in case the data has changed since the user viewed the Preview.
+            // Re-validate against current DB data; never trust client-sent Resolved*/IsNew* fields.
             var (validatedRows, departmentPlans, groupPlans) = await ValidateAndResolveRowsAsync(request.Rows, userName, isAdmin);
 
             var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
@@ -64,19 +60,14 @@ namespace Attendance.Application.Services
 
             if (validRows.Count == 0) return result;
 
-            // Only create Department/Group entries that are actually used by at least 1 VALID
-            // employee row — avoid creating orphan records if all employees using that code get
-            // skipped due to other errors.
+            // Create only codes used by at least one valid row, to avoid orphan Department/Group records.
             var usedDepartmentCodes = validRows.Select(r => r.DepartmentCode!).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var usedGroupCodes = validRows.Select(r => r.GroupCode!).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             await _unitOfWork.BeginTransactionAsync();
             try
             {
-                // New Department/Group entities are assigned via navigation property (they don't have
-                // a real Id yet) instead of a direct Id — EF Core automatically fixes up the foreign
-                // key at SaveChangesAsync time, the same way OtFormService.CreateAsync assigns
-                // OtFormEmployee.OtForm = newOtForm.
+                // New entities have no Id yet, so link via navigation and let EF fix up FKs on save.
                 var newDepartmentsByCode = new Dictionary<string, Department>(StringComparer.OrdinalIgnoreCase);
                 foreach (var code in usedDepartmentCodes)
                 {
@@ -122,9 +113,7 @@ namespace Attendance.Application.Services
                     result.CreatedGroupCount++;
                 }
 
-                // Employees that already exist (Code unique, matched in DB) are UPDATED in place
-                // instead of being created anew — only load the Employees that actually need
-                // updating (not the entire table).
+                // Load only employees that need updating, not the whole table.
                 var employeeCodesToUpdate = validRows.Where(r => !r.IsNewEmployee).Select(r => r.EmployeeCode!).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var employeesToUpdateByCode = employeeCodesToUpdate.Count == 0
                     ? new Dictionary<string, Employee>(StringComparer.OrdinalIgnoreCase)
@@ -155,9 +144,7 @@ namespace Attendance.Application.Services
                     }
                     else
                     {
-                        // Only update the name + group — DO NOT touch MonthToDate/YearToDate/AccumulationYear/
-                        // AccumulationMonth/UserName since the Excel file has no such columns; re-importing
-                        // must not wipe out OT accumulation or the AD account already assigned to the employee.
+                        // Name and group only: the file has no accumulation/UserName columns, so re-import must not wipe them.
                         var existingEmployee = employeesToUpdateByCode[row.EmployeeCode!];
                         existingEmployee.FirstName = row.ResolvedFirstName!;
                         existingEmployee.LastName = row.ResolvedLastName!;
@@ -182,8 +169,6 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // Result of resolving 1 Department/Group code: already exists (ExistingId has a value) or will
-        // be created new, and whether there's a name/department conflict between rows in the file (HasConflict).
         private sealed class DepartmentResolution
         {
             public int? ExistingId { get; set; }
@@ -230,9 +215,8 @@ namespace Attendance.Application.Services
 
             var duplicatedEmployeeCodesInFile = FindDuplicates(rawRows, r => r.EmployeeCode);
 
-            // Phase 1: collect unique Department/Group definitions by code across the file, detect
-            // conflicts (different names for the same new code, or a Group code that already belongs
-            // to a different Department in the DB).
+            // Phase 1: collect Department/Group codes and detect conflicts (same new code with different names,
+            // or a Group code already under another Department).
             var departmentPlans = new Dictionary<string, DepartmentResolution>(StringComparer.OrdinalIgnoreCase);
             var groupPlans = new Dictionary<string, GroupResolution>(StringComparer.OrdinalIgnoreCase);
 
@@ -303,10 +287,7 @@ namespace Attendance.Application.Services
                 }
                 else
                 {
-                    // A code duplicated WITHIN THE FILE is still an error (can't tell which row is
-                    // correct) — but a code that ALREADY EXISTS IN THE DB is no longer an error;
-                    // Confirm will update that employee's info instead (upsert by Code, see
-                    // EmployeeImportRowDto.IsNewEmployee).
+                    // Duplicates within the file are errors; codes already in the DB are updated on Confirm.
                     if (duplicatedEmployeeCodesInFile.Contains(employeeCode))
                         errors.Add($"Mã nhân viên '{employeeCode}' bị lặp lại nhiều dòng trong file.");
                     isNewEmployee = existingEmployee == null;
@@ -320,8 +301,7 @@ namespace Attendance.Application.Services
                 }
                 else
                 {
-                    // Last word = given name (FirstName), the rest = family + middle name (LastName) —
-                    // matches the "{LastName} {FirstName}" display convention used in OtFormService.
+                    // Last word = FirstName, rest = LastName, matching the "{LastName} {FirstName}" display convention.
                     var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     resolvedFirstName = parts[^1];
                     resolvedLastName = parts.Length > 1 ? string.Join(' ', parts[..^1]) : string.Empty;
@@ -397,11 +377,8 @@ namespace Attendance.Application.Services
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
-        // Columns per the real HR Excel template: A=No. (ignored, unused), B=Employee code, C=Full name,
-        // D=Department (code), E=Department Name, F=Group (code), G=Group Name.
-        // The header row is NOT fixed at row 1 — real files may have a title/blank rows above it
-        // (2026-07-16, discovered while testing a real file: the header was on row 13) — so we detect
-        // the header row by finding the row where column B = "Employee code" instead of assuming it's always the first row.
+        // A=No. (ignored), B=Employee code, C=Full name, D/E=Department code/name, F/G=Group code/name.
+        // The header row is located by column B since real files have title rows above it.
         private const string HeaderMarkerCellB = "Employee code";
 
         private static List<EmployeeImportRowDto> ParseXlsx(Stream stream)
@@ -413,9 +390,7 @@ namespace Attendance.Application.Services
             }
             catch (Exception ex) when (ex is not DomainException)
             {
-                // Include the underlying exception's type + message in Errors (returned in
-                // ApiResponse.errors) — "Invalid Excel file" is too generic on its own to diagnose the
-                // real cause (e.g. an old .xls file ClosedXML can't read, a password-protected file...).
+                // Include the inner exception so causes like old .xls or password-protected files are diagnosable.
                 throw new DomainException(
                     "File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx).",
                     new List<string> { $"{ex.GetType().Name}: {ex.Message}" });
@@ -428,10 +403,7 @@ namespace Attendance.Application.Services
             var rows = new List<EmployeeImportRowDto>();
             if (usedRange == null) return rows;
 
-            // worksheet.Cell(row, col) — KHÔNG dùng xlRow.Cell(col) (range-relative: nếu cột A trống
-            // hoàn toàn, ClosedXML tự thu hẹp usedRange bắt đầu từ cột B, khiến Cell(2) trỏ nhầm sang
-            // cột C) — đã tái hiện lỗi thật với chính file mẫu do GenerateTemplate() sinh ra (cột A cố
-            // tình để trống theo quy ước), xem docs/docs-be/attendance-module.md (2026-09-03).
+            // Use absolute worksheet.Cell(row, col): range-relative xlRow.Cell(col) shifts when column A is empty.
             var allUsedRows = usedRange.RowsUsed().ToList();
             var headerRow = allUsedRows.FirstOrDefault(r =>
                 string.Equals(worksheet.Cell(r.RowNumber(), 2).GetString().Trim(), HeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
@@ -468,13 +440,8 @@ namespace Attendance.Application.Services
             return rows;
         }
 
-        // Mục 5 (2026-08-27, xem attendance-module.md §Lũy kế & giới hạn giờ OT).
-        // File Excel riêng, khác EmployeeImportRowDto ở trên: cột A bỏ trống (theo đúng quy ước các file
-        // import khác trong module — vd Import_Nhan_Su_Che_Tao.xlsx), B=MNV, C=Giới hạn Tháng, D=Giới
-        // hạn Năm. Chỉ UPDATE nhân viên ĐÃ TỒN TẠI (không tạo mới, không có Department/Group phụ thuộc
-        // cần rà như import Employee đầy đủ) — không cần Preview/Confirm 2 bước, áp dụng thẳng và trả
-        // lại kết quả từng dòng. Ô Giới hạn Tháng/Năm để TRỐNG ở 1 dòng = GIỮ NGUYÊN override cũ của
-        // nhân viên đó (không phải xoá) — đã chốt với người dùng 2026-08-27.
+        // B=MNV, C=monthly limit, D=yearly limit; updates existing employees only, applied directly without Preview.
+        // An empty limit cell keeps the existing override (it does not clear it).
         private const string OtHourLimitHeaderMarkerCellB = "MNV";
 
         public async Task<EmployeeOtHourLimitImportResultDto> ImportOtHourLimitsAsync(Stream excelFileStream, string userName, bool isAdmin)
@@ -498,8 +465,7 @@ namespace Attendance.Application.Services
             var result = new EmployeeOtHourLimitImportResultDto();
             if (usedRange == null) return result;
 
-            // worksheet.Cell(row, col) tuyệt đối — KHÔNG dùng r.Cell(col) range-relative, xem chú thích ở
-            // ParseXlsx phía trên (2026-09-03).
+            // Absolute Cell(row, col); see ParseXlsx above.
             var allUsedRows = usedRange.RowsUsed().ToList();
             var headerRow = allUsedRows.FirstOrDefault(r =>
                 string.Equals(worksheet.Cell(r.RowNumber(), 2).GetString().Trim(), OtHourLimitHeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
@@ -523,13 +489,8 @@ namespace Attendance.Application.Services
             var employeesByCode = (await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && codes.Contains(x.Code)))
                 .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
 
-            // Scope THEO TỪNG DÒNG (2026-08-29, mở rộng thêm Nhóm 2026-09-28) — file này nhận
-            // EmployeeCode tự do, không hardcode 1 Phòng ban như ProductionEmployeeImportService. Admin
-            // bỏ qua hoàn toàn; non-Admin phải là Coordinator đúng Phòng ban HOẶC đúng Nhóm thật của
-            // nhân viên đó (trực tiếp qua DepartmentId, hoặc gián tiếp qua Group.DepartmentId —
-            // FindAsync không include navigation nên tra riêng 1 lượt) — cùng scope với sửa-từng-người
-            // (EnsureCanManageDeptOrGroupScopeAsync), xem docs/docs-be/attendance-module.md §Phân quyền
-            // theo Phòng ban.
+            // Scoped per row since codes are free-form: non-Admins must coordinate the employee's department or group.
+            // FindAsync doesn't include navigation, so Group.DepartmentId is looked up separately.
             var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
             var managedGroupIds = isAdmin ? null : (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
                 x => x.Employee.UserName == userName && !x.IsDeleted)).Select(x => x.GroupId).ToHashSet();
@@ -601,15 +562,8 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // Import lũy kế OT theo THÁNG cho MỌI Phòng ban (2026-09-03, theo yêu cầu người dùng — nguồn dữ
-        // liệu ban đầu là file HR ngoài "phép năm và tăng ca 062026- Công Vụ.xlsx", nhưng hệ thống dùng
-        // FORMAT RIÊNG đơn giản hơn thay vì khớp cột file gốc: file gốc tách 7 loại giờ (đêm/CN/Lễ...)
-        // phục vụ tính lương, còn EmployeeAccumulationHistory hiện chỉ lưu TỔNG giờ/tháng — chỉ lấy đúng
-        // 2 cột cần thiết). Cùng logic delta-upsert + scope theo từng dòng với
-        // ProductionEmployeeImportService.ApplyAccumulationAsync (unique index (EmployeeId,Year,Month)
-        // trên EmployeeAccumulationHistories buộc phải cộng dồn CHÊNH LỆCH thay vì ghi đè — xem file đó
-        // để biết đầy đủ lý do; không trích thành helper dùng chung vì 2 service không cùng 1 lớp cha
-        // chứa logic, và đoạn này đủ ngắn để giữ độc lập, cùng tinh thần các ParseXlsx của module này).
+        // Simplified 2-column format (code + monthly total) since the ledger stores only totals per month.
+        // Delta-upsert because of the unique (EmployeeId, Year, Month) index; same logic as ApplyAccumulationAsync.
         private const string MonthlyAccumulationHeaderMarkerCellB = "MNV";
 
         public async Task<ProductionEmployeeAccumulationResultDto> ImportMonthlyAccumulationAsync(
@@ -634,8 +588,7 @@ namespace Attendance.Application.Services
             var result = new ProductionEmployeeAccumulationResultDto();
             if (usedRange == null) return result;
 
-            // worksheet.Cell(row, col) tuyệt đối — KHÔNG dùng r.Cell(col) range-relative, xem chú thích ở
-            // ParseXlsx phía trên (2026-09-03).
+            // Absolute Cell(row, col); see ParseXlsx above.
             var allUsedRows = usedRange.RowsUsed().ToList();
             var headerRow = allUsedRows.FirstOrDefault(r =>
                 string.Equals(worksheet.Cell(r.RowNumber(), 2).GetString().Trim(), MonthlyAccumulationHeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));
@@ -663,9 +616,7 @@ namespace Attendance.Application.Services
                 x => new { x.Id, x.Code, x.GroupId, DepartmentId = x.DepartmentId ?? (x.Group != null ? (int?)x.Group.DepartmentId : null) }))
                 .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
 
-            // Scope THEO TỪNG DÒNG (EmployeeCode tự do, không hardcode 1 Phòng ban), mở rộng thêm Nhóm
-            // (2026-09-28) — cùng nguyên tắc ImportOtHourLimitsAsync/ApplyAccumulationAsync, xem
-            // docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban.
+            // Scoped per row, same rules as ImportOtHourLimitsAsync.
             var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
             var managedGroupIds = isAdmin ? null : (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
                 x => x.Employee.UserName == userName && !x.IsDeleted)).Select(x => x.GroupId).ToHashSet();
@@ -718,7 +669,7 @@ namespace Attendance.Application.Services
                 var changedMonth = false;
                 var changedYear = false;
 
-                // 1. Cập nhật lũy kế Tháng (nếu có giá trị cột C)
+                // Monthly accumulation (column C).
                 if (row.TotalHours.HasValue)
                 {
                     var targetMonthHours = row.TotalHours.Value;
@@ -760,18 +711,18 @@ namespace Attendance.Application.Services
                     }
                 }
 
-                // 2. Cập nhật lũy kế Năm độc lập (nếu có giá trị cột D) vào dòng số dư đầu kỳ (Month = 0)
+                // Yearly accumulation (column D) goes to the opening-balance row (Month = 0).
                 if (row.YearHours.HasValue)
                 {
                     var targetYearHours = row.YearHours.Value;
-                    // Lũy kế năm hiện tại sau khi đã tính cả điều chỉnh tháng ở trên
+                    // Current year total including the monthly adjustment above.
                     var employeeYearRows = ledgerRowsByEmployee.TryGetValue(employee.Id, out var yRows) ? yRows : new List<EmployeeAccumulationHistory>();
                     var currentYearHours = employeeYearRows.Sum(x => x.TotalHours);
                     var deltaYear = targetYearHours - currentYearHours;
 
                     if (deltaYear != 0)
                     {
-                        // Lưu phần chênh lệch vào dòng số dư đầu kỳ (Month = 0) để không làm sai lệch số giờ thực tế của từng tháng 1..12
+                        // Store the delta on Month = 0 so actual hours for months 1..12 stay accurate.
                         var hasInitialRow = ledgerRowsByEmployeeAndMonth.TryGetValue((employee.Id, 0), out var initialRow);
                         if (hasInitialRow)
                         {

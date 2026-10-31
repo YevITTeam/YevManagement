@@ -107,16 +107,7 @@ public partial class AssetDbContext : DbContext
                 .HasForeignKey(d => d.SupplierId)
                 .HasConstraintName("FK_ThietBis_NhaCungCaps_NhaCungCapId");
 
-            // Self-reference: suggestion for "which NEW device will replace this device" — stored on the
-            // OLD device itself (populated from the "Old MQL" column when importing Excel: after creating
-            // the new device, the server writes the new device's Id into SuggestedNewDeviceId of the
-            // corresponding old device, see docs/asset-module.md).
-            // 2026-07-13: reversed the self-reference direction — previously stored on the NEW device
-            // (ReplacesOldDeviceId pointing to the old device), now stored on the OLD device (pointing to
-            // the new device) so the "Transfer Device" screen opened on the old device can read a single
-            // column directly, without having to search backward through multiple new devices claiming to
-            // replace it. This is only a suggestion for the "Transfer Device" screen — it does not
-            // automatically create a TransferHistory record.
+            // Stored on the OLD device so the Transfer screen reads one column; only a suggestion, no TransferHistory is created.
             entity.HasIndex(e => e.SuggestedNewDeviceId, "IX_ThietBis_GoiYMayMoiId");
 
             entity.HasOne(d => d.SuggestedNewDevice).WithMany()
@@ -143,9 +134,7 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<DeviceGroup>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_Nhoms");
-            // 1 Department - N Groups (2026-07-13): Group code is no longer globally unique, only unique
-            // within 1 Department (e.g. "OF" can belong to both General Affairs and Quality Management,
-            // as 2 distinct Groups).
+            // GroupCode is unique per Department, not globally.
             entity.HasIndex(e => new { e.DepartmentId, e.GroupCode }, "IX_Nhoms_BoPhanId_MaNhom").IsUnique();
             entity.Property(e => e.GroupCode).HasMaxLength(50);
             entity.Property(e => e.GroupName).HasMaxLength(255);
@@ -325,8 +314,7 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<InventorySession>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_InventorySessions");
-            // Chỉ ràng buộc DB: 1 xưởng không được có quá 1 phiên InProgress (Status=0) cùng lúc — filtered
-            // unique index vì nhiều phiên Completed của cùng xưởng là bình thường (mỗi đợt kiểm kê 1 phiên).
+            // At most 1 InProgress session per branch; filtered because many Completed sessions are normal.
             entity.HasIndex(e => e.BranchId, "IX_InventorySessions_BranchId_InProgress")
                 .IsUnique()
                 .HasFilter("[Status] = 0");

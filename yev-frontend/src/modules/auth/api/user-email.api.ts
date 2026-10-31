@@ -22,14 +22,14 @@ const ENDPOINTS = {
   },
 } as const;
 
-// Mọi hàm ghi trả lại toàn bộ overview mới của user để dialog thay state 1 lần.
+// Every write returns the full new overview so the dialog replaces its state once.
 export const UserEmailApi = {
   getOverview: async (userId: number) => {
     const response = await api.get<ApiResponse<UserEmailOverviewDto>>(ENDPOINTS.USER_EMAIL.byUser(userId));
     return response.data;
   },
 
-  // Email tìm thấy ngoài danh sách (mail + alias trên AD).
+  // Emails found on AD (mail + aliases) outside the current list.
   getSuggestions: async (userId: number) => {
     const response = await api.get<ApiResponse<UserEmailSuggestionDto[]>>(ENDPOINTS.USER_EMAIL.suggestions(userId));
     return response.data;
@@ -50,7 +50,7 @@ export const UserEmailApi = {
     return response.data;
   },
 
-  // Identity đã có User/email nào cho tài khoản domain này (userExists=false: chưa có User).
+  // userExists=false means no User yet.
   getByDomainAccount: async (domainAccount: string) => {
     const response = await api.get<ApiResponse<DomainAccountEmailStatusDto>>(
       `${ENDPOINTS.USER_EMAIL.domainAccount}?domainAccount=${encodeURIComponent(domainAccount)}`
@@ -58,7 +58,7 @@ export const UserEmailApi = {
     return response.data;
   },
 
-  // Thêm email vào User của tài khoản domain, tự tạo User (role Basic) nếu chưa có.
+  // Creates the User (Basic role) if missing.
   linkDomainAccount: async (data: LinkDomainAccountEmailsDto) => {
     const response = await api.post<ApiResponse<LinkDomainAccountEmailsResultDto>>(ENDPOINTS.USER_EMAIL.linkDomainAccount, data);
     return response.data;

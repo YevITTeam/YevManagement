@@ -1,4 +1,3 @@
-// Khớp Attendance.Application.Dtos.Reports.ProductionTicketReportDto/RowDto (BE).
 export interface ProductionTicketReportRowDto {
     congDoan: string;
     ca: string;
@@ -20,9 +19,8 @@ export interface ProductionTicketReportDto {
     rows: ProductionTicketReportRowDto[];
 }
 
-// Khớp ProductionTicketBatchGroupDto/EmployeeDto (BE, mới 2026-09-03c) — dữ liệu nền cho phiếu
-// YEV-22-024 xuất hàng loạt theo Line/Nhóm/ngày. FE lấy phần chữ ký/lý do/ProcessPart qua
-// OtFormApi.getOtFormById(primaryOtFormId), chỉ override employees/numberOfEmployee bằng dữ liệu ở đây.
+// Data for bulk-printing YEV-22-024 per line/group/day; signatures/reasons come from getOtFormById(primaryOtFormId),
+// only employees/numberOfEmployee are overridden from here.
 export interface ProductionTicketBatchEmployeeDto {
     employeeId: number;
     employeeCode: string;
@@ -32,8 +30,7 @@ export interface ProductionTicketBatchEmployeeDto {
     monthToDate: number;
     yearToDate: number;
     noteVn: string | null;
-    // Snapshot Team/Line(Block)/Nhóm ca — cần để dựng đúng ô "Tên công đoạn" giống bản in đơn lẻ, xem
-    // getProductionCongDoanLabel() ở OtFormPrintView.tsx.
+    // Needed to build the same process-name cell as the single print (getProductionCongDoanLabel).
     congDoanSnapshot: string | null;
     taskNameSnapshot: string | null;
     blockCodeSnapshot: string | null;

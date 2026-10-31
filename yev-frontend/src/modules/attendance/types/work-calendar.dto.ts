@@ -1,5 +1,4 @@
-// Lịch ngày nghỉ của công ty — xem docs/docs-be/attendance-module.md §Lịch ngày nghỉ.
-// Giá trị khớp enum WorkCalendarDayType bên BE.
+// Values match BE enum WorkCalendarDayType.
 export enum WorkCalendarDayType {
     Sunday = 1,
     PublicHoliday = 2,

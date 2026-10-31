@@ -21,9 +21,6 @@ interface EmployeeImportDialogProps {
     exportFilter: EmployeeExportFilter;
 }
 
-// Pattern Preview → Confirm giống hệt import Device bên module Asset
-// (src/modules/pc-management/components/devices/ImportDeviceConfigurationDialog.tsx) —
-// docs/attendance-module.md §API/§8.
 export default function EmployeeImportDialog({ isOpen, onClose, onImported, exportFilter }: EmployeeImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const [file, setFile] = useState<File | null>(null);
@@ -103,8 +100,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
         }
         setIsConfirming(true);
         try {
-            // Gửi lại NGUYÊN rows từ Preview (kể cả dòng isValid=false) — BE tự re-validate và bỏ qua
-            // dòng lỗi, không phải FE tự lọc trước (docs §3.7).
+            // Send all rows including invalid ones; BE re-validates and skips bad rows.
             const confirmResult = await EmployeeImportApi.confirmImport(rows);
             setResult(confirmResult);
             toast.success(

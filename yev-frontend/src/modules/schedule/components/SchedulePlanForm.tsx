@@ -35,7 +35,6 @@ export default function SchedulePlanForm({ isOpen, mode, initial, onClose, onSub
     setEndDate(current?.endDate ?? "");
   });
 
-  // Ngày kết thúc không được trước ngày bắt đầu.
   const dateError = startDate && endDate && endDate < startDate ? "Ngày kết thúc phải sau ngày bắt đầu." : "";
 
   if (!isOpen) return null;

@@ -10,20 +10,12 @@ using Shared.Application.Interfaces.External;
 
 namespace Attendance.Application.Services
 {
-    // Orchestrates 1 chat turn against the LLM server with tool-calling for OT-form creation (mirrors Asset's
-    // AiChatService — docs/docs-be/asset-module.md §1.18, adapted here in
-    // docs/docs-be/attendance-module.md §AttendanceAiChat). Stateless — the FE resends the whole
-    // history every turn, nothing is persisted server-side. Unlike Asset's version, this feature has
-    // exactly 1 WRITE tool (create_ot_form_draft) — see the confirmation gate below, which is the
-    // reason this orchestrator cannot just be a copy-paste of Asset's.
+    // Stateless: the FE resends the whole history each turn. Differs from Asset's AiChatService because the
+    // single write tool (create_ot_form_draft) sits behind a confirmation gate.
     public class AttendanceAiChatService : IAttendanceAiChatService
     {
-        // Own key (`AiChatSettings:AttendanceMaxToolRounds`), NOT Asset's shared `MaxToolRounds`: this
-        // flow needs a round to call create_ot_form_draft plus a round to report the result, and the
-        // same-turn promise retry can eat one too, so Asset's budget of 3 left users hitting "đã đạt
-        // giới hạn số lần gọi công cụ" mid-form. Kept separate rather than raising the shared value
-        // because each extra round is a full model call (~20-30s on the CPU-only Ollama box) and Asset's
-        // read-only flow does not need the headroom.
+        // Separate from Asset's MaxToolRounds: create + report + a promise retry need more rounds,
+        // and each extra round is a slow full model call Asset's read-only flow doesn't need.
         private const int DefaultMaxToolRounds = 5;
 
         public const string DefaultSystemPrompt =
@@ -79,19 +71,13 @@ namespace Attendance.Application.Services
             "tool — nên tuyệt đối không tự cho rằng đã có xác nhận nếu người dùng chưa thực sự trả lời " +
             "khẳng định.";
 
-        // Matches an assistant reply that promises to act ("tôi sẽ tạo đơn ngay bây giờ", "để tôi kiểm
-        // tra", "xin chờ trong giây lát"...) without actually calling a tool — ported from Asset's
-        // AiChatService (docs/docs-be/asset-module.md §1.18), "tạo" added to the verb list since the
-        // write tool here can be promised-but-not-called the same way a lookup can.
+        // Detects replies that promise an action without calling a tool; includes the "create" verb for the write tool.
         private static readonly Regex UnfulfilledPromisePattern = new(
             @"(sẽ\s+(thực hiện|tra cứu|kiểm tra|gọi|tạo)|ngay bây giờ|trong giây lát|xin chờ|để tôi\s+(kiểm tra|tra cứu))",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // Structural confirmation gate (docs §B3) — the actual write-safety mechanism, NOT just a
-        // prompt rule. Matches a short, unambiguous affirmative at the START of the user's own current
-        // message (never the model's text — the model cannot manufacture this). Anchored to the start
-        // on purpose: a long message that merely contains "ok" somewhere in the middle must NOT count,
-        // only a message that IS an affirmative should.
+        // Write-safety gate: only the user's own message can confirm, and it must START with the affirmative
+        // so a long message merely containing "ok" doesn't count.
         private static readonly Regex ConfirmationPattern = new(
             @"^\s*(đồng ý|dong y|xác nhận|xac nhan|ok(ay)?|được|duoc|tạo đi|tao di|yes|confirm)\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -118,14 +104,10 @@ namespace Attendance.Application.Services
             var maxRounds = _configuration.GetValue<int?>("AiChatSettings:AttendanceMaxToolRounds") ?? DefaultMaxToolRounds;
             var think = request.Think ?? false;
 
-            // At most 1 OT form is ever created per conversation turn (the confirmation gate only lets
-            // create_ot_form_draft through once the user has confirmed a specific proposal) — a single
-            // nullable tracker is enough, unlike Asset's HashSet for potentially many device refs.
+            // The confirmation gate allows at most one form per turn, so a single tracker suffices.
             int? emittedOtFormId = null;
 
-            // Bounds the same-turn auto-retry below (separate from maxRounds' tool-call budget) — a
-            // model that just keeps promising instead of calling a tool must not be allowed to silently
-            // burn every round on empty talk; after this many nudges we give up and end the turn normally.
+            // Caps same-turn nudges so a model that keeps promising can't burn every round.
             const int MaxPromiseRetries = 2;
             var promiseRetriesUsed = 0;
 
@@ -138,20 +120,13 @@ namespace Attendance.Application.Services
                 }
             };
 
-            // Deterministic reference data, re-injected EVERY turn (docs §16). This is what stops the
-            // model inventing option lists and wrong ids, and it frees the whole MaxToolRounds budget
-            // for the one tool that actually has to be a tool (create_ot_form_draft). Re-injecting
-            // rather than relying on history is deliberate: the FE only resends user/assistant
-            // messages, so nothing else carries earlier lookups into this turn.
+            // Re-injected every turn because the FE only resends user/assistant messages; stops the model inventing ids.
             var referenceContext = await _toolExecutor.BuildReferenceContextAsync(caller, cancellationToken);
             messages.Add(new ChatMessageWire { Role = "system", Content = referenceContext });
             foreach (var historyMessage in request.History)
                 messages.Add(new ChatMessageWire { Role = historyMessage.Role, Content = historyMessage.Content });
 
-            // Same unfulfilled-promise guard as Asset's AiChatService (docs §14) — "tool" messages are
-            // never persisted/resent by the FE, so if a PAST turn's assistant reply was just a promise
-            // that ended the round without any real tool_calls, nothing in the resent history proves
-            // anything happened. Detect that shape and inject an explicit correction.
+            // Tool messages aren't resent, so a past bare promise looks like nothing happened; inject a correction.
             var lastHistoryMessage = request.History.Count > 0 ? request.History[^1] : null;
             if (lastHistoryMessage != null &&
                 lastHistoryMessage.Role == "assistant" &&
@@ -176,8 +151,7 @@ namespace Attendance.Application.Services
                 List<ChatToolCallWire>? toolCalls = null;
                 AttendanceAiChatStreamEventDto? streamError = null;
 
-                // DeepClone() is mandatory — AttendanceAiChatToolDefinitions.Tools is a shared static
-                // node and a JsonNode can only ever be attached to 1 parent.
+                // DeepClone is required: the shared static node can only have one parent.
                 var enumerator = _llmChatClient
                     .StreamChatAsync(messages, AttendanceAiChatToolDefinitions.Tools.DeepClone(), think, cancellationToken)
                     .GetAsyncEnumerator(cancellationToken);
@@ -202,13 +176,10 @@ namespace Attendance.Application.Services
                         if (!string.IsNullOrEmpty(chunk.Message?.Content))
                         {
                             contentBuilder.Append(chunk.Message!.Content);
-                            // Stream straight to the client as soon as it arrives (same fix as Asset's
-                            // AiChatService — see its 2026-07-27 comment for the full rationale).
                             yield return AttendanceAiChatStreamEventDto.Content(chunk.Message!.Content);
                         }
 
-                        // tool_calls position is NOT fixed in the stream — keep whatever we've seen so
-                        // far, never let a later empty chunk erase it.
+                        // tool_calls can arrive in any chunk; never let a later empty chunk erase them.
                         if (chunk.Message?.ToolCalls is { Count: > 0 })
                             toolCalls = chunk.Message.ToolCalls;
                     }
@@ -230,11 +201,7 @@ namespace Attendance.Application.Services
                 {
                     messages.Add(new ChatMessageWire { Role = "assistant", Content = text });
 
-                    // Same-turn version of the cross-turn guard above: don't hand control back to the
-                    // user on a bare promise — the model has already proven (in production use) that it
-                    // will just repeat the promise again next turn instead of calling the tool. Force
-                    // another model round right now, within the same HTTP request, up to
-                    // MaxPromiseRetries times.
+                    // Force another round in the same request on a bare promise; otherwise the model repeats it next turn.
                     if (UnfulfilledPromisePattern.IsMatch(text) && promiseRetriesUsed < MaxPromiseRetries && round < maxRounds - 1)
                     {
                         promiseRetriesUsed++;
@@ -261,13 +228,8 @@ namespace Attendance.Application.Services
 
                     AttendanceAiChatToolExecutionResult toolResult;
 
-                    // Structural confirmation gate (docs §B3) — the ONLY write tool is blocked unless
-                    // the user's OWN current-turn message (never the model's own text) carries an
-                    // unambiguous affirmative. This defeats the exact proven failure mode from
-                    // docs/docs-be/asset-module.md §1.18: a small model confidently acting on its own
-                    // hallucinated belief that it received confirmation. The model can emit
-                    // `tool_calls` for create_ot_form_draft all it wants — it still won't execute
-                    // unless the human actually said so this turn.
+                    // Blocks the write tool unless the human's current message is an affirmative,
+                    // so a model hallucinating confirmation can't create a form.
                     if (call.Function.Name == "create_ot_form_draft" && !ConfirmationPattern.IsMatch(request.Message))
                     {
                         toolResult = new AttendanceAiChatToolExecutionResult
@@ -281,29 +243,22 @@ namespace Attendance.Application.Services
                     {
                         try
                         {
-                            // LM Studio sends `arguments` as a JSON-ENCODED STRING (OpenAI wire
-                            // format), unlike Ollama which sent a JSON object — parse it into the
-                            // JsonElement shape AttendanceAiChatToolExecutorService already expects, so
-                            // its tool implementations needed no change for the Ollama->LM Studio
-                            // migration (2026-08-24).
+                            // LM Studio sends arguments as a JSON-encoded string; parse to the JsonElement the executor expects.
                             var argumentsJson = string.IsNullOrWhiteSpace(call.Function.Arguments) ? "{}" : call.Function.Arguments;
                             using var argumentsDoc = JsonDocument.Parse(argumentsJson);
                             toolResult = await _toolExecutor.ExecuteAsync(call.Function.Name, argumentsDoc.RootElement, caller, cancellationToken);
                         }
                         catch (Exception ex)
                         {
-                            // Defense-in-depth: the executor already catches its own errors, this only
-                            // guards against something failing before that (e.g. serialization).
+                            // Defense in depth for failures before the executor's own catch (e.g. serialization).
                             toolResult = new AttendanceAiChatToolExecutionResult { Json = $"{{\"error\":\"Lỗi khi thực thi tool: {ex.Message}\"}}" };
                         }
                     }
 
-                    // ToolCallId echoes call.Id back per the OpenAI Chat Completions spec (see Asset's
-                    // AiChatService for the full rationale) — required by LM Studio's wire format.
+                    // ToolCallId must echo call.Id per the OpenAI wire format LM Studio uses.
                     messages.Add(new ChatMessageWire { Role = "tool", Content = toolResult.Json, ToolCallId = call.Id });
 
-                    // Deep-link button for the FE (§C) — pure metadata, never part of the message
-                    // history sent back to the model.
+                    // FE deep-link metadata only; never sent back to the model.
                     if (toolResult.CreatedOtFormId != null && emittedOtFormId == null)
                     {
                         emittedOtFormId = toolResult.CreatedOtFormId;
@@ -311,7 +266,6 @@ namespace Attendance.Application.Services
                     }
                 }
 
-                // Loop again so the model reads the tool result(s) and either answers or calls more tools.
             }
 
             yield return AttendanceAiChatStreamEventDto.Error("Đã đạt giới hạn số lần gọi công cụ, vui lòng thử lại với yêu cầu cụ thể hơn.");

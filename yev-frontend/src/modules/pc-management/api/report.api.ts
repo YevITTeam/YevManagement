@@ -16,7 +16,7 @@ export interface GetDeviceListReportParams {
     branchId?: number;
     departmentId?: number;
     groupId?: number;
-    // 0 = Chưa sử dụng, 1 = Đang sử dụng; omitted = both.
+    // 0 = unused, 1 = in use; omitted = both.
     status?: number;
 }
 

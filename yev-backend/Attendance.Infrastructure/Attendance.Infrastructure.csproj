@@ -13,8 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Template email của module Attendance — copy nguyên thư mục EmailTemplates/ ra cạnh DLL sau
-         build để EmailTemplateService (Shared.Infrastructure) đọc được lúc chạy (xem docs/attendance-module.md). -->
+    <!-- EmailTemplateService reads these next to the DLL at runtime. -->
     <Content Include="EmailTemplates\**\*.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -3,8 +3,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Asset.Application.Dtos.ServerChecks
 {
-    // Note chỉ áp dụng cho item còn Pending (chưa quét) khi kết thúc phiên — item đã Ok giữ nguyên,
-    // gửi kèm cũng bị bỏ qua. ManualResults bắt buộc đủ toàn bộ ServerCheckManualItem đang active.
+    // Note applies only to items still Pending at session end; Ok items are left untouched.
+    // ManualResults must cover every active ServerCheckManualItem.
     public class EndServerCheckSessionDto
     {
         public List<EndServerCheckItemNoteDto> Items { get; set; } = new();
@@ -26,7 +26,7 @@ namespace Asset.Application.Dtos.ServerChecks
         [Required]
         public int ManualItemId { get; set; }
 
-        // Asset.Domain.Enums.ServerCheckItemStatus — chỉ nhận Ok(1)/Ng(2).
+        // ServerCheckItemStatus; only Ok(1)/Ng(2) accepted.
         [Required]
         public int Status { get; set; }
 

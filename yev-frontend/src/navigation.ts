@@ -1,6 +1,6 @@
 import { createNavigation } from "next-intl/navigation";
 import { routing } from "./i18n/routing";
 
-// Mọi component cần chuyển trang phải dùng Link/useRouter/usePathname từ đây thay vì
-// next/link hay next/navigation, để next-intl tự thêm/bỏ tiền tố locale khi điều hướng.
+// Use Link/useRouter/usePathname from here, not next/link or next/navigation,
+// so next-intl adds/strips the locale prefix.
 export const { Link, redirect, usePathname, useRouter, getPathname } = createNavigation(routing);

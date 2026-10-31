@@ -20,7 +20,7 @@ import type { UserDto } from "@/modules/auth/types/auth.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 
-// JobTitleTerminalLevel (docs/attendance-module.md §API) — 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
+// JobTitleTerminalLevel: 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
 const TERMINAL_LEVEL_NONE = 0;
 const TERMINAL_LEVEL_DEPARTMENT_MANAGER = 1;
 
@@ -29,17 +29,14 @@ export interface EmployeeFormValues {
     firstName: string;
     lastName: string;
     userName: string | null;
-    // Đúng 1 trong 2 field được điền tuỳ theo Chức vụ (2026-08-08, xem docs §Cây chức vụ):
-    // TerminalLevel=None → groupId bắt buộc; =DepartmentManager (Trưởng phòng) → departmentId bắt
-    // buộc; =WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc) → cả 2 đều null.
+    // Depends on the job title's TerminalLevel: None → groupId required; DepartmentManager → departmentId
+    // required; WorkshopManager/GeneralDirector → both null.
     groupId: number | null;
     departmentId: number | null;
     // Department Managers: the (workshop, department) pairs they approve for (0 = not chosen yet).
     approvalScopes: { workshopId: number; departmentId: number }[];
     jobTitleId: number | null;
-    // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — null = dùng mặc định chung (2026-08-26, theo
-    // yêu cầu người dùng — cho phép "gia hạn" cao hơn mặc định, thường dùng cho công nhân dưới chuyền).
-    // Không có Ngày riêng — Ngày luôn dùng chung 1 mốc cho mọi người.
+    // Per-employee OT limits; null = global default. No daily override — the daily limit is always shared.
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
 }
@@ -51,10 +48,8 @@ interface EmployeeFormProps {
     loading?: boolean;
     onClose: () => void;
     onSubmit: (values: EmployeeFormValues) => void | Promise<void>;
-    // Phạm vi Coordinator của người gọi (2026-09-28, xem EmployeeList.tsx) — không phải Admin/toàn công
-    // ty thì chỉ hiện đúng Bộ phận/Nhóm mình phụ trách trong 2 dropdown bên dưới, khớp với những gì BE
-    // thật sự cho phép tạo/sửa (EmployeeService.EnsureAssignmentInCallerScopeAsync) — tránh chọn xong
-    // mới bị 400. `undefined`/`null`/`companyWide` → giữ hành vi cũ (tải toàn bộ công ty).
+    // Coordinator scope: restricts the dropdowns to what BE actually allows, avoiding a 400 after picking.
+    // undefined/null/companyWide = load the whole company.
     scope?: EmployeeScopeDto | null;
     // Show the per-employee OT limit fields when editing (create mode always shows them). Needs
     // Attendance.Employee.UpdateOtLimit because the limits are saved through a separate endpoint.
@@ -89,14 +84,12 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     const [jobTitles, setJobTitles] = useState<JobTitleDto[]>([]);
     const [usersWithRoles, setUsersWithRoles] = useState<UserDto[]>([]);
     const [showUserSuggestions, setShowUserSuggestions] = useState(false);
-    // Bộ phận dùng để LỌC danh sách Nhóm cho nhân viên thường (Bộ phận của họ suy ra từ Nhóm, không lưu
-    // riêng). null = chưa chọn tay, lấy theo Bộ phận của Nhóm đang chọn.
+    // Only filters the group list: an employee's department is derived from their group, not stored.
+    // null = not picked manually, follow the selected group's department.
     const [departmentFilter, setDepartmentFilter] = useState<number | "" | null>(null);
     const [workshopFilter, setWorkshopFilter] = useState<number | "" | null>(null);
 
-    // Bị giới hạn theo Coordinator (2026-09-28) — dùng THẲNG danh sách BE đã trả sẵn trong `scope` (khớp
-    // đúng phạm vi BE thật sự cho phép, xem EmployeeList.tsx) thay vì gọi API "toàn công ty" + set lại
-    // qua state riêng (tránh setState đồng bộ trong effect, frontend-conventions.md §3).
+    // When restricted, use the lists BE returned in `scope` directly instead of fetching + syncing state in an effect.
     const isScopeRestricted = Boolean(scope && !scope.companyWide);
     const effectiveGroups = isScopeRestricted ? scope!.groups : groups;
     const effectiveDepartments = isScopeRestricted ? scope!.departments : departments;
@@ -174,7 +167,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
 
     const handleDepartmentFilterChange = (v: number | "") => {
         setDepartmentFilter(v);
-        // Nhóm đang chọn không thuộc Bộ phận mới → bỏ chọn để phải chọn lại Nhóm đúng Bộ phận.
+        // Selected group no longer belongs to the new department → clear it.
         setValues((current) => {
             const currentGroup = effectiveGroups.find((g) => g.id === current.groupId);
             return v !== "" && currentGroup && currentGroup.departmentId !== v ? { ...current, groupId: null } : current;
@@ -199,8 +192,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         const nextJobTitleId = value === "" ? null : value;
         const nextJobTitle = jobTitles.find((jt) => jt.id === nextJobTitleId);
         const nextTerminalLevel = nextJobTitle?.terminalLevel ?? TERMINAL_LEVEL_NONE;
-        // Đổi nhóm Chức vụ (thường/Trưởng phòng/Trưởng Xưởng-Giám đốc) làm giá trị Bộ phận/Phòng ban
-        // cũ không còn hợp lệ — reset để tránh gửi lẫn field sai lên BE.
+        // Changing the job-title kind invalidates the previous department/group, so reset to avoid sending stale fields.
         setValues((current) => ({
             ...current,
             jobTitleId: nextJobTitleId,

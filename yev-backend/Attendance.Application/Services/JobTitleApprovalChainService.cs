@@ -7,22 +7,8 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Giai đoạn 2b (2026-08-06) — chuỗi duyệt đọc từ DepartmentApprovalStep (cấu hình TAY theo từng
-    // Phòng ban), KHÔNG còn tự bắc cầu qua mọi RankOrder đang có người giữ. Giai đoạn 3.1 (2026-08-07)
-    // wiring thật vào OtFormService.CreateAsync qua ResolveChainForCreationAsync. Giai đoạn 4
-    // (2026-08-08) — tách cấu hình cấp trung gian (Staff/Group Leader/Team Leader) xuống
-    // GroupApprovalStep theo từng Nhóm, chỉ còn 3 cấp cuối (Manager/Factory Manager/Director) ở
-    // DepartmentApprovalStep theo Bộ phận — xem docs/docs-be/attendance-module.md §Cây chức vụ.
-    //
-    // Phạm vi tìm ứng viên mỗi bước:
-    //   - Chức vụ TerminalLevel=None (Staff/Group Leader/Team Leader, từ GroupApprovalStep) → CHỈ
-    //     tính Employee.GroupId == groupId (đúng Nhóm của người tạo đơn, không lan sang Nhóm khác
-    //     cùng Bộ phận — 2026-08-08, trước đó gộp chung theo cả Bộ phận).
-    //   - Chức vụ TerminalLevel=WorkshopManager/GeneralDirector (Factory Manager/Director) → dùng
-    //     chung toàn công ty, KHÔNG lọc theo Department.
-    //   - Chức vụ TerminalLevel=DepartmentManager (Manager) → chỉ tính người có phạm vi
-    //     EmployeeApprovalScope khớp đúng cặp (Xưởng, Phòng ban) của đơn (1 Trưởng phòng có thể giữ
-    //     nhiều cặp, vd cùng Phòng ban ở nhiều Xưởng).
+    // Candidate scope per step: TerminalLevel=None -> creator's own group only; Factory Manager/Director -> company-wide;
+    // DepartmentManager -> people whose EmployeeApprovalScope matches the form's (workshop, department) pair.
     public class JobTitleApprovalChainService : BaseService<IAttendanceUnitOfWork>, IJobTitleApprovalChainService
     {
         public JobTitleApprovalChainService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
@@ -36,8 +22,7 @@ namespace Attendance.Application.Services
             if (creator!.JobTitleId is null || creator.JobTitle is null)
                 throw new DomainException($"Nhân viên '{creator.Code}' chưa được gán chức vụ — không thể suy luận chuỗi duyệt.");
 
-            // Người tạo đơn OT phải thuộc 1 Nhóm thật (GroupId) — Trưởng phòng/Trưởng Xưởng/Giám đốc
-            // (2026-08-08, GroupId null) không tạo đơn OT cho chính họ qua luồng này.
+            // Department managers and above have no GroupId and can't create OT forms for themselves through this path.
             if (creator.Group is null)
                 throw new DomainException($"Nhân viên '{creator.Code}' không thuộc Nhóm nào (Trưởng phòng/Trưởng Xưởng/Giám đốc) — không áp dụng cho việc tạo đơn OT.");
 
@@ -70,8 +55,7 @@ namespace Attendance.Application.Services
             public bool IsResponsible { get; set; }
             public int TerminalLevel { get; set; }
 
-            // Chỉ có giá trị thật khi đọc từ ProductionApprovalStep (đơn "theo chuyền") — xem
-            // JobTitle.IsLineScoped, ResolveChainForProductionCreationAsync.
+            // Only meaningful for production chains (ProductionApprovalStep).
             public bool IsLineScoped { get; set; }
         }
 
@@ -93,10 +77,7 @@ namespace Attendance.Application.Services
                 };
             }
 
-            // Cấp trung gian (Staff/Group Leader/Team Leader) đọc từ GroupApprovalStep theo groupId,
-            // rồi nối tiếp cấp cuối (Manager/Factory Manager/Director) đọc từ DepartmentApprovalStep
-            // theo departmentId — LUÔN đi hết Nhóm trước rồi mới tới Bộ phận, không xen kẽ theo
-            // StepOrder thô (2 nguồn StepOrder độc lập, không so sánh chéo được).
+            // Group steps always come before department steps; the two StepOrder sequences are independent and not comparable.
             var groupSteps = await _unitOfWork.GroupApprovalSteps.SelectAsync(
                 predicate: x => x.GroupId == groupId && !x.IsDeleted,
                 selector: x => new ConfiguredStepRow
@@ -129,10 +110,7 @@ namespace Attendance.Application.Services
                 .Concat(departmentSteps.OrderBy(x => x.StepOrder))
                 .ToList();
 
-            // Xem ResolveApprovalChainResultDto.RequiresCreatorSelfSign — tính TRƯỚC khi lọc relevantSteps
-            // vì phải so với TOÀN BỘ Chức vụ "Bắt buộc ký" đã cấu hình (kể cả các bước đã bị lọc ra vì
-            // RankOrder <= creatorRank), không phải chỉ các bước còn lại trong chuỗi của đơn này. Tính
-            // được ngay cả khi configuredSteps rỗng (khi đó tự nhiên = false, không có gì để tự ký thay).
+            // Computed before filtering: must consider every configured signing title, including steps at or below the creator's rank.
             var configuredSigningIntermediateSteps = configuredSteps
                 .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None && x.RequiresSignature)
                 .ToList();
@@ -140,9 +118,7 @@ namespace Attendance.Application.Services
                 && configuredSigningIntermediateSteps.Count > 0
                 && configuredSigningIntermediateSteps.All(x => x.RankOrder <= creatorRank);
 
-            // Người tạo đã ở cấp bằng/cao hơn cấp duyệt cuối cần tới — không cần bước duyệt nào (kiểm
-            // tra SAU khi đã tính requiresCreatorSelfSign để đơn hoàn tất ngay vẫn snapshot đúng chữ ký
-            // tự ký của người tạo, không riêng gì trường hợp còn bước tới Trưởng phòng).
+            // Checked after requiresCreatorSelfSign so a form completing immediately still snapshots the creator's signature.
             if (targetJobTitle.RankOrder <= creatorRank)
                 return new ResolveApprovalChainResultDto { IsComplete = true, RequiresCreatorSelfSign = requiresCreatorSelfSign };
 
@@ -155,9 +131,7 @@ namespace Attendance.Application.Services
                 };
             }
 
-            // Chỉ giữ các bước ở cấp CAO HƠN người tạo (người tạo không tự duyệt đơn của mình), theo
-            // đúng thứ tự đã ghép Nhóm→Bộ phận ở trên, rồi cắt tại bước đầu tiên chạm đúng cấp duyệt
-            // cuối cần tới — các bước cấu hình sau đó (nếu có) không liên quan tới OtCase này.
+            // Keep steps above the creator, cut at the first one reaching the target level; later steps don't apply to this OtCase.
             var relevantSteps = configuredSteps
                 .Where(x => x.RankOrder > creatorRank)
                 .ToList();
@@ -193,8 +167,7 @@ namespace Attendance.Application.Services
                 .Select(x => x.JobTitleId)
                 .ToList();
 
-            // Cấp trung gian: CHỈ đúng Nhóm của người tạo đơn (2026-08-08, thắt chặt so với trước —
-            // trước đây lọc theo cả Bộ phận nên lẫn ứng viên giữa các Nhóm không liên quan).
+            // Intermediate levels: creator's own group only.
             // Plus Team Leaders of other Groups lent to this Group (GroupBorrowedApprover).
             var borrowedApproverIds = intermediateJobTitleIds.Count == 0
                 ? new List<int>()
@@ -209,7 +182,7 @@ namespace Attendance.Application.Services
                     .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
                     .ToList();
 
-            // Trưởng phòng được chọn theo phạm vi (Xưởng, Phòng ban) của đơn, không theo Employee.DepartmentId.
+            // Department managers are matched by the form's (workshop, department) scope, not Employee.DepartmentId.
             var deptCandidates = deptScopedJobTitleIds.Count == 0
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
                 : (await _unitOfWork.Employees.SelectAsync(
@@ -338,12 +311,7 @@ namespace Attendance.Application.Services
                 };
             }
 
-            // ">=" (không phải ">") — người tạo đơn "theo chuyền" không phải Admin BẮT BUỘC là Line
-            // Leader thật của Line trong đơn (xem OtFormService.CreateProductionFormAsync), tức
-            // creatorRank ở đây chỉ có thể là 0 (Admin, không lọc gì khác nhau) hoặc ĐÚNG RankOrder của
-            // chính bước Line Leader — dùng ">" sẽ loại luôn bước của chính họ, khiến đơn gửi thẳng lên
-            // Group Leader mà Line Leader không có bước Pending nào để tự ký/sửa trước (2026-09-03, theo
-            // yêu cầu người dùng — đơn phải dừng ở bước Line Leader tới khi họ tự ký mới gửi lên trên).
+            // ">=" so a Line Leader creator keeps their own step: the form must wait for them to sign before going up.
             var relevantSteps = configuredSteps.Where(x => x.RankOrder >= creatorRank).ToList();
 
             var cutoffIndex = relevantSteps.FindIndex(x => x.TerminalLevel == targetTerminalLevel);
@@ -361,21 +329,8 @@ namespace Attendance.Application.Services
                 };
             }
 
-            // Trong 1 chuỗi duy nhất, cấp trung gian (TerminalLevel=None) tách làm 2 phạm vi khác nhau:
-            // Line Leader (IsLineScoped=true, theo ProductionLineId) và Group Leader/Team Leader
-            // (IsLineScoped=false) — Line Leader suy TỰ ĐỘNG từ chính những người đang được thêm vào
-            // đơn (KHÔNG có 1 ProductionLineId cố định trên OtForm); Group Leader/Team Leader dùng
-            // chung CẢ Bộ phận Chế tạo (2026-08-28, theo yêu cầu người dùng — "GL/TL dưới chuyền là
-            // người duyệt tổng luôn", KHÔNG scoped theo từng Nhóm sản xuất như bản trước — xem
-            // attendance-module.md §Cây chức vụ & Cây duyệt). CHỈ áp dụng cho đơn "theo chuyền"; đơn "theo Nhóm"
-            // (GroupApprovalStep, ResolveChainCoreAsync ở trên) vẫn giữ nguyên scoping theo Nhóm.
-            //
-            // Line Leader KHÔNG gán qua Employee.JobTitleId (2026-08-27, sửa lại theo yêu cầu người
-            // dùng) — ai là Line Leader của Line nào đã có sẵn trong file import nhân sự dưới chuyền
-            // (cột LEADER → ProductionEmployee.IsLeader, luôn mới nhất mỗi lần import lại), không cần
-            // gán tay qua Cây chức vụ nữa. Group Leader/Team Leader thì KHÔNG có nguồn dữ liệu sẵn nào
-            // tương tự (file import không phân cấp lãnh đạo) — vẫn phải gán tay qua Employee.JobTitleId
-            // như trước (xem ApprovalStepManager.tsx khối "holders" mới ở tab Theo chuyền).
+            // Line Leaders are derived from the form's employees via ProductionEmployee.IsLeader (from import, not JobTitleId);
+            // Group/Team Leaders are assigned by JobTitleId and shared across the whole department for production forms.
             var lineScopedJobTitleIds = relevantSteps
                 .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None && x.IsLineScoped)
                 .Select(x => x.JobTitleId)
@@ -394,10 +349,7 @@ namespace Attendance.Application.Services
                 .Select(x => x.JobTitleId)
                 .ToList();
 
-            // Chỉ suy ra phạm vi Line khi TẤT CẢ người trong đơn cùng 1 ProductionLine — lẫn nhiều Line
-            // thì phạm vi đó coi như không suy được (bước Line Leader sẽ không có ứng viên nào, hiển
-            // thị đúng qua Warning bên dưới, không tự ý chọn đại 1 Line). Group Leader/Team Leader
-            // không cần suy Group nữa (dùng chung cả Bộ phận, xem comment ở trên).
+            // Line scope is derived only when all employees share one line; otherwise the Line Leader step gets no candidate.
             int? derivedProductionLineId = null;
             if (employeeIds.Count > 0)
             {
@@ -420,9 +372,7 @@ namespace Attendance.Application.Services
                     .Distinct()
                     .ToList();
 
-            // 1 người "IsLeader" áp dụng cho MỌI bước Line Leader trong chuỗi (thực tế luôn chỉ có 1
-            // bước như vậy — file import chỉ có 1 cột LEADER, không phân biệt "Line Leader của bước
-            // nào") — xem comment ở trên.
+            // The import has a single LEADER column, so one leader applies to every Line Leader step.
             var lineScopedCandidates = lineScopedJobTitleIds
                 .SelectMany(jobTitleId => lineLeaderHolders.Select(h => (JobTitleId: jobTitleId, h.Id, h.UserName, h.FirstName, h.LastName)))
                 .ToList();

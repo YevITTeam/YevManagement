@@ -8,21 +8,16 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Nạp hàng loạt "Nhân sự dưới chuyền" (ProductionEmployee) từ file mẫu Import_Nhan_Su_Che_Tao.xlsx
-    // (sheet "OT(N+1)") — xem docs/docs-be/attendance-module.md §Import nhân sự dưới chuyền. Upsert theo
-    // EmployeeCode; người không còn xuất hiện trong file mới bị gỡ (soft-delete) khỏi ProductionEmployees.
-    // Mã nhân viên chưa có Employee tương ứng được PHÉP tự tạo (2026-08-27, khác EmployeeImportService —
-    // gán vào Group "Chưa phân loại" dưới Phòng ban Chế Tạo vì file này không cho đủ dữ liệu Nhóm thật).
+    // Upserts by EmployeeCode; people missing from the new file are soft-deleted. Unknown codes create an Employee in the
+    // unclassified group of the Manufacturing department, since the file lacks real group data.
     public class ProductionEmployeeImportService : BaseService<IAttendanceUnitOfWork>, IProductionEmployeeImportService
     {
-        // Bộ phận Chế Tạo (đã có sẵn trong hệ thống) — nơi chứa Group "Chưa phân loại" dùng cho nhân
-        // viên tự tạo từ import này (2026-08-27, theo yêu cầu người dùng).
+        // Department holding the unclassified group for employees auto-created by this import.
         private const string ManufacturingDepartmentCode = "CT";
         private const string UnclassifiedGroupCode = "KHAC";
         private const string UnclassifiedGroupNameVn = "Chưa phân loại (nhập từ file chuyền)";
 
-        // GROUP trong file dịch sang Code của ProductionTeam: A->1, B->2, HC->HC, còn lại khớp trực
-        // tiếp (không phân biệt hoa/thường) — xem ProductionEmployee.cs.
+        // Maps file GROUP to ProductionTeam.Code; others match case-insensitively.
         private static readonly Dictionary<string, string> TeamCodeTranslation =
             new(StringComparer.OrdinalIgnoreCase) { ["A"] = "1", ["B"] = "2", ["HC"] = "HC" };
 
@@ -34,10 +29,7 @@ namespace Attendance.Application.Services
             _departmentAccessGuard = departmentAccessGuard;
         }
 
-        // Đích của import này đã hardcode cứng vào ĐÚNG 1 Phòng ban (ManufacturingDepartmentCode) —
-        // khác ApplyAccumulationAsync (nhận EmployeeCode tự do, phải scope theo TỪNG dòng) — nên chỉ
-        // cần check 1 lần cho cả file (2026-08-29, xem docs/docs-be/attendance-module.md §Phân quyền
-        // theo Phòng ban).
+        // Target department is fixed, so one scope check covers the whole file (unlike ApplyAccumulationAsync).
         private async Task EnsureManufacturingDepartmentAccessAsync(string userName, bool isAdmin)
         {
             var department = (await _unitOfWork.Departments.FirstOrDefaultAsync(
@@ -72,8 +64,7 @@ namespace Attendance.Application.Services
         {
             await EnsureManufacturingDepartmentAccessAsync(userName, isAdmin);
 
-            // Re-validate từ đầu theo dữ liệu DB hiện tại — không tin Resolved*/Is* mà client gửi lại,
-            // đề phòng dữ liệu đã đổi kể từ lúc xem Preview (cùng nguyên tắc EmployeeImportService).
+            // Re-validate against current DB data; never trust the Resolved*/Is* flags the client sends back.
             var (validatedRows, removedRows) = await ValidateAndResolveRowsAsync(request.Rows);
 
             var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
@@ -122,8 +113,7 @@ namespace Attendance.Application.Services
                     }
                 }
 
-                // Employee mới tạo được gán qua navigation property (chưa có Id thật) — EF tự fix up FK
-                // lúc SaveChangesAsync, giống cách EmployeeImportService gán Group/Department mới tạo.
+                // Assigned via navigation (no Id yet); EF fixes up the FK on SaveChangesAsync.
                 var newEmployeesByCode = new Dictionary<string, Employee>(StringComparer.OrdinalIgnoreCase);
                 foreach (var row in newEmployeeRows)
                 {
@@ -223,11 +213,8 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // Tách riêng khỏi ConfirmAsync (2026-08-27, theo yêu cầu người dùng) — đụng lũy kế OT là dữ
-        // liệu ảnh hưởng lương, cần quyền riêng (Attendance.EmployeeAccumulation.Import) và Admin phải
-        // tự chọn tay Year/Month áp dụng. (EmployeeId, Year, Month) có unique index trên
-        // EmployeeAccumulationHistories nên không tách được 1 dòng riêng cho phần điều chỉnh — chỉ có
-        // thể cộng thêm CHÊNH LỆCH vào đúng dòng của tháng đó rồi ghi chú lại nguồn gốc (Note).
+        // Separate from ConfirmAsync: accumulation affects pay, so it needs its own permission and an explicit Year/Month.
+        // The unique (EmployeeId, Year, Month) index forces adding the difference into that month's row with a Note.
         public async Task<ProductionEmployeeAccumulationResultDto> ApplyAccumulationAsync(ApplyProductionEmployeeAccumulationDto request, string userName, bool isAdmin)
         {
             var result = new ProductionEmployeeAccumulationResultDto();
@@ -237,10 +224,7 @@ namespace Attendance.Application.Services
                 .ToList();
             if (candidateRows.Count == 0) return result;
 
-            // Khác ConfirmAsync (1 Phòng ban cố định) — file này nhận EmployeeCode TỰ DO, phải scope
-            // THEO TỪNG DÒNG: lấy trước danh sách Phòng ban người gọi phụ trách (Admin bỏ qua hoàn
-            // toàn), rồi so với Phòng ban thật của từng nhân viên trong vòng lặp bên dưới (2026-08-29,
-            // xem docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban).
+            // Free EmployeeCodes, so scope is checked per row against the caller's managed departments (Admin skips it).
             var managedDepartmentIds = isAdmin
                 ? null
                 : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
@@ -376,10 +360,7 @@ namespace Attendance.Application.Services
 
                 int? teamId = null;
                 var teamCode = row.TeamCode?.Trim();
-                // Chuẩn hoá NGAY ở bước này (2026-09-05) — trước đây chỉ dùng translatedTeamCode để tra
-                // TeamId rồi vứt đi, còn TeamCode lưu xuống DB vẫn là chữ thô "A"/"B" dù TeamId đã trỏ
-                // đúng ProductionTeam "1"/"2", gây lệch giữa 2 cột. Từ giờ TeamCode trong DTO (và vì vậy
-                // cả trong ProductionEmployee) LUÔN là mã đã dịch, khớp ProductionTeam.Code.
+                // Store the translated code so TeamCode always matches ProductionTeam.Code.
                 var translatedTeamCode = teamCode != null && TeamCodeTranslation.TryGetValue(teamCode, out var translated) ? translated : teamCode;
                 if (string.IsNullOrWhiteSpace(teamCode))
                 {
@@ -447,8 +428,7 @@ namespace Attendance.Application.Services
                 });
             }
 
-            // Người đang có trong ProductionEmployees nhưng KHÔNG còn xuất hiện trong file mới (kể cả
-            // dòng lỗi vẫn tính là "còn nhắc tới", chỉ dòng nào vắng mặt hoàn toàn mới bị gỡ).
+            // Rows with errors still count as present; only codes absent from the file are removed.
             var codesStillInFile = rawRows
                 .Select(r => r.EmployeeCode?.Trim())
                 .Where(c => !string.IsNullOrWhiteSpace(c))
@@ -478,11 +458,8 @@ namespace Attendance.Application.Services
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
-        // Cột theo đúng file mẫu Import_Nhan_Su_Che_Tao.xlsx (sheet OT(N+1)): A=KHOI SU (bỏ qua, xem
-        // docs §Import nhân sự dưới chuyền), B=MNV, C=BOPHAN, D=HO, E=TEN, F=CÔNG VIỆC, G=OT month,
-        // H=OT year, I=BLOCK, J=NHOM, K=GROUP, L/M/N=rác ("SX" cố định + cột trống), O=LEADER, P=rác
-        // (#REF! công thức Excel hỏng). Dò dòng tiêu đề bằng cột B="MNV" thay vì cố định dòng 1 — cùng
-        // lý do EmployeeImportService.ParseXlsx (file thật có thể có dòng tiêu đề ở vị trí khác).
+        // Columns of Import_Nhan_Su_Che_Tao.xlsx: A=KHOI SU (ignored), B=MNV, C=BOPHAN, D=HO, E=TEN, F=CONG VIEC, G=OT month,
+        // H=OT year, I=BLOCK, J=NHOM, K=GROUP, L-N/P junk, O=LEADER. Header row is located by B="MNV" since its position varies.
         private const string HeaderMarkerCellB = "MNV";
 
         private static List<ProductionEmployeeImportRowDto> ParseXlsx(Stream stream)
@@ -547,10 +524,7 @@ namespace Attendance.Application.Services
             return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
         }
 
-        // File mẫu tải xuống (2026-08-27, theo yêu cầu người dùng) — ĐÚNG vị trí cột A..O của
-        // Import_Nhan_Su_Che_Tao.xlsx (xem ParseXlsx ở trên), dùng lại nguyên header text với
-        // ProductionEmployeeExportService để 2 file (mẫu import / xuất) luôn khớp nhau. Kèm 1 dòng ví
-        // dụ, không phải dữ liệu thật.
+        // Same A..O layout and header text as ProductionEmployeeExportService so template and export stay in sync.
         public (byte[] Content, string FileName) GenerateTemplate()
         {
             using var workbook = new XLWorkbook();

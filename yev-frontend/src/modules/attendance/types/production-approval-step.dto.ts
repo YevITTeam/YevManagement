@@ -9,8 +9,7 @@ export interface ProductionApprovalStepDto {
     requiresSignature: boolean;
     isResponsible: boolean;
     terminalLevel: number;
-    // true CHỈ cho "Line Leader" — ai giữ lấy thẳng từ ProductionEmployee.IsLeader khi import, không
-    // gán tay được nữa (2026-08-27, xem attendance-module.md).
+    // true only for "Line Leader"; holders come from ProductionEmployee.IsLeader on import.
     isLineScoped: boolean;
 }
 

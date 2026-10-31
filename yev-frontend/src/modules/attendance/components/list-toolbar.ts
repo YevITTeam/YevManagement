@@ -1,6 +1,4 @@
-// Cho phép trang wrapper có tab (Quản lý danh mục Attendance) đặt nút
-// "Làm mới" / "Thêm mới" cùng hàng với tiêu đề, nhưng vẫn điều khiển được
-// danh sách của tab đang mở. Mirror src/modules/pc-management/components/list-toolbar.ts.
+// Lets a tabbed wrapper page put Refresh/Add in its header while still driving the active tab's list.
 export interface ListHandle {
     refresh: () => void;
     openCreate: () => void;

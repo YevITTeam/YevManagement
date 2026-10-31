@@ -2,8 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Workflow.Application.Dtos.OrgUnits
 {
-    // Kéo-thả đổi vị trí/cha trong cây tổ chức — gửi nguyên danh sách item bị ảnh hưởng, mỗi item
-    // là 1 dòng OrgUnit cần cập nhật lại SortOrder (và ParentId nếu đổi cha).
+    // Send every affected item; each updates SortOrder (and ParentId when the parent changes).
     public class ReorderOrgUnitDto
     {
         [Required]

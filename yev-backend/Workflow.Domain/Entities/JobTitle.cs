@@ -10,16 +10,11 @@ public partial class JobTitle
 
     public string? NameJp { get; set; }
 
-    // Thứ bậc — số nhỏ = cao hơn. CHỈ để hiển thị/sắp xếp, KHÔNG dùng suy luận luồng duyệt
-    // (workflow-module.md §1.6: đã bỏ OrgUnitScope = ApplicantAncestor).
+    // Lower = higher rank. Display/sorting only, never used to infer approval flow.
     public int RankOrder { get; set; }
 
-    // true = tại 1 đơn vị chỉ 1 người được giữ chức danh này cùng lúc (EmployeeService.
-    // ReplaceOrgUnitsAsync enforce) — BẮT BUỘC cho chức danh dùng làm mốc route duyệt (§5.5
-    // ParticipantSource=JobTitle cần resolve ra đúng 1 người). false = chức danh phổ thông, nhiều
-    // người cùng giữ được (vd "Nhân viên"). Mặc định true để giữ nguyên hành vi cũ cho dữ liệu có sẵn
-    // (chốt 2026-08-26, xem workflow-module.md §10 — phát hiện khi 1 chức danh phổ thông không gán
-    // được cho người thứ 2 trong cùng đơn vị).
+    // Must be true for titles used as route anchors (resolution needs exactly one holder per unit);
+    // false for common titles held by many (e.g. staff). Defaults true for existing data.
     public bool IsUniquePerOrgUnit { get; set; } = true;
 
     public bool IsDeleted { get; set; }

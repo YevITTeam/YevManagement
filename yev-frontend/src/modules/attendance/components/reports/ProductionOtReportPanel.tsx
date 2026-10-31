@@ -20,7 +20,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 
-// Thứ tự CA cố định khớp file mẫu 22-08.pdf (A → B → C → H), không phải alphabet mặc định.
+// Fixed shift order matching the 22-08.pdf template (A, B, C, H), not alphabetical.
 const CA_ORDER = ["A", "B", "C", "H"];
 
 interface PivotRow {
@@ -39,12 +39,8 @@ interface PivotResult {
     totalMilk: number;
 }
 
-// Bảng tổng hợp theo CA/Dãy ở đầu trang — mirror khối pivot đầu file mẫu 22-08.pdf (nhóm CA → nhóm
-// CA_Dãy bên trong, có dòng tổng mỗi CA rồi TỔNG cuối cùng, dòng nào cũng kèm 1 giờ đại diện). Gộp
-// NGAY TRÊN dữ liệu report.rows đã có (vốn chi tiết hơn, còn tách theo Line) — không cần gọi thêm
-// API. Cột giờ ở mỗi dòng CA_Dãy lấy StartTime của dòng chi tiết ĐẦU TIÊN trong nhóm đó (nếu 1 CA_Dãy
-// gồm nhiều Line khác giờ nhau do về sớm/vào trễ thì chỉ đại diện 1 giờ, giống đúng cách file mẫu thể
-// hiện — xem đủ giờ từng Line ở bảng chi tiết bên dưới).
+// Pivot by shift/row like the top of 22-08.pdf, built from report.rows (no extra API call). Each row shows the
+// StartTime of its first detail line, as the template does; per-Line times are in the detail table.
 function buildPivotRows(rows: ProductionTicketReportRowDto[]): PivotResult {
     const byCa = new Map<string, ProductionTicketReportRowDto[]>();
     for (const row of rows) {
@@ -107,8 +103,7 @@ function formatDateVn(iso: string) {
     return `${d}/${m}/${y}`;
 }
 
-// Font mặc định của jsPDF (Helvetica) không có dấu tiếng Việt — nhúng font Roboto qua VFS (cùng file
-// dùng chung với DeviceListReportPrintDialog.tsx, xem modules/pc-management/lib/pdf-fonts.ts).
+// Default Helvetica lacks Vietnamese diacritics; embed Roboto via VFS (shared pdf-fonts.ts).
 function registerVietnameseFont(doc: jsPDF) {
     doc.addFileToVFS("Roboto-Regular.ttf", ROBOTO_REGULAR_BASE64);
     doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
@@ -117,11 +112,8 @@ function registerVietnameseFont(doc: jsPDF) {
     doc.setFont("Roboto", "normal");
 }
 
-// Màu mô phỏng ĐÚNG file PDF gốc docs/Data/Reports/22-08.pdf (2026-08-29, đọc trực tiếp file gốc chứ
-// không phải ảnh chụp) — dòng nhóm CA chữ TÍM đậm; dòng CA_Dãy con: cột nhãn/giờ/Phiếu Phụ chữ ĐEN
-// trên nền XÁM nhạt, riêng 2 cột Chính/Sữa chữ XANH LÁ (quirk của file mẫu, giữ nguyên); tiêu đề +
-// header bảng chi tiết chữ XANH LAM đậm. Không có trong bảng màu thương hiệu AGENTS.md vì đây là bản
-// in đối chiếu với hệ cũ, cố tình khác giao diện web của hệ thống.
+// Colors replicate the legacy 22-08.pdf (including its green Main/Milk columns quirk), deliberately outside the brand
+// palette since this print is compared against the old system.
 const PIVOT_BORDER_COLOR: [number, number, number] = [77, 208, 225];
 const TITLE_COLOR: [number, number, number] = [26, 115, 140];
 const CA_GROUP_TEXT_COLOR: [number, number, number] = [106, 61, 154];
@@ -157,13 +149,10 @@ function buildTicketReportPdf(report: ProductionTicketReportDto) {
     doc.text(titleText, boxX + 4, titleY);
     doc.setTextColor(0, 0, 0);
 
-    // Khung phải đủ rộng cho tiêu đề (VD tên Bộ phận dài) lẫn bảng tổng hợp — lấy max của cả 2.
+    // Wide enough for both the title (long department names) and the summary table.
     const boxWidth = Math.max(100, doc.getTextWidth(titleText) + 12);
 
-    // Bảng tổng hợp theo CA/Dãy — cùng khối pivot đầu file mẫu 22-08.pdf (xem buildPivotRows). Dòng
-    // đầu tiên (không nhãn) lặp lại 3 tổng cộng giống hệt hàng "tiêu đề số" của file mẫu (thay vì chữ
-    // "Phiếu Phụ/Chính/Sữa" — giữ đúng quirk hiển thị gốc). Nhóm CA tô tím đậm, dòng CA_Dãy tô xanh lá
-    // + nền xám nhạt, khớp đúng phối màu ảnh chụp người dùng gửi.
+    // The first unlabeled row repeats the three totals, mirroring the template's numeric header row.
     const pivot = buildPivotRows(report.rows);
     const pivotBody: (string | number)[][] = [
         ["", "", pivot.totalSecondary, pivot.totalMain, pivot.totalMilk],
@@ -197,8 +186,7 @@ function buildTicketReportPdf(report: ProductionTicketReportDto) {
                 data.cell.styles.textColor = CA_GROUP_TEXT_COLOR;
                 data.cell.styles.fontStyle = "bold";
             } else {
-                // Cột Chính (index 3)/Sữa (index 4) chữ xanh lá, cột nhãn/giờ/Phiếu Phụ (0-2) chữ đen
-                // — đúng quirk màu của file mẫu gốc (không phải lỗi đọc nhầm ảnh mờ trước đó).
+                // Main (3)/Milk (4) in green, label/time/secondary (0-2) in black, matching the template's quirk.
                 data.cell.styles.textColor = data.column.index >= 3 ? LEAF_MAIN_MILK_TEXT_COLOR : LEAF_TEXT_COLOR;
                 data.cell.styles.fillColor = LEAF_FILL_COLOR;
             }
@@ -207,12 +195,12 @@ function buildTicketReportPdf(report: ProductionTicketReportDto) {
 
     const pivotFinalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
-    // Khung viền cyan quanh tiêu đề + bảng tổng hợp — khớp khối box của file mẫu.
+    // Cyan frame around title + summary, as in the template.
     doc.setDrawColor(...PIVOT_BORDER_COLOR);
     doc.setLineWidth(0.4);
     doc.rect(boxX, boxTop, boxWidth, pivotFinalY - boxTop + 4);
 
-    // "TỔNG :" nằm NGOÀI khung, ngay dưới — đúng vị trí file mẫu (không phải dòng cuối trong bảng).
+    // The grand total label sits outside the frame, below it, as in the template.
     const totalLineY = pivotFinalY + 12;
     doc.setFont("Roboto", "bold");
     doc.setFontSize(11);
@@ -253,8 +241,7 @@ function buildTicketReportPdf(report: ProductionTicketReportDto) {
         ]),
     });
 
-    // Chân trang lặp lại mỗi trang — ngày giờ in bên trái, "Page X of Y" bên phải, khớp bản in nhiều
-    // trang của file mẫu (đơn dưới chuyền 1 ngày có thể ra hàng trăm dòng chi tiết, tự ngắt trang).
+    // Footer on every page (print time left, "Page X of Y" right); a single day can span hundreds of rows.
     const pageCount = doc.getNumberOfPages();
     const printedAt = formatPrintTimestamp(new Date());
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -271,10 +258,8 @@ function buildTicketReportPdf(report: ProductionTicketReportDto) {
     return doc;
 }
 
-// Tab "Báo cáo" trong Danh mục (2026-08-28, theo yêu cầu người dùng — trước đó là mục riêng ở
-// sidebar). Không theo khuôn List CRUD (không có bảng/"Thêm mới") nhưng vẫn implement ListHandle để
-// CategoryManagement.tsx dùng chung nút "Làm mới" ở header — openCreate() là no-op, refresh() chạy
-// lại đúng lượt tìm gần nhất (không làm gì nếu chưa từng bấm "Xem báo cáo phiếu").
+// Not a CRUD List but implements ListHandle for CategoryManagement's shared refresh button: openCreate() is a no-op,
+// refresh() reruns the last search (nothing if none yet).
 const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(function ProductionOtReportPanel(
     { onLoadingChange },
     ref
@@ -298,8 +283,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         onLoadingChange?.(isLoading);
     }, [isLoading, onLoadingChange]);
 
-    // Chọn Phòng ban để lọc báo cáo (2026-08-29, theo yêu cầu người dùng — đơn "dưới chuyền" có thể
-    // tạo dưới bất kỳ Phòng ban nào, không chỉ riêng "Chế tạo"). Danh sách chỉ tải 1 lần khi mount.
+    // Production-line forms can belong to any department, not only manufacturing; list loads once on mount.
     useFetchEffect(
         () => DepartmentApi.getAllDepartments(),
         [],
@@ -386,8 +370,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         }
     };
 
-    // 2 export mới (2026-09-03c) — độc lập với 2 export ở trên, KHÔNG dùng chung state/handler dù cùng
-    // pattern tải blob, để lỗi/loading của từng nút tách biệt nhau.
+    // Separate state/handlers from the exports above so each button's loading/error stays independent.
     const handleExportQry = async () => {
         setIsExportingQry(true);
         try {
@@ -428,9 +411,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         }
     };
 
-    // Xuất hàng loạt phiếu YEV-22-024 theo Line/Nhóm, đóng gói zip (2026-09-03c) — chỉ tính đơn Hoàn
-    // tất (đã tự lọc sẵn ở BE GetTicketBatchAsync, cùng bộ lọc Status=Completed với mọi báo cáo khác
-    // trong màn này, theo đúng xác nhận người dùng "chỉ những đơn đã hoàn tất").
+    // Bulk YEV-22-024 zip per Line/group; Completed forms only (filtered in BE GetTicketBatchAsync).
     const handleExportTicketZip = async () => {
         setIsExportingTickets(true);
         setTicketExportProgress(null);

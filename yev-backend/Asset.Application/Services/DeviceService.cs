@@ -54,9 +54,7 @@ namespace Asset.Application.Services
 
             if (!string.IsNullOrWhiteSpace(request.DeviceCode))
             {
-                // 2026-07-11: changed from StartsWith to Contains — matching just requires the
-                // keyword to appear anywhere in the device code, not necessarily typed from the
-                // start (consistent with Note/SerialNumber/IpAddress/Email which already use Contains).
+                // Contains, not StartsWith: the keyword may appear anywhere in the code, like the other text filters.
                 query = query.Where(d => d.DeviceCode.Contains(request.DeviceCode));
             }
 
@@ -70,9 +68,7 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.Supplier.SupplierName.Contains(request.SupplierName));
             }
 
-            // Name-based filters (2026-07-30, see DeviceFilterRequest for why they exist). Group and
-            // Department are optional on Device, hence the null-guard on the navigation property; Branch
-            // is required so it needs none.
+            // Group/Department are optional on Device, hence the null-guard; Branch is required.
             if (!string.IsNullOrWhiteSpace(request.BranchName))
             {
                 query = query.Where(d => d.Branch.BranchName.Contains(request.BranchName));
@@ -88,9 +84,7 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.DeviceDepartment != null && d.DeviceDepartment.DepartmentName.Contains(request.DepartmentName));
             }
 
-            // FE only sends a full ISO date (input type="date"), so this is really an exact-day match —
-            // parse it and compare on Date instead of PurchaseDate.ToString().Contains(...), which forced
-            // SQL Server to CONVERT every row to string (non-sargable, no index use) for a full table scan.
+            // FE sends a full ISO date; compare on Date instead of ToString().Contains, which forces a non-sargable scan.
             if (!string.IsNullOrWhiteSpace(request.PurchaseDate) && DateTime.TryParse(request.PurchaseDate, out var purchaseDate))
             {
                 query = query.Where(d => d.PurchaseDate.Date == purchaseDate.Date);
@@ -116,8 +110,7 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.IsUseUsb == request.IsUseUsb.Value);
             }
 
-            // Lọc máy đã tick "Cần kiểm tra hằng ngày (QR)" — dùng để gom nhanh danh sách in QR hàng
-            // loạt cho phòng server (asset-module.md §1.19/§1.21), không liên quan phiên quét đang chạy.
+            // Gathers devices for bulk QR printing; unrelated to any running scan session.
             if (request.RequiresDailyCheck.HasValue)
             {
                 query = query.Where(d => d.RequiresDailyCheck == request.RequiresDailyCheck.Value);
@@ -202,9 +195,8 @@ namespace Asset.Application.Services
                 selector);
         }
 
-        // IPv4 strings do not sort numerically in SQL ("10.45.1.9" > "10.45.1.100"), so the filtered
-        // (Id, IPs) pairs are sorted in memory by numeric value and only the requested page is loaded in full.
-        // Ascending uses each device's lowest IP, descending its highest; devices without IP always come last.
+        // IPv4 strings don't sort numerically in SQL, so (Id, IPs) pairs are sorted in memory and only the page is loaded;
+        // ascending uses the lowest IP, descending the highest, devices without IP always last.
         private async Task<PagedResponse<DeviceGridDto>> GetPagedSortedByIpAsync(
             IQueryable<Device> query,
             DeviceFilterRequest request,
@@ -339,9 +331,7 @@ namespace Asset.Application.Services
 
             var today = TimeHelper.GetCurrentUtcTime().Date;
 
-            // Select the raw list of Ip strings first (translatable collection projection),
-            // then join into a display string in-memory below — string.Join over a subquery
-            // is not reliably translatable across providers.
+            // string.Join over a subquery isn't reliably translatable, so join in memory.
             var rawItems = await _unitOfWork.Devices.ToListAsync(
                 query.OrderBy(d => d.DeviceCode),
                 d => new
@@ -464,12 +454,10 @@ namespace Asset.Application.Services
             return (stream.ToArray(), $"DanhSachThietBi_{TimeHelper.GetCurrentUtcTime():yyyyMMdd}.xlsx");
         }
 
-        // Số ngày cảnh báo trước khi hết hạn cho màn "Báo cáo thiết bị" (yev-frontend DeviceReport.tsx
-        // EXPIRY_WINDOW_DAYS) — 2 nơi phải khớp nhau vì FE không tự lọc lại danh sách ExpiringDevices.
+        // Must match EXPIRY_WINDOW_DAYS in the FE DeviceReport.tsx, which doesn't re-filter ExpiringDevices.
         private const int ReportExpiryWindowDays = 90;
 
-        // Thống kê cho màn "Báo cáo thiết bị" — tính bằng COUNT/GROUP BY ở SQL thay vì trả nguyên bảng
-        // Device (5000+ dòng) để FE tự cộng dồn trong bộ nhớ (2026-07-30, xem docs/docs-be/asset-module.md).
+        // Aggregated in SQL instead of returning 5000+ rows for the FE to sum.
         public async Task<DeviceReportSummaryDto> GetReportSummaryAsync()
         {
             var query = _unitOfWork.Devices.GetQueryable(false, d => d.Branch, d => d.DeviceType)
@@ -479,8 +467,7 @@ namespace Asset.Application.Services
             var totalCount = await _unitOfWork.Devices.CountAsync(query);
             var inUseCount = await _unitOfWork.Devices.CountAsync(query, d => d.Status == (int)DeviceStatus.InUse);
 
-            // OrderByDescending/Take chạy trong bộ nhớ sau khi group — tập kết quả chỉ vài chục dòng
-            // (số Chi nhánh/Loại thiết bị thực tế), không đáng để làm phức tạp thêm interface repository.
+            // Sorting/taking in memory is fine: only a few dozen groups.
             var branchGroups = await _unitOfWork.Devices.GroupCountAsync(
                 query, d => d.Branch.BranchName,
                 g => new DeviceReportDistributionItemDto { Label = g.Key, Count = g.Count() });
@@ -510,8 +497,7 @@ namespace Asset.Application.Services
                     ExpirationDate = d.ExpirationDate
                 });
 
-            // DaysRemaining là phép trừ ngày đơn giản — tính trong bộ nhớ vì EF không dịch được
-            // (ExpirationDate.Value - today).Days sang SQL cho mọi provider một cách nhất quán.
+            // Computed in memory: EF can't translate the date subtraction consistently across providers.
             foreach (var item in expiringDevices)
             {
                 item.DaysRemaining = (int)Math.Ceiling((item.ExpirationDate!.Value - today).TotalDays);
@@ -553,10 +539,7 @@ namespace Asset.Application.Services
             };
         }
 
-        // Builds QR-label data for the devices ticked on the grid (2026-07-23). The BE only returns
-        // the fields + a ready QrPayload; the FE draws the QR and lays out the print sheet. Preserves
-        // the order of the requested Ids so the printed sheet matches the user's selection order; Ids
-        // not found (or soft-deleted) are silently skipped (nothing to print for them).
+        // BE returns fields + QrPayload, FE draws the QR. Keeps the requested Id order; missing/soft-deleted Ids are skipped.
         public async Task<List<DeviceQrLabelDto>> GetQrLabelsAsync(DeviceQrLabelRequestDto request)
         {
             var ids = request.Ids.Distinct().ToList();
@@ -602,9 +585,7 @@ namespace Asset.Application.Services
                 .ToList();
         }
 
-        // Default QR content: line 1 is the bare DeviceCode (the stable key an internal scanner app
-        // splits off to look the device up); the remaining, labelled lines make a phone camera scan
-        // human-readable offline. Empty fields are dropped so the QR stays compact.
+        // Line 1 is the bare DeviceCode (scanner lookup key); labelled lines keep phone scans readable. Empty fields are dropped.
         private static string BuildQrPayload(string deviceCode, string deviceName, string? serialNumber, string? branchName)
         {
             var lines = new List<string> { deviceCode };
@@ -666,8 +647,7 @@ namespace Asset.Application.Services
             await _unitOfWork.Devices.AddAsync(newDevice);
             await _unitOfWork.SaveChangesAsync();
 
-            // Máy tạo thẳng ở trạng thái Chờ thanh lý/Đã thanh lý coi như không dùng -> không gán IP
-            // dù request có gửi kèm, để IP đó vẫn Available cho máy khác (2026-08-22).
+            // Devices created as liquidation status are out of use, so no IPs are assigned and they stay Available.
             if (newDevice.Status.IsLiquidationStatus())
             {
                 ipAddresses = new List<IpAddress>();
@@ -753,11 +733,8 @@ namespace Asset.Application.Services
 
             var previousStatus = device.Status;
 
-            // 2026-08-25 (user decision): a Device only holds a live Ip/installed Software while it is
-            // actually InUse. Moving into PendingLiquidation/Liquidated releases both the Ip and the
-            // installed Software; moving InUse -> PendingUse (taken out of service, not yet re-assigned)
-            // releases just the Ip — the Software list still makes sense to keep for whenever it comes
-            // back InUse.
+            // Only an InUse device holds IPs/software: liquidation releases both; InUse -> PendingUse releases only the IPs,
+            // keeping software for when it comes back.
             if (request.Status.IsLiquidationStatus())
             {
                 await ReleaseAllIpsAsync(device.Id);
@@ -800,13 +777,7 @@ namespace Asset.Application.Services
         {
             var oldDevice = (await _unitOfWork.Devices.FirstOrDefaultAsync(x => x.Id == oldDeviceId, x => x.SuggestedNewDevice!)).OrThrowNotFound("Thiết bị", oldDeviceId);
 
-            // The suggestion is read directly from the SuggestedNewDeviceId column stored on the old
-            // device itself (2026-07-13, reversed the self-reference direction — previously had to search
-            // backward through every new device declaring "Old MQL" = this device, then pick the most
-            // recently imported one). A later import always overwrites the suggestion from an earlier
-            // import, so "most recent" no longer needs to be chosen — there is now only 1 suggestion per
-            // old device. It is only valid if the new device still exists, is not deleted, and is still
-            // "Pending Use" (has not been used for any other transfer since being suggested).
+            // Valid only if the suggested device still exists, isn't deleted and is still PendingUse (not used by another transfer).
             var suggestion = oldDevice!.SuggestedNewDevice;
             if (suggestion == null || suggestion.IsDeleted || suggestion.Status != (int)DeviceStatus.PendingUse)
                 return null;
@@ -819,12 +790,7 @@ namespace Asset.Application.Services
             };
         }
 
-        // Used by DeviceImportService: after creating the NEW device from the "Old MQL" column,
-        // writes the new device's Id directly into SuggestedNewDeviceId of the corresponding OLD
-        // device — without going through the full UpdateAsync (no need to re-validate the entire
-        // Device, both Ids were already confirmed to exist in the Import's resolve step). Overwrites
-        // the old suggestion if this old device was already suggested before by a different import —
-        // always keeps the most recent suggestion.
+        // Skips full UpdateAsync: both Ids were already validated by the import. Overwrites any earlier suggestion.
         public async Task SetSuggestedNewDeviceAsync(int oldDeviceId, int newDeviceId)
         {
             var oldDevice = (await _unitOfWork.Devices.GetByIdAsync(oldDeviceId)).OrThrowNotFound("Thiết bị", oldDeviceId);
@@ -835,11 +801,7 @@ namespace Asset.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // Group/Department are both optional — only validate existence (!IsDeleted) when the client
-        // sends an Id. Since DeviceGroup belongs to exactly 1 DeviceDepartment (1 Department - N Groups),
-        // sending GroupId must be accompanied by the correct parent DepartmentId of that Group — to
-        // avoid saving Device data with mismatched Group/Department (e.g. FE sends the GroupId of Group
-        // "OF" belonging to Quality Management but DepartmentId is General Affairs).
+        // Group/Department are optional; when GroupId is sent, DepartmentId must be that Group's parent to avoid mismatches.
         private async Task<(DeviceGroup? Group, DeviceDepartment? Department)> ValidateGroupAndDepartmentAsync(int? groupId, int? departmentId)
         {
             DeviceDepartment? department = null;
@@ -865,10 +827,7 @@ namespace Asset.Application.Services
             return (group, department);
         }
 
-        // Shared by Create/Update: if SuggestedNewDeviceId is provided, the new (suggested) device must
-        // exist (!IsDeleted) and must not point to itself (only applies during Update,
-        // currentDeviceId != null). Returns the new device entity (or null if not set) so the
-        // caller can attach the navigation property right away.
+        // The suggested device must exist and, on Update, must not be the device itself.
         private async Task<Device?> ValidateSuggestedNewDeviceIdAsync(int? suggestedNewDeviceId, int? currentDeviceId)
         {
             if (!suggestedNewDeviceId.HasValue) return null;
@@ -891,8 +850,7 @@ namespace Asset.Application.Services
             _unitOfWork.Devices.Update(device);
 
             await ReleaseAllIpsAsync(id);
-            // Safety net for devices that reached Liquidated before this cleanup existed (2026-08-25) —
-            // normally already empty by the time Status became PendingLiquidation/Liquidated.
+            // Safety net: software is normally already released by the time the device reached liquidation.
             await ReleaseAllSoftwareAsync(id);
 
             var emails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == id && !x.IsDeleted);
@@ -905,14 +863,8 @@ namespace Asset.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // Bulk SOFT delete of Devices (2026-07-13: changed from hard delete to soft delete — same
-        // mechanism as DeleteAsync above, only difference is accepting multiple Ids at once; avoids
-        // hitting TransferHistory's foreign key constraint since soft delete only sets IsDeleted=true,
-        // without touching the primary key). Only allows deleting devices currently in the
-        // Liquidated state (2026-08-22: was PendingLiquidation — a device still pending liquidation
-        // may still be in real use or reverted, only a fully liquidated device is safe to delete). An
-        // Id not found or not in the liquidated state is skipped (SkippedDevices), without blocking
-        // the whole batch.
+        // Soft delete so TransferHistory FKs stay valid. Only Liquidated devices qualify (a PendingLiquidation one may
+        // still be in use); others are reported in SkippedDevices without blocking the batch.
         public async Task<BulkDeleteDeviceResultDto> BulkDeleteAsync(List<int> ids)
         {
             var requestedIds = ids.Distinct().ToList();
@@ -988,7 +940,7 @@ namespace Asset.Application.Services
             if (ipAddressIds.Distinct().Count() != ipAddressIds.Count)
                 throw new DomainException("Danh sách địa chỉ IP có ID bị trùng lặp.");
 
-            // Batch-fetch thay vì query từng IP trong vòng lặp (2026-08-11).
+            // Batch-fetch instead of one query per IP.
             var idsSet = ipAddressIds.ToHashSet();
             var ipsById = (await _unitOfWork.IpAddresses.FindAsync(x => idsSet.Contains(x.Id))).ToDictionary(x => x.Id);
 
@@ -1003,9 +955,7 @@ namespace Asset.Application.Services
             return result;
         }
 
-        // Reconciles a Device's assigned IpAddresses with the requested Id list: unassigns
-        // Ips no longer present, assigns newly-added ones (must be Available), leaves
-        // already-assigned Ips untouched.
+        // Newly added IPs must be Available; already-assigned ones are left untouched.
         private async Task SyncIpAddressesAsync(int deviceId, List<int> requestedIpAddressIds)
         {
             if (requestedIpAddressIds.Distinct().Count() != requestedIpAddressIds.Count)
@@ -1024,7 +974,7 @@ namespace Asset.Application.Services
             var newIpIds = requestedIpAddressIds.Where(id => !currentIds.Contains(id)).ToList();
             if (newIpIds.Count > 0)
             {
-                // Batch-fetch thay vì query từng IP trong vòng lặp (2026-08-11).
+                // Batch-fetch instead of one query per IP.
                 var newIdsSet = newIpIds.ToHashSet();
                 var newIpsById = (await _unitOfWork.IpAddresses.FindAsync(x => newIdsSet.Contains(x.Id))).ToDictionary(x => x.Id);
 
@@ -1041,10 +991,7 @@ namespace Asset.Application.Services
             }
         }
 
-        // Releases every IpAddress currently assigned to a Device back to Available (DeviceId=null).
-        // Used whenever a Device moves into PendingLiquidation/Liquidated: these statuses mean the
-        // device is no longer in active use, so its Ips must be freed for other devices regardless of
-        // what the caller submitted (2026-08-22).
+        // Used on entering PendingLiquidation/Liquidated: the device is out of use, so its IPs are freed regardless of the request.
         private async Task ReleaseAllIpsAsync(int deviceId)
         {
             var assignedIps = await _unitOfWork.IpAddresses.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted);
@@ -1056,9 +1003,7 @@ namespace Asset.Application.Services
             }
         }
 
-        // Hard-deletes every DeviceSoftware row for a Device (uninstalls all software), same "xóa cứng"
-        // treatment DeviceSoftwareService already uses for this keyless join table. Used whenever a
-        // Device moves into PendingLiquidation/Liquidated (2026-08-25).
+        // Hard delete, like DeviceSoftwareService does for this keyless join table.
         private async Task ReleaseAllSoftwareAsync(int deviceId)
         {
             var installed = await _unitOfWork.DeviceSoftwares.FindAsync(x => x.DeviceId == deviceId);
@@ -1066,9 +1011,7 @@ namespace Asset.Application.Services
                 _unitOfWork.DeviceSoftwares.RemoveRange(installed);
         }
 
-        // Reconciles a Device's emails with the requested list, matched by trimmed/case-insensitive
-        // Email text (input items have no Id): entries missing from the request are soft-deleted,
-        // matching entries keep their Id and refresh Note/lowercased Email, unmatched entries are added.
+        // Matched by trimmed case-insensitive Email (inputs have no Id); missing entries are soft-deleted.
         private async Task SyncEmailsAsync(int deviceId, List<DeviceEmailInputDto> requestedEmails)
         {
             var currentEmails = await _unitOfWork.DeviceEmails.FindAsync(x => x.DeviceId == deviceId && !x.IsDeleted);
@@ -1146,9 +1089,7 @@ namespace Asset.Application.Services
             Emails = emails.Select(e => new DeviceEmailDto { Id = e.Id, Email = e.Email, Note = e.Note }).ToList()
         };
 
-        // Delegates to the shared helper so the wording lives in exactly one place (2026-07-23).
-        // The two grid projections above still repeat the ternary inline because EF translates them
-        // to SQL and cannot call a C# method.
+        // The grid projections above still inline the ternary because EF can't call a C# method in SQL.
         private static string GetStatusText(int status) => status.GetDeviceStatusText();
     }
 }

@@ -1,6 +1,5 @@
 namespace Workflow.Domain.Enums;
 
-// workflow-module.md §4 — kiểu dữ liệu của 1 ô nhập trong FormFields.
 public enum FieldDataType
 {
     Text = 1,

@@ -7,16 +7,13 @@ namespace Attendance.Application.Dtos.EmployeeAccumulationHistories
         public string EmployeeFullName { get; set; } = null!;
         public int Year { get; set; }
 
-        // Luôn đủ 12 tháng (1..12), tháng chưa có dữ liệu = TotalHours 0 — điền ở Service, KHÔNG lưu
-        // dòng rỗng trong DB (xem EmployeeAccumulationHistory).
+        // Always 12 months; missing months are filled with 0 in the service, never stored as empty rows.
         public List<EmployeeAccumulationHistoryDto> Months { get; set; } = new();
 
-        // = Sum(Months.TotalHours) — cho năm CŨ (đã rollover) đây là nguồn DUY NHẤT để biết tổng giờ cả
-        // năm đó, vì Employee.YearToDate chỉ còn phản ánh năm hiện tại. Cho năm hiện tại, giá trị này
-        // luôn khớp Employee.YearToDate (cùng 1 điểm ghi — AccumulateEmployeeHoursAsync).
+        // For past years this is the only yearly total, since Employee.YearToDate reflects the current year only.
         public decimal YearTotalHours { get; set; }
 
-        // Số dư lũy kế đầu kỳ/các tháng trước chốt từ import (lưu ở Month = 0)
+        // Opening balance from import (stored as Month = 0).
         public decimal InitialBalanceHours { get; set; }
     }
 }

@@ -36,8 +36,6 @@ function toDateInputValue(iso: string): string {
 const fieldLabelClassName = "mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]";
 const fieldClassName = "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
-// Ủy quyền duyệt thay (代理承認) — workflow-module.md §3.4/§5.6. Tách khỏi ApprovalDelegationList.tsx
-// (trước đây tự dựng inline JSX) để cùng khuôn "Create/Edit dialog" với EmployeeForm/JobTitleForm.
 export default function ApprovalDelegationForm({ isOpen, mode, initial, employeeOptions, forms, loading = false, onClose, onSubmit }: ApprovalDelegationFormProps) {
     const t = useTranslations("Workflow.WorkflowRequest");
     const tCommon = useTranslations("Common");

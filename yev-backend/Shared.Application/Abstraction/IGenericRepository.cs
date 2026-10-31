@@ -50,9 +50,7 @@ namespace Shared.Application.Abstractions
 
         Task<int> CountAsync(IQueryable<T> query, Expression<Func<T, bool>> predicate);
 
-        // GroupBy + Count cho các màn thống kê (vd DeviceReportSummary) — resultSelector nhận
-        // IGrouping<TKey,T> nên có thể gọi g.Count() ngay trong Expression, EF dịch trọn thành 1
-        // câu SQL GROUP BY thay vì tải nguyên bảng về rồi tự đếm ở C#.
+        // resultSelector takes IGrouping so g.Count() translates into a single SQL GROUP BY.
         Task<IReadOnlyList<TResult>> GroupCountAsync<TKey, TResult>(
             IQueryable<T> query,
             Expression<Func<T, TKey>> keySelector,

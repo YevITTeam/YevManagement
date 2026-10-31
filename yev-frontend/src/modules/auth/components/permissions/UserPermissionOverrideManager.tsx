@@ -13,31 +13,27 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import PermissionTree from "./PermissionTree";
 
-// Override giá trị đang chọn cho 1 permission trên UI (chưa lưu).
-// "inherit": không override, theo Role. "grant": cấp thêm riêng. "deny": thu hồi riêng.
+// Unsaved UI choice: inherit = follow role, grant = extra grant, deny = revoke.
 type OverrideChoice = "inherit" | "grant" | "deny";
 
-// get-all-users-with-roles trả toàn bộ user — phân trang client-side cho danh sách bên trái.
+// The endpoint returns all users, so the left list is paged client-side.
 const USERS_PAGE_SIZE = 10;
 
 export default function UserPermissionOverrideManager() {
     const { user: currentUser } = useAuth();
-    // PUT /api/Permission/user/{userId} yêu cầu permission Identity.User.UpdatePermissions (docs/identity-module.md §6).
     const canUpdateUserPermissions = hasPermission(currentUser, "Identity.User.UpdatePermissions");
 
     const [users, setUsers] = useState<UserDto[]>([]);
-    // Nhóm 2 cấp Module > Entity trả thẳng từ GET /api/Permission/all (docs/identity-module.md §6, 2026-07-11).
     const [moduleGroups, setModuleGroups] = useState<PermissionModuleGroupDto[]>([]);
     const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
     const [userSearchTerm, setUserSearchTerm] = useState("");
 
-    // Baseline quyền theo Role của user đang chọn (suy ra từ override + effective tại thời điểm tải) — không đổi khi user tick chọn trên UI.
+    // Role-only baseline derived from overrides + effective at load time; unaffected by UI ticks.
     const [roleBaselineIds, setRoleBaselineIds] = useState<Set<number>>(new Set());
-    // Permission đang được Chức vụ (Attendance) tự động cấp — CHỈ để hiển thị, KHÔNG nằm trong
-    // `choices` (không đi vào payload lưu) trừ khi Admin chủ động bấm đổi (khi đó thao tác tay
-    // "chiếm" luôn dòng đó, xem PermissionService.UpdateUserPermissionOverridesAsync ở BE).
+    // Job-title auto-grants are display-only and kept out of `choices`, so saving never turns them
+    // into manual overrides unless the admin explicitly changes one.
     const [autoGrantedIds, setAutoGrantedIds] = useState<Set<number>>(new Set());
-    // Lựa chọn override đang chỉnh trên UI (chưa lưu) — chỉ gồm override THỦ CÔNG.
+    // Pending manual overrides only.
     const [choices, setChoices] = useState<Map<number, OverrideChoice>>(new Map());
 
     const [isSaving, setIsSaving] = useState(false);
@@ -55,7 +51,7 @@ export default function UserPermissionOverrideManager() {
         "user-permission-base"
     );
 
-    // Danh sách phẳng tất cả permission, suy ra từ cây Module > Entity — dùng để tính baseline theo Role.
+    // Flat permission list, used to compute the role baseline.
     const flatPermissions = useMemo(
         () => moduleGroups.flatMap((moduleGroup) => moduleGroup.entities.flatMap((entityGroup) => entityGroup.permissions)),
         [moduleGroups]
@@ -72,9 +68,7 @@ export default function UserPermissionOverrideManager() {
             const effectiveIds = new Set(effective.map((p) => p.id));
             const overrideByPermissionId = new Map(overrides.map((o) => [o.permissionId, o.isGranted]));
 
-            // roleHasAccess = hasOverride ? !isGranted : effectiveHasAccess (không override thì effective = role).
-            // Đúng cho CẢ override thủ công lẫn tự động — "roleHasAccess" luôn nghĩa là "Role một mình
-            // (không tính bất kỳ override nào) có cấp quyền này không", không phụ thuộc nguồn override.
+            // Holds for both manual and auto overrides: roleHasAccess means the role alone grants it.
             const baseline = new Set<number>();
             for (const permission of flatPermissions.length > 0 ? flatPermissions : effective) {
                 const override = overrideByPermissionId.get(permission.id);
@@ -82,10 +76,8 @@ export default function UserPermissionOverrideManager() {
                 if (roleHasAccess) baseline.add(permission.id);
             }
 
-            // Tách 2 loại override: tự động theo Chức vụ (chỉ hiển thị, không đưa vào choices để lưu)
-            // và thủ công (đưa vào choices như cũ) — nếu gộp chung, mỗi lần Admin bấm Lưu (dù chỉ sửa
-            // 1 quyền khác) sẽ vô tình gửi lại TOÀN BỘ quyền tự động như thể Admin vừa tự tay cấp,
-            // biến chúng thành override thủ công vĩnh viễn (không còn tự thu hồi được khi đổi Chức vụ).
+            // Auto (job-title) overrides stay out of `choices`; otherwise every save would resend them as
+            // permanent manual overrides that no longer get revoked on a job-title change.
             const autoGranted = new Set<number>();
             const nextChoices = new Map<number, OverrideChoice>();
             overrides.forEach((o) => {
@@ -116,7 +108,7 @@ export default function UserPermissionOverrideManager() {
     }, [users, userSearchTerm]);
 
     const [userPageIndex, setUserPageIndex] = useState(1);
-    // Tìm kiếm đổi → về trang 1 (snapshot so sánh ngay trong render, không dùng effect — frontend-conventions.md §3).
+    // Reset to page 1 on search change; snapshot compared during render instead of an effect.
     const [prevUserSearchTerm, setPrevUserSearchTerm] = useState(userSearchTerm);
     if (prevUserSearchTerm !== userSearchTerm) {
         setPrevUserSearchTerm(userSearchTerm);
@@ -130,8 +122,7 @@ export default function UserPermissionOverrideManager() {
         safeUserPageIndex * USERS_PAGE_SIZE
     );
 
-    // Tick/bỏ tick = quyền hiệu lực mong muốn. Trùng mức mặc định (Role hoặc Chức vụ tự cấp) thì không
-    // cần override; khác thì ghi override "grant" (cấp thêm) / "deny" (thu hồi).
+    // Checkbox = desired effective access: matching the default (role or job-title grant) needs no override.
     const setPermissionsChecked = (permissions: PermissionDto[], checked: boolean) => {
         setChoices((prev) => {
             const next = new Map(prev);
@@ -144,8 +135,7 @@ export default function UserPermissionOverrideManager() {
         });
     };
 
-    // Hiệu lực hiện tại (Role/Chức vụ tự cấp, trừ khi bị override tay) — dùng để đếm số quyền "đang có"
-    // trong tiêu đề Module/Entity lúc đang thu gọn, cùng công thức effectiveHasAccess trong vòng lặp render.
+    // Same formula as effectiveHasAccess in the render loop; used for collapsed header counts.
     const isPermissionEffectivelyGranted = (permissionId: number) => {
         const choice = choices.get(permissionId) ?? "inherit";
         if (choice === "grant") return true;
@@ -175,10 +165,8 @@ export default function UserPermissionOverrideManager() {
     };
 
     const selectedUser = users.find((user) => user.id === selectedUserId) ?? null;
-    // Chặn tự sửa quyền của chính tài khoản đang đăng nhập — tránh tự khoá/tự cấp quyền cho mình.
-    // So cả `id` lẫn `userName` (không phân biệt hoa/thường) — phòng trường hợp id trả về từ 2 API
-    // (`getAllUsersWithRoles` vs `windows-login`) không đồng nhất kiểu dữ liệu, `userName` (định danh AD)
-    // là nguồn đáng tin cậy hơn để nhận diện "đây chính là tài khoản đang đăng nhập".
+    // Block editing your own permissions (self-lockout/escalation); also compare userName because ids
+    // from getAllUsersWithRoles and windows-login may differ in type.
     const isEditingSelf =
         currentUser !== null &&
         selectedUser !== null &&

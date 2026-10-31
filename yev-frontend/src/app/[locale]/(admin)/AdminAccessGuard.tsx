@@ -5,7 +5,7 @@ import { useRouter } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission, IDENTITY_ADMIN_PERMISSIONS } from "@/modules/auth/lib/permissions";
 
-// Chặn truy cập trực tiếp bằng URL vào /admin/* nếu user không có permission quản trị Identity nào.
+// Blocks direct URL access to /admin/* without any Identity admin permission.
 export default function AdminAccessGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, isLoading } = useAuth();
@@ -28,7 +28,7 @@ export default function AdminAccessGuard({ children }: { children: ReactNode }) 
   return <>{children}</>;
 }
 
-// Chặn từng trang con theo permission View của chính nó (vào bằng URL khi chỉ có quyền ở trang khác).
+// Per-page gate: users with permission for another admin page can't reach this one by URL.
 export function AdminPageGate({ permission, children }: { permission: string; children: ReactNode }) {
   const { user } = useAuth();
   if (!hasPermission(user, permission)) {

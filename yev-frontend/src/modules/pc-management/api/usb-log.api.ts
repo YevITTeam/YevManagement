@@ -2,8 +2,7 @@ import { api } from "@/lib/client";
 import type { UsbFileEventDto, UsbMachineDto, UsbSessionDto } from "@/modules/pc-management/types/usb-log.dto";
 import { ApiResponseWithPageNation } from "@/types/api";
 
-// Route /UsbLog — docs/docs-be/asset-module.md §1.24. Chỉ đọc (agent ghi qua POST ingest, không qua FE).
-// Permission Asset.UsbLog.View (Admin gán riêng).
+// Read-only from FE; the agent writes via POST ingest. Needs Asset.UsbLog.View.
 const ENDPOINTS = {
     USB_LOG: {
         getMachines: "/UsbLog/machines",

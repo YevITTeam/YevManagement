@@ -32,35 +32,20 @@ namespace Attendance.Application.Services
             _departmentAccessGuard = departmentAccessGuard;
         }
 
-        // Lũy kế THẬT không còn lưu trên Employee (2026-08-19) — tính trực tiếp từ
-        // EmployeeAccumulationHistory (ledger) ngay trong projection (EF dịch được thành subquery),
-        // luôn scope theo năm/tháng THỰC TẾ hôm nay (không phải ngày trên bất kỳ đơn nào) — mỗi hàm đọc
-        // bên dưới tự lấy `todayYear`/`todayMonth` qua GetTodayYearMonth() rồi lặp lại công thức
-        // (không gộp thành 1 Expression dùng chung được vì EF không hỗ trợ Invoke composed expression).
+        // Accumulation is computed from the ledger inside projections, always for today's real year/month.
+        // The formula is repeated per query because EF can't translate an invoked shared Expression.
         private static (int Year, int Month) GetTodayYearMonth()
         {
             var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
             return (today.Year, today.Month);
         }
 
-        // Phạm vi xem nhân viên suy theo ĐÚNG vị trí Cây chức vụ của người gọi — dùng chung cho MỌI
-        // endpoint trả danh sách nhân viên chỉ gate bằng Attendance.Employee.View (permission này cấp
-        // TOÀN CÔNG TY qua JobTitlePermissionWhitelist, không tự scope), để 1 Staff bất kỳ không xem
-        // được lũy kế/giới hạn OT của cả công ty (2026-09-03). Không áp dụng cho GetByDepartmentIdAsync/
-        // GetByGroupIdAsync (nhận thẳng Id, dùng cho màn Cây duyệt/lập đơn — phạm vi đã do route quyết định).
-        //   - TerminalLevel=WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc): toàn công ty.
-        //   - Có DepartmentId (Manager): nhân viên có DepartmentId trùng, hoặc Group.DepartmentId trùng.
-        //   - Còn lại (Staff/Group Leader/Team Leader, cấp Nhóm): chỉ nhân viên có GroupId trùng.
-        // PairKeys = (Department, Workshop) pairs of a Manager (ScopeKey); GroupIds already holds every group
-        // under a coordinated department or a managed pair, so group-based staff match through GroupIds only.
+        // Employee.View is company-wide, so lists scope by position: directors all, managers their (department, workshop) pairs, others their group.
+        // GroupIds already includes every group under a coordinated department or managed pair.
         private readonly record struct EmployeeScope(bool CompanyWide, HashSet<int> DepartmentIds, HashSet<int> GroupIds, HashSet<int> PairKeys);
 
-        // Phạm vi XEM = hợp nhất vị trí THẬT trong Cây chức vụ (Manager có DepartmentId/Staff có GroupId)
-        // VÀ mọi Bộ phận/Nhóm đang được gán làm "Người phụ trách" (Coordinator, gán tay qua Cây duyệt,
-        // KHÔNG liên quan Chức vụ — xem §Chốt mô hình Coordinator, 2026-09-28). Trước đó 2 nguồn này lệch
-        // nhau: 1 người được Admin gán Coordinator cho 1 Nhóm/Bộ phận KHÁC vị trí thật của mình thì có
-        // quyền SỬA OT-limit/lũy kế/dưới chuyền của Nhóm/Bộ phận đó (đã cấp tự động), nhưng màn "Nhân
-        // viên" (chỉ dùng vị trí thật) không hiện được người cần sửa — quyền cấp ra không dùng được.
+        // Union of the caller's real position and every department/group they coordinate,
+        // otherwise coordinators couldn't see the people they are allowed to edit.
         private async Task<EmployeeScope> ResolveCallerScopeAsync(string callerUserName)
         {
             var caller = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == callerUserName && !x.IsDeleted, x => x.JobTitle!);
@@ -110,12 +95,7 @@ namespace Attendance.Application.Services
                 || x.ApprovalScopes.Any(s => departmentIds.Contains(s.DepartmentId) || pairKeys.Contains(s.DepartmentId * ScopeKey.Factor + s.WorkshopId)));
         }
 
-        // Cho FE thu hẹp dropdown lọc Phòng ban/Nhóm ở màn "Nhân viên" — thuần UX, không phục vụ enforce
-        // (đã enforce ở GetPagedAsync rồi). Trả ĐỦ danh sách Phòng ban/Nhóm trong
-        // phạm vi (2026-09-28, sửa lỗi thật: bản cũ chỉ chứa được đúng 1 Phòng ban HOẶC 1 Nhóm, nên
-        // người vừa có vị trí thật là Nhóm VỪA là Coordinator của 1 Phòng ban khác thì trả rỗng cả 2,
-        // khiến dropdown Nhóm ở FE hiện "Không tìm thấy kết quả" dù bảng chính vẫn đúng dữ liệu) — FE
-        // dùng thẳng, không cần gọi thêm DepartmentApi/GroupApi.
+        // UX only (filter dropdowns); returns the full department/group lists so FE needs no extra calls.
         public async Task<EmployeeScopeDto> GetMyScopeAsync(string callerUserName, bool isAdmin)
         {
             if (isAdmin) return new EmployeeScopeDto { CompanyWide = true };
@@ -261,17 +241,8 @@ namespace Attendance.Application.Services
                 });
         }
 
-        // Toàn bộ nhân viên active (mọi Group) — dùng cho các dropdown/công cụ cần chọn 1 nhân viên bất
-        // kỳ, vd JobTitle "Thử chuỗi duyệt" (docs/docs-be/attendance-module.md §Cây chức vụ). Non-Admin
-        // tự giới hạn theo phạm vi Cây chức vụ của người gọi, cùng lý do với GetPagedAsync.
-        // Dùng cho Trưởng nhóm liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm. Trưởng
-        // phòng/Trưởng Xưởng/Giám đốc (GroupId null) không bao giờ khớp — đúng ý nghĩa, họ không phải
-        // thành viên của 1 Group cụ thể nào để bị liệt kê ở đây.
-        // targetDate = ngày trên đơn OT ĐANG TẠO (mặc định hôm nay thực tế nếu FE chưa chọn ngày) —
-        // Projected CHỈ có ý nghĩa scope theo đúng tháng/năm của targetDate, KHÁC HẲN MonthToDate/
-        // YearToDate thật ở trên (luôn theo hôm nay thực tế) — xem docs/docs-be/attendance-module.md
-        // §Lũy kế Dự kiến. Ví dụ: đang tạo đơn cho ngày 1/8 dù hôm nay 27/7 thì phải thấy Dự kiến của
-        // đúng tháng 8, không phải tháng 7.
+        // Group leaders pick their own group's employees; managers and above have no GroupId and never match.
+        // Projected totals use targetDate's month/year (the form's date), not today like MonthToDate/YearToDate.
         public async Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId, DateOnly? targetDate = null)
         {
             var (todayYear, todayMonth) = GetTodayYearMonth();
@@ -330,33 +301,19 @@ namespace Attendance.Application.Services
                     var ledger = ledgerByEmployee[item.Id].ToList();
 
                     item.ProjectedDayToDate = employeeRows.Where(x => x.OtForm.Date == target)
-                        .Sum(x => CalculateProjectedHours(x, mealSettings));
+                        .Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings));
                     item.ProjectedMonthToDate = ledger.Where(x => x.Month == target.Month).Sum(x => x.TotalHours)
-                        + pendingRows.Where(x => x.OtForm.Date.Month == target.Month).Sum(x => CalculateProjectedHours(x, mealSettings));
+                        + pendingRows.Where(x => x.OtForm.Date.Month == target.Month).Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings));
                     item.ProjectedYearToDate = ledger.Sum(x => x.TotalHours)
-                        + pendingRows.Sum(x => CalculateProjectedHours(x, mealSettings));
+                        + pendingRows.Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings));
                 }
             }
 
             return items.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
-        // Mirror OtFormService.CalculateOtHours (redesign 3 bậc phiếu ăn 2026-08-26, xem
-        // AttendanceSetting.cs) — không gọi chéo sang OtFormService, mỗi service tự chứa logic tính
-        // giờ của mình. Ca khớp ĐÚNG khung sớm (EarlyMealWindowStartTime/EndTime) không trừ dù DidEat.
-        private static decimal CalculateProjectedHours(OtFormEmployee row, AttendanceSettingDto mealSettings)
-        {
-            var hours = Math.Round((decimal)(row.EndTime - row.StartTime).TotalHours, 2);
-            var isEarlyWindow = row.StartTime == mealSettings.EarlyMealWindowStartTime && row.EndTime == mealSettings.EarlyMealWindowEndTime;
-            if (!isEarlyWindow && row.DidEat) hours -= mealSettings.MealBreakDeductionHours;
-            return hours;
-        }
-
-        // Toàn bộ nhân viên active thuộc Phòng ban (mọi Group con, CỘNG Trưởng phòng gán trực tiếp
-        // DepartmentId) — dùng cho màn "Cây duyệt Phòng ban" (xem ai đang giữ Chức vụ nào trong Phòng
-        // ban để cấu hình/gán nhanh — docs/attendance-module.md §Cây chức vụ).
-        // A department can hold thousands of employees, so the result is always capped (MaxDepartmentListSize);
-        // callers narrow it with keyword / jobTitled (only employees that hold a Job Title) / take.
+        // Includes managers assigned directly by DepartmentId. Always capped since a department can hold thousands;
+        // callers narrow with keyword / jobTitledOnly / take.
         private const int MaxDepartmentListSize = 500;
 
         public async Task<List<EmployeeDto>> GetByDepartmentIdAsync(
@@ -405,15 +362,8 @@ namespace Attendance.Application.Services
                 });
         }
 
-        // Nhân viên trong phạm vi quản lý của người GIỮ QUYỀN DUYỆT (Attendance.OTForm.Approve, không
-        // nhất thiết có Attendance.Employee.View) — dùng cho màn "Lũy kế nhân viên" tra cứu (2026-08-11d,
-        // xem docs/docs-be/attendance-module.md §Lịch sử lũy kế). Phạm vi suy theo ĐÚNG vị trí Cây chức
-        // vụ của người gọi (KHÁC bảng Người phụ trách Cây duyệt — đó là uỷ quyền cấu hình cây duyệt,
-        // còn đây là phạm vi xem/duyệt theo đúng cấp bậc thật họ đang giữ):
-        //   - Admin: không giới hạn.
-        //   - TerminalLevel=WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc): toàn công ty.
-        //   - Có DepartmentId (Manager): nhân viên có DepartmentId trùng, hoặc Group.DepartmentId trùng.
-        //   - Còn lại (Staff/Group Leader/Team Leader, cấp Nhóm): chỉ nhân viên có GroupId trùng.
+        // For approvers who may lack Employee.View; scope follows the caller's real job-title position,
+        // not the coordinator list.
         public async Task<PagedResponse<EmployeeDto>> GetInScopeAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword)
         {
             var (todayYear, todayMonth) = GetTodayYearMonth();
@@ -468,9 +418,7 @@ namespace Attendance.Application.Services
             );
         }
 
-        // Lịch sử lũy kế 12 tháng của 1 năm cho 1 Employee — đọc từ EmployeeAccumulationHistory (ledger
-        // append-only, ghi dần từ 2026-08-11d, KHÔNG có dữ liệu trước đó). Cùng phạm vi truy cập với
-        // GetInScopeAsync (EnsureInAccumulationScopeAsync dùng chung logic suy phạm vi theo Cây chức vụ).
+        // Ledger is append-only and has no data before it was introduced; same scope as GetInScopeAsync.
         public async Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, int year)
         {
             var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
@@ -482,8 +430,7 @@ namespace Attendance.Application.Services
             return await BuildAccumulationYearDtoAsync(employee!, year);
         }
 
-        // Cùng dữ liệu với GetAccumulationHistoryAsync nhưng cho người được quyền SỬA lũy kế (Admin /
-        // Người phụ trách đúng Bộ phận/Nhóm của nhân viên) — không đòi Attendance.OTForm.Approve.
+        // For accumulation editors (Admin/coordinator); does not require Attendance.OTForm.Approve.
         public async Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryForManageAsync(string callerUserName, bool isAdmin, int employeeId, int year)
         {
             var employee = (await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId && !x.IsDeleted, x => x.Group!))
@@ -557,8 +504,7 @@ namespace Attendance.Application.Services
                 .ToList();
         }
 
-        // Đặt lại số giờ từng tháng + số dư đầu kỳ (Month = 0) của 1 năm. Không bắt lý do, không ghi log
-        // (đã chốt: chỉ người có quyền mới vào được). Dòng chưa có mà giá trị 0 thì không tạo mới.
+        // No reason or audit log by design; zero values don't create missing rows.
         public async Task<EmployeeAccumulationHistoryYearDto> UpdateAccumulationHistoryAsync(
             string callerUserName, bool isAdmin, int employeeId, UpdateEmployeeAccumulationDto request)
         {
@@ -603,13 +549,7 @@ namespace Attendance.Application.Services
             return await BuildAccumulationYearDtoAsync(employee, request.Year);
         }
 
-        // Admin: luôn được. Người khác: phải là Người phụ trách (Admin gán tay) đúng Bộ phận chứa nhân
-        // viên, hoặc đúng Nhóm của nhân viên — Người phụ trách Nhóm chỉ đụng được nhân viên trong Nhóm đó.
-        // Dùng chung cho mọi thao tác "sửa 1 Employee cụ thể" mà quyền được cấp theo Người phụ trách
-        // (lũy kế, giới hạn OT): phụ trách Phòng ban → sửa được cả phòng; chỉ phụ trách Nhóm → chỉ sửa
-        // được đúng Nhóm đó. Admin luôn qua (2026-09-28, theo yêu cầu người dùng — Attendance.Employee.
-        // UpdateOtLimit trước đây chỉ scope theo Phòng ban qua IDepartmentAccessGuard, không cho Người
-        // phụ trách Nhóm dùng được dù đã được cấp quyền).
+        // Department coordinators may edit the whole department; group coordinators only their group.
         private async Task EnsureCanManageDeptOrGroupScopeAsync(string callerUserName, bool isAdmin, Employee employee, string errorMessage)
         {
             if (isAdmin) return;
@@ -629,12 +569,8 @@ namespace Attendance.Application.Services
             throw new DomainException(errorMessage);
         }
 
-        // Biến thể của EnsureCanManageDeptOrGroupScopeAsync ở trên, dùng cho Create/Update khi CHƯA có
-        // sẵn Employee entity để đọc GroupId/DepartmentId — nhận thẳng cặp (groupId, departmentId) ĐÃ
-        // được ValidateOrganizationAssignmentAsync resolve xong (2026-09-28, theo yêu cầu người dùng:
-        // Coordinator được cấp quyền Create/Update/Delete y hệt Admin nhưng chỉ trong đúng phạm vi).
-        // Cả 2 field null (Trưởng Xưởng/Giám đốc, dùng chung toàn công ty) luôn NGOÀI phạm vi Coordinator
-        // bất kỳ — chỉ Admin mới gán được vai trò này.
+        // Variant for Create/Update with an already-resolved (groupId, departmentId); both null means a
+        // company-wide title that only Admin may assign.
         private async Task EnsureAssignmentInCallerScopeAsync(
             string callerUserName, bool isAdmin, int? groupId, int? departmentId, List<(int WorkshopId, int DepartmentId)> scopes, string errorMessage)
         {
@@ -697,8 +633,7 @@ namespace Attendance.Application.Services
             };
         }
 
-        // Mirror logic phạm vi ở GetInScopeAsync nhưng cho ĐÚNG 1 Employee mục tiêu (đã biết trước) —
-        // tách riêng vì GetInScopeAsync lọc cả danh sách qua IQueryable, còn ở đây chỉ cần so trực tiếp.
+        // Same rules as GetInScopeAsync, checked directly against one known employee.
         private async Task EnsureInAccumulationScopeAsync(string callerUserName, Employee targetEmployee)
         {
             var caller = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == callerUserName && !x.IsDeleted, x => x.JobTitle!);
@@ -729,9 +664,6 @@ namespace Attendance.Application.Services
             throw new DomainException("Bạn chỉ được xem lũy kế của nhân viên thuộc Nhóm mình quản lý.");
         }
 
-        // Lũy kế THẬT của 1 Employee, tính từ ledger, scope theo năm/tháng THỰC TẾ hôm nay — dùng cho
-        // GetByIdAsync/GetByUserNameAsync (chỉ 1 người nên query trực tiếp, không cần EF dịch subquery
-        // như các hàm liệt kê nhiều dòng ở trên).
         private async Task<(decimal MonthToDate, decimal YearToDate)> GetRealAccumulationAsync(int employeeId)
         {
             var (todayYear, todayMonth) = GetTodayYearMonth();
@@ -791,7 +723,7 @@ namespace Attendance.Application.Services
             return dto;
         }
 
-        // Nhân viên tự tra employeeId của chính mình (màn "Lũy kế của tôi") — so khớp Employee.UserName.
+        // Matches Employee.UserName so employees can look up their own record.
         public async Task<EmployeeDto> GetByUserNameAsync(string userName)
         {
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted, x => x.Group!, x => x.Department!, x => x.JobTitle!);
@@ -864,8 +796,7 @@ namespace Attendance.Application.Services
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == request.Id, x => x.Group!);
             employee.OrThrowNotFound("Nhân viên", request.Id);
 
-            // Phạm vi HIỆN TẠI của nhân viên đang sửa (2026-09-28) — Coordinator chỉ sửa được người
-            // đang thuộc đúng Bộ phận/Nhóm mình phụ trách.
+            // The employee's current scope must be within the caller's.
             await EnsureCanManageDeptOrGroupScopeAsync(callerUserName, isAdmin, employee!,
                 "Bạn chỉ được sửa nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
 
@@ -882,13 +813,11 @@ namespace Attendance.Application.Services
             }
 
             var (groupId, departmentId, scopes) = await ValidateOrganizationAssignmentAsync(request.JobTitleId, request.GroupId, request.DepartmentId, request.ApprovalScopes);
-            // Phạm vi MỚI (nếu đổi Nhóm/Chức vụ) cũng phải hợp lệ — không cho "chuyển" nhân viên ra
-            // ngoài phạm vi Coordinator đang quản (2026-09-28).
+            // The new scope must also be within the caller's, so employees can't be moved out.
             await EnsureAssignmentInCallerScopeAsync(callerUserName, isAdmin, groupId, departmentId, scopes,
                 "Bạn chỉ được chuyển nhân viên vào đúng Bộ phận/Nhóm mình phụ trách.");
 
-            // Chụp lại UserName CŨ trước khi ghi đè — cần để thu hồi quyền tự động cấp khỏi tài khoản
-            // cũ nếu Employee này vừa được link sang 1 UserName khác (xem SyncJobTitlePermissionsAsync).
+            // Needed to revoke auto-granted permissions from the old account on re-link.
             var oldUserName = employee.UserName;
 
             employee.Code = request.Code;
@@ -903,8 +832,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.SaveChangesAsync();
             await ReplaceApprovalScopesAsync(employee.Id, scopes);
 
-            // Đổi sang UserName khác (không phải chỉ gỡ) — thu hồi quyền tự động đã cấp khỏi tài khoản
-            // cũ trước, tránh 1 tài khoản Identity giữ mãi quyền của 1 Employee không còn link tới nó.
+            // Revoke from the old account so it doesn't keep permissions of an employee no longer linked.
             if (!string.IsNullOrWhiteSpace(oldUserName) && oldUserName != employee.UserName)
             {
                 await _userDirectoryService.SyncAutoGrantedPermissionsAsync(oldUserName, Array.Empty<string>());
@@ -912,12 +840,7 @@ namespace Attendance.Application.Services
             await SyncAutoGrantedPermissionsCoreAsync(employee);
         }
 
-        // Sửa RIÊNG giới hạn OT/tháng/năm (2026-08-29) — permission hẹp
-        // Attendance.Employee.UpdateOtLimit, scope theo Người phụ trách Phòng ban/Nhóm (2026-09-28: đổi
-        // từ chỉ-Phòng-ban sang dùng chung EnsureCanManageDeptOrGroupScopeAsync — phụ trách Phòng ban
-        // sửa được cả phòng, chỉ phụ trách Nhóm thì chỉ sửa được đúng Nhóm đó). Chỉ set đúng 2 field
-        // này, không đụng field nào khác của Employee — xem docs/docs-be/attendance-module.md §Phân
-        // quyền theo Phòng ban.
+        // Touches only the two limit fields; scoped like other coordinator edits.
         public async Task<EmployeeDto> UpdateOtLimitAsync(string userName, bool isAdmin, int employeeId, UpdateEmployeeOtLimitDto request)
         {
             var employee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId && !x.IsDeleted, x => x.Group!);
@@ -948,19 +871,12 @@ namespace Attendance.Application.Services
             _unitOfWork.Employees.Update(employee);
             await _unitOfWork.SaveChangesAsync();
 
-            // Nhân viên bị xoá (mềm) không còn giữ Chức vụ nào theo nghĩa thực tế — thu hồi hết quyền
-            // tự động đã cấp cho tài khoản Identity link với họ (nếu có).
+            // Soft-deleted employees hold no title, so revoke every auto-granted permission.
             await _userDirectoryService.SyncAutoGrantedPermissionsAsync(employee.UserName, Array.Empty<string>());
         }
 
-        // Tính lại TOÀN BỘ permission "tự động cấp" hiện hành cho 1 Employee — gộp CHUNG 2 nguồn
-        // (theo Chức vụ + theo vai trò "Người phụ trách Cây duyệt") trong CÙNG 1 lần gọi
-        // IUserDirectoryService.SyncAutoGrantedPermissionsAsync, vì hàm đó THAY NGUYÊN danh sách
-        // permission IsAutoGranted=true của user — gọi tách rời theo từng nguồn sẽ khiến nguồn gọi
-        // sau xoá mất permission do nguồn kia vừa cấp. No-op nếu chưa có UserName (chưa liên kết tài
-        // khoản đăng nhập); khi UserName được gán sau này, lần UpdateAsync đó sẽ tự cấp đúng bộ quyền
-        // hiện hành, không cần thao tác gì thêm (xem docs/docs-be/attendance-module.md §Cây chức vụ,
-        // mục "Quyền theo Chức vụ" và "Người phụ trách Cây duyệt").
+        // Both sources (job title + coordinator) must go in one call: the sync replaces the user's whole
+        // auto-granted set, so separate calls would wipe each other. No-op without a UserName.
         private async Task SyncAutoGrantedPermissionsCoreAsync(Employee employee)
         {
             if (string.IsNullOrWhiteSpace(employee.UserName)) return;
@@ -981,10 +897,9 @@ namespace Attendance.Application.Services
                 coordinatorCodes.AddRange(ApprovalStepCoordinatorPermissions.BaseViewCodes);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeAccumulationUpdateCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeUpdateOtLimitCode);
-                // Import Excel hàng loạt (2026-09-28) — cùng scope Bộ phận/Nhóm với 2 quyền sửa-từng-
-                // người ở trên, xem ghi chú tại ApprovalStepCoordinatorPermissions.
+                // Same department/group scope as the per-employee edits.
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeAccumulationImportCode);
-                // Hồ sơ nhân viên đầy đủ — y hệt Admin nhưng khoá theo scope (2026-09-28).
+                // Full employee profile, like Admin but scoped.
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeCreateCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeUpdateCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.EmployeeDeleteCode);
@@ -993,8 +908,7 @@ namespace Attendance.Application.Services
             {
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.DepartmentUpdateCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionUpdateCode);
-                // Nhân sự dưới chuyền (2026-09-28, theo yêu cầu người dùng) — CHỈ Người phụ trách Bộ
-                // phận, không cấp cho Nhóm (xem ghi chú tại ApprovalStepCoordinatorPermissions).
+                // Department coordinators only, not group coordinators.
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeViewCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeUpdateCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeImportCode);
@@ -1033,8 +947,7 @@ namespace Attendance.Application.Services
             var employee = await _unitOfWork.Employees.GetByIdAsync(employeeId);
             employee.OrThrowNotFound("Nhân viên", employeeId);
 
-            // Employee phải đang thuộc ĐÚNG Bộ phận đang thao tác (trực tiếp, hoặc qua Group con) —
-            // không "mượn" nhân viên Bộ phận khác qua endpoint này dù có quyền phụ trách Bộ phận A.
+            // Prevents borrowing employees of another department through this endpoint.
             var belongsToDepartment = employee!.DepartmentId == departmentId ||
                 (await _unitOfWork.EmployeeApprovalScopes.FindAsync(x => x.EmployeeId == employeeId && x.DepartmentId == departmentId)).Count > 0 ||
                 (employee.GroupId.HasValue &&
@@ -1058,8 +971,7 @@ namespace Attendance.Application.Services
             }
             var terminalLevel = (JobTitleTerminalLevel)(jobTitle?.TerminalLevel ?? (int)JobTitleTerminalLevel.None);
 
-            // Trưởng Xưởng/Giám đốc dùng chung toàn công ty — vượt phạm vi 1 Bộ phận, chỉ Admin mới
-            // được thăng lên 2 cấp này qua đây (Người phụ trách chỉ quản lý ĐÚNG Bộ phận mình phụ trách).
+            // Company-wide titles exceed a single department, so only Admin may assign them.
             if (!isAdmin && (terminalLevel == JobTitleTerminalLevel.WorkshopManager || terminalLevel == JobTitleTerminalLevel.GeneralDirector))
                 throw new DomainException("Chỉ Admin mới được gán Chức vụ Trưởng Xưởng/Giám đốc.");
 
@@ -1088,7 +1000,7 @@ namespace Attendance.Application.Services
                 default:
                     if (employee.GroupId == null)
                         throw new DomainException("Người này hiện không thuộc Nhóm nào — hãy nhờ Admin sửa qua màn Nhân viên.");
-                    break; // Chức vụ trung gian/gỡ chức vụ — giữ nguyên Group/Department hiện tại.
+                    break; // Intermediate title or removal keeps the current Group/Department.
             }
 
             employee.JobTitleId = jobTitleId;
@@ -1128,7 +1040,7 @@ namespace Attendance.Application.Services
                     throw new DomainException("Chỉ được gán Chức vụ cấp trung gian (Staff/Group Leader/Team Leader) ở khối Nhóm.");
             }
 
-            // GroupId/DepartmentId giữ nguyên — Chức vụ cấp trung gian không đổi tổ chức của Employee.
+            // Intermediate titles don't change the employee's organization.
             employee.JobTitleId = jobTitleId;
 
             _unitOfWork.Employees.Update(employee);
@@ -1139,15 +1051,8 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(employee.Id);
         }
 
-        // Nhân viên tự chỉnh lũy kế của chính mình (canAdjustAny=false, so khớp UserName), hoặc
-        // người có quyền Attendance.Employee.Update chỉnh cho bất kỳ ai (canAdjustAny=true).
-        // Chốt GroupId/DepartmentId thật sự sẽ lưu, dựa theo TerminalLevel của Chức vụ được chọn
-        // (2026-08-08 — xem docs/docs-be/attendance-module.md §Cây chức vụ):
-        //   - Chưa gán Chức vụ / TerminalLevel=None (nhân viên thường): BẮT BUỘC GroupId, KHÔNG được gửi DepartmentId.
-        //   - TerminalLevel=DepartmentManager (Trưởng phòng): BẮT BUỘC DepartmentId, KHÔNG được gửi GroupId
-        //     (không thuộc Bộ phận cụ thể nào — chỉ quản lý Phòng ban).
-        //   - TerminalLevel=WorkshopManager/GeneralDirector (Trưởng Xưởng/Giám đốc): dùng chung toàn công ty
-        //     — KHÔNG được gửi cả GroupId lẫn DepartmentId.
+        // None: GroupId required, no DepartmentId; DepartmentManager: DepartmentId required, no GroupId;
+        // WorkshopManager/GeneralDirector: neither.
         private async Task<(int? GroupId, int? DepartmentId, List<(int WorkshopId, int DepartmentId)> Scopes)> ValidateOrganizationAssignmentAsync(
             int? jobTitleId, int? groupId, int? departmentId, List<EmployeeApprovalScopeInputDto>? approvalScopes)
         {

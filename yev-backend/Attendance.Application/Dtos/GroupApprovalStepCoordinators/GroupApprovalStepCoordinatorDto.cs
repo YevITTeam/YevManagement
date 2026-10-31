@@ -8,7 +8,7 @@ namespace Attendance.Application.Dtos.GroupApprovalStepCoordinators
         public string EmployeeCode { get; set; } = null!;
         public string FullName { get; set; } = null!;
 
-        // null = chưa liên kết tài khoản đăng nhập — xem DepartmentApprovalStepCoordinatorDto.UserName.
+        // Null = no linked login yet (see DepartmentApprovalStepCoordinatorDto.UserName).
         public string? UserName { get; set; }
     }
 }

@@ -2,10 +2,8 @@ using System.Collections.Generic;
 
 namespace Attendance.Domain.Entities;
 
-// Reference data for khối chuyền (Chế tạo): Nhóm = shift-color grouping (Green/Orange/Blue/HC),
-// per Le Kim Ngan's email (2026-08-21) — "Áp dụng cho tất cả các line block".
-// Deliberately independent of ProductionLine for now: the same Line appears under
-// multiple shift-team values in the personnel data, so this is not a child level of Line.
+// Shift-color grouping (Green/Orange/Blue/HC) shared by all lines; not a child of ProductionLine because one line
+// appears under several shift teams.
 public partial class ProductionShiftTeam
 {
     public int Id { get; set; }

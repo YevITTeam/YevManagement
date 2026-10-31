@@ -9,9 +9,7 @@ import type { FormCategoryDto } from "@/modules/workflow/types/form-category.dto
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 
-// routeConditionType nằm trong values để dựng UI (hiện/ẩn 2 ô field key) và để Create gửi lên — nhưng
-// Update KHÔNG gửi field này, vì bất biến sau khi tạo (workflow-module.md §3.2). List component tự
-// lược field này ra khi gọi updateFormDefinition.
+// routeConditionType is immutable after creation: sent on Create only, stripped by the list before Update.
 export interface FormDefinitionFormValues {
     code: string;
     nameVn: string;

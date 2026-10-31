@@ -7,9 +7,7 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Quản lý mapping Chức vụ -> permission Identity tự động cấp (2026-08-10) — quản lý kiểu "thay
-    // nguyên danh sách" (mirror GroupApprovalStepService), không có Create/Update/Delete từng dòng
-    // riêng. Xem docs/docs-be/attendance-module.md §Cây chức vụ, mục "Quyền theo Chức vụ".
+    // Whole-list replace of JobTitle -> auto-granted Identity permissions.
     public class JobTitlePermissionService : BaseService<IAttendanceUnitOfWork>, IJobTitlePermissionService
     {
         private readonly IEmployeeService _employeeService;
@@ -65,11 +63,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.JobTitlePermissions.AddRangeAsync(newItems);
             await _unitOfWork.SaveChangesAsync();
 
-            // Sửa mapping có hiệu lực NGAY cho mọi nhân viên đang giữ đúng Chức vụ này (có UserName) —
-            // không cần đợi ai đó động vào Employee của từng người mới đồng bộ lại. Gọi qua
-            // IEmployeeService (không tự gọi thẳng IUserDirectoryService ở đây nữa) để gộp CHUNG với
-            // permission tự động cấp theo vai trò "Người phụ trách Cây duyệt" nếu người đó cũng đang
-            // giữ vai trò đó — xem EmployeeService.SyncAutoGrantedPermissionsCoreAsync.
+            // Apply immediately to every holder; going through IEmployeeService merges with coordinator-granted permissions.
             var employees = await _unitOfWork.Employees.FindAsync(x => x.JobTitleId == jobTitleId && !x.IsDeleted && x.UserName != null);
             foreach (var employee in employees)
             {

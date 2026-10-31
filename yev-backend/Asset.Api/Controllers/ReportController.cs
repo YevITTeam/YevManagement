@@ -33,8 +33,7 @@ namespace Asset.Api.Controllers
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
-        // Thống kê cho màn "Báo cáo thiết bị" (KPI + phân bổ trạng thái/chi nhánh/loại + sắp hết hạn) —
-        // tách riêng khỏi device-list vì đây là số liệu tổng hợp, không phải danh sách chi tiết để xuất Excel.
+        // Aggregated stats, separate from device-list which returns raw rows for Excel export.
         [RequirePermission("Asset.Report.View")]
         [HttpGet("device-summary")]
         public async Task<ActionResult<ApiResponse<DeviceReportSummaryDto>>> GetDeviceSummary()

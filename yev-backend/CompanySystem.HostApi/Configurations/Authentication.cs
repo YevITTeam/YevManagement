@@ -19,15 +19,8 @@ namespace CompanySystem.HostApi.Configurations
             })
             .AddNegotiate(options =>
             {
-                // NTLM (khác Kerberos) gắn liền với 1 kết nối TCP cụ thể — mặc định
-                // PersistNtlmCredentials=false nghĩa là mỗi request mới trên cùng kết nối vẫn có thể bị
-                // yêu cầu bắt tay NTLM lại từ đầu nếu ASP.NET Core không chắc kết nối đó đã xác thực
-                // (rất dễ xảy ra khi đứng sau IIS + nhiều tab/request đồng thời). Bật cờ này để 1 kết nối
-                // đã bắt tay xong thì mọi request sau trên CÙNG kết nối dùng lại luôn, không hỏi lại —
-                // giảm hẳn tần suất bật popup nhập mật khẩu domain (2026-08-08, xem thêm checklist IIS
-                // ở docs/docs-be/identity-module.md — Anonymous Authentication phải BẬT và Windows
-                // Authentication phải TẮT ở IIS site của BE, nếu không app + IIS sẽ tranh nhau challenge
-                // Negotiate và gây đúng hiện tượng "hiện popup lặp lại dù đăng nhập đúng").
+                // NTLM is bound to the TCP connection; reusing it avoids repeated domain-password prompts behind IIS.
+                // IIS site must have Anonymous on and Windows Auth off, or IIS and the app fight over the challenge.
                 options.PersistNtlmCredentials = true;
             })
             .AddJwtBearer(options =>

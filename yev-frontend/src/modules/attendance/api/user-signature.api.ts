@@ -17,18 +17,17 @@ const ENDPOINTS = {
 } as const;
 
 export const UserSignatureApi = {
-    // data = null nếu user chưa đăng ký chữ ký (chưa thấy docs nói rõ 404 hay data null — xử lý cả 2 phía component).
+    // data is null when no signature is registered; components handle both null and 404.
     getMySignature: async () => {
         const response = await api.get<ApiResponse<UserSignatureDto | null>>(ENDPOINTS.USER_SIGNATURE.getMySignature);
         return response.data;
     },
-    // ⚠️ 2026-07-16: KHÔNG còn áp dụng chữ ký ngay — chỉ gửi email xác nhận, data=true là đã gửi mail
-    // thành công, chữ ký thật sự đổi sau khi user tự bấm xác nhận qua confirmSignature() (docs §6b).
+    // Not applied immediately: only sends a confirmation email (data=true = sent); the change happens on confirmSignature().
     upsertMySignature: async (data: UpsertUserSignatureDto) => {
         const response = await api.put<ApiResponse<boolean>>(ENDPOINTS.USER_SIGNATURE.upsertMySignature, data);
         return response.data;
     },
-    // Admin xem chữ ký người khác — permission Attendance.UserSignature.View.
+    // Requires Attendance.UserSignature.View.
     getUserSignature: async (userName: string) => {
         const response = await api.get<ApiResponse<UserSignatureDto | null>>(
             ENDPOINTS.USER_SIGNATURE.getUserSignature(userName)
@@ -40,7 +39,7 @@ export const UserSignatureApi = {
         const response = await api.put<ApiResponse<UserSignatureDto>>(ENDPOINTS.USER_SIGNATURE.getUserSignature(userName), data);
         return response.data;
     },
-    // Public, [AllowAnonymous] — trang "Xác nhận cập nhật chữ ký" mở qua link email (docs §6b).
+    // Public [AllowAnonymous], opened from the email link.
     getSignatureConfirmation: async (token: string) => {
         const response = await api.get<ApiResponse<SignatureConfirmationPreviewDto>>(
             ENDPOINTS.USER_SIGNATURE.confirmGet(token)

@@ -48,8 +48,7 @@ interface ApprovalStepView {
     history: OtFormDto["approvalHistories"][number] | null;
 }
 
-// Chuỗi bước duyệt đã snapshot ở form.approvalSteps — đồng bộ với OtFormDetail.tsx (2026-08-07,
-// Giai đoạn 3.1), không còn suy từ danh sách cấp cố định như trước.
+// Chain comes from the form.approvalSteps snapshot, same as OtFormDetail.tsx.
 function buildApprovalSteps(form: OtFormDto): ApprovalStepView[] {
     const firstPendingOrder = form.approvalSteps.find((s) => s.status === 0)?.stepOrder;
     return form.approvalSteps.map((step): ApprovalStepView => {
@@ -61,13 +60,13 @@ function buildApprovalSteps(form: OtFormDto): ApprovalStepView[] {
     });
 }
 
-// employee.removedAtLevel giờ lưu StepOrder — xem OtFormDetail.tsx.
+// removedAtLevel holds a StepOrder (see OtFormDetail.tsx).
 function stepNameByOrder(form: OtFormDto, stepOrder: number | null): string {
     if (stepOrder === null) return "";
     return form.approvalSteps.find((s) => s.stepOrder === stepOrder)?.jobTitleNameSnapshot ?? `#${stepOrder}`;
 }
 
-// Cùng pattern ProcessPartTile của OtFormDetail.tsx — badge song ngữ xanh lá/xám thay vì text phẳng.
+// Bilingual counterpart of OtFormDetail's ProcessPartTile.
 function ProcessPartTile({ icon, label, active, activeLabel, inactiveLabel }: {
     icon: ReactNode;
     label: string;
@@ -95,11 +94,9 @@ function ProcessPartTile({ icon, label, active, activeLabel, inactiveLabel }: {
     );
 }
 
-// Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-module.md §API
-// Mở qua link email "Duyệt/Từ chối đơn tăng ca" gửi cho Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc.
+// Public route secured by the URL token; opened from the approve/reject email sent to managers.
 export default function OtFormEmailConfirmPage() {
-    // Bilingual (VN / JP) regardless of the /vi or /ja locale segment the approver opened the link
-    // in (2026-07-29, user request) — see createBilingualTranslator in lib/bilingual.ts.
+    // Bilingual (VN / JP) regardless of the /vi or /ja segment the link was opened in.
     const t = createBilingualTranslator("Attendance.OtFormDetail");
     const tConfirm = createBilingualTranslator("Attendance.OtFormEmailConfirm");
     const tCommon = createBilingualTranslator("Common");
@@ -111,19 +108,13 @@ export default function OtFormEmailConfirmPage() {
     const [actionResult, setActionResult] = useState<"approved" | "rejected" | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
 
-    // Popup riêng cho cả "Duyệt" lẫn "Từ chối" (2026-07-29, mở rộng 2026-07-30 để thêm mật khẩu cấp 2
-    // cho cả 2 popup thay vì để ô Duyệt hiện sẵn ngoài trang) — bấm nút nào mới mở popup nhập
-    // comment/lý do + mật khẩu cấp 2 tương ứng, đồng bộ UX với modal Ký duyệt/Duyệt/Từ chối ở
-    // OtFormDetail.tsx (màn trong app).
     const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
     const [comment, setComment] = useState("");
     const [secondaryPassword, setSecondaryPassword] = useState("");
 
     const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
     const [rejectComment, setRejectComment] = useState("");
-    // Mật khẩu cấp 2 riêng cho từng popup — trang này không có JWT nên không thể kiểm tra trước
-    // "đã thiết lập chưa" như OtFormDetail.tsx (SecondaryPasswordApi.getMyStatus() cần đăng nhập);
-    // lỗi "chưa thiết lập"/"sai mật khẩu" hiện ra qua actionError trả về từ BE.
+    // No JWT here, so "is it set up" can't be pre-checked; not-set/wrong-password errors come back via actionError.
     const [rejectSecondaryPassword, setRejectSecondaryPassword] = useState("");
 
     // Removing an employee here asks for the secondary password like Approve/Reject: the link is the only other credential.
@@ -132,8 +123,7 @@ export default function OtFormEmailConfirmPage() {
     const [removeSecondaryPassword, setRemoveSecondaryPassword] = useState("");
     const [isRemovingEmployee, setIsRemovingEmployee] = useState(false);
 
-    // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
-    // đúng câu thông báo riêng này thay vì rơi về fallback chung.
+    // Throw a JSON {message} so getApiErrorMessage surfaces this specific text instead of the generic fallback.
     const { isLoading, error: loadError } = useFetchEffect(
         async () => {
             if (!token) {
@@ -268,19 +258,12 @@ export default function OtFormEmailConfirmPage() {
     }
 
     const approvalStepViews = buildApprovalSteps(form);
-    // Người đã bị loại khỏi đơn (docs §4.5a) không tính vào tổng giờ OT hiển thị ở trang xem trước qua
-    // email — kênh email KHÔNG có hành động "Loại khỏi đơn" (chỉ có ở trong app), nhưng vẫn phải phản
-    // ánh đúng trạng thái đơn hiện tại nếu việc loại người đã xảy ra trước đó qua app.
+    // Removed employees (via the app) are excluded from the displayed total hours.
     const activeEmployees = form.employees.filter((employee) => !employee.isRemoved);
     const totalWorkedHours = activeEmployees.reduce((sum, employee) => sum + employee.actualHours, 0);
 
     return (
-        // max-w-[1600px] — trang này là route public độc lập (xac-nhan-don/page.tsx), KHÔNG nằm
-        // trong (ot-manager)/layout.tsx nên không bị ràng buộc max-w-[1280px] của khung app đã đăng
-        // nhập. Trước đây từng khớp 1280px (max-w-7xl) theo khung app, nhưng bảng danh sách nhân viên
-        // (9 cột: mã NV, họ tên, thời gian, số giờ, lũy kế tháng/năm, phiếu ăn, có ăn, ghi chú) vẫn bị
-        // chật ở 1280px trên màn hình rộng — họ tên và badge "Có ăn / 食事あり" xuống dòng, rớt chữ.
-        // Nới rộng thêm vì trang mở trực tiếp từ email, không cần khớp bố cục app.
+        // Public route outside the app layout, so it can exceed 1280px; the 9-column employee table wraps names at 1280px.
         <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
@@ -304,15 +287,26 @@ export default function OtFormEmailConfirmPage() {
                     </div>
                 )}
                 <div className="flex overflow-x-auto pb-1">
+                    {/* Steps at or below the creator's rank are dropped from the chain, so the creator heads the progress. */}
+                    <div className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
+                        {approvalStepViews.length > 0 && <div className="absolute right-0 top-4 h-0.5 w-1/2 -translate-y-1/2 bg-emerald-500" />}
+                        <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-emerald-500 bg-emerald-500 text-white">
+                            <Check size={16} />
+                        </div>
+                        <div className="mt-2 text-center text-xs font-semibold text-[#191c1e]">{t("requesterStep")}</div>
+                        <div className="mt-0.5 text-center text-[11px] leading-tight text-[#5e3f3a]">
+                            {form.createdByFullName ?? form.createdByUserName}
+                            <br />
+                            {formatDateTime(form.createdAt)}
+                        </div>
+                    </div>
                     {approvalStepViews.map((view, index) => (
                         <div key={view.step.id} className="relative flex min-w-[6.5rem] flex-1 flex-col items-center">
-                            {index > 0 && (
-                                <div
-                                    className={`absolute left-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
-                                        approvalStepViews[index - 1].state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
-                                    }`}
-                                />
-                            )}
+                            <div
+                                className={`absolute left-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
+                                    index === 0 || approvalStepViews[index - 1].state === "done" ? "bg-emerald-500" : "bg-[#e0e3e5]"
+                                }`}
+                            />
                             {index < approvalStepViews.length - 1 && (
                                 <div
                                     className={`absolute right-0 top-4 h-0.5 w-1/2 -translate-y-1/2 ${
@@ -405,14 +399,9 @@ export default function OtFormEmailConfirmPage() {
                 )}
             </section>
 
-            {/* Luôn hiện khối này, kể cả khi form.processPart null — mặc định "Không" cho 3 checkbox,
-                cùng cách OtFormPrintView.tsx đã xử lý từ trước (processPart?.isEat ?? false). Trước
-                đây ẩn hẳn cả khối khi null, khiến người dùng tưởng thiếu thông tin dù đây là giá trị
-                mặc định hợp lệ (đơn không yêu cầu hỗ trợ gì thêm), không phải dữ liệu bị mất. */}
+            {/* Always shown even when processPart is null (defaults to "No"), otherwise users assume info is missing. */}
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                {/* Nhãn/giá trị dựng thủ công từ literal song ngữ (bilingual.ts), KHÔNG đi qua
-                    createBilingualTranslator — {value} bên dưới TỰ nó đã là chuỗi song ngữ
-                    ("Có / はい"), ghép qua t() sẽ lặp lại 2 lần (bug đã gặp thực tế). */}
+                {/* Built from bilingual literals, not createBilingualTranslator: {value} is already bilingual and t() would duplicate it. */}
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{processPartTitleBilingual}</h2>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                     <ProcessPartTile
@@ -480,8 +469,7 @@ export default function OtFormEmailConfirmPage() {
                                 <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colHours")}</th>
                                 <th colSpan={2} className="border-b border-[#e0e3e5] px-6 py-2 text-center">{t("colAccumulation")}</th>
                                 <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colMeal")}</th>
-                                {/* Đơn Theo chuyền không có khái niệm "ăn sau" (Ăn uống bắt buộc, DidEat luôn true) —
-                                    bỏ cột này để tránh hiện thông tin không áp dụng (2026-09-28, theo yêu cầu người dùng). */}
+                                {/* Production-line forms always eat (DidEat true), so this column doesn't apply. */}
                                 {!form.isProductionForm && <th rowSpan={2} className="px-6 py-3 text-center align-bottom">{t("colDidEat")}</th>}
                                 <th rowSpan={2} className="px-6 py-3 align-bottom">{t("colNote")}</th>
                                 {!actionResult && <th rowSpan={2} className="px-6 py-3 align-bottom" />}
@@ -493,9 +481,7 @@ export default function OtFormEmailConfirmPage() {
                         </thead>
                         <tbody>
                             {form.employees.map((employee) => {
-                                // Đã bị loại khỏi đơn qua app (docs §4.5a) — kênh email không có hành
-                                // động loại người, nhưng vẫn phải phản ánh đúng nếu việc đó đã xảy ra
-                                // trước khi cấp duyệt mở link email này.
+                                // Removed via the app before this link was opened; the email channel can't remove but must reflect it.
                                 if (employee.isRemoved) {
                                     return (
                                         <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#f8fafc] opacity-60">
@@ -522,10 +508,7 @@ export default function OtFormEmailConfirmPage() {
                                         </tr>
                                     );
                                 }
-                                // Trang public (không JWT) nên KHÔNG gọi được GET /AttendanceSetting —
-                                // dùng mặc định dùng chung với BE. Admin đổi ngưỡng thì màn trong app
-                                // đổi theo ngay, riêng trang email này vẫn theo mặc định (chấp nhận
-                                // được: đây chỉ là màu cảnh báo, không phải số liệu nghiệp vụ).
+                                // No JWT, so GET /AttendanceSetting is unavailable; uses the shared defaults (only affects warning colors).
                                 const isMonthOverLimit = employee.monthToDate > DEFAULT_ATTENDANCE_SETTING.monthlyOtHourLimit;
                                 const isYearOverLimit = employee.yearToDate > DEFAULT_ATTENDANCE_SETTING.yearlyOtHourLimit;
                                 const isOverLimit = isMonthOverLimit || isYearOverLimit;
@@ -603,6 +586,22 @@ export default function OtFormEmailConfirmPage() {
             <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
                 <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("approvalHistoryTitle")}</h2>
                 <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                    <div className="rounded-lg border border-[#e0e3e5] p-4">
+                        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("requesterStep")}</div>
+                        <div className="mt-2 space-y-2">
+                            <div className="text-sm font-semibold text-[#191c1e]">{form.createdByFullName ?? form.createdByUserName}</div>
+                            <div className="text-xs text-[#5e3f3a]">{t("createdAction")}</div>
+                            <div className="text-xs text-[#5e3f3a]">{formatDateTime(form.createdAt)}</div>
+                            {form.creatorSignatureImage && (
+                                // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image can't optimize it
+                                <img
+                                    src={`data:image/png;base64,${form.creatorSignatureImage}`}
+                                    alt={t("signatureAlt", { name: form.createdByFullName ?? form.createdByUserName })}
+                                    className="h-16 w-full rounded border border-[#e0e3e5] object-contain"
+                                />
+                            )}
+                        </div>
+                    </div>
                     {form.approvalSteps.map((step) => {
                         const history = form.approvalHistories.find((item) => item.stepOrder === step.stepOrder);
                         return (
@@ -619,7 +618,7 @@ export default function OtFormEmailConfirmPage() {
                                         <div className="text-xs text-[#5e3f3a]">{formatDateTime(history.actionAt)}</div>
                                         {history.comment && <div className="text-xs text-[#191c1e]">&quot;{history.comment}&quot;</div>}
                                         {history.hasSignature && history.signatureImage && (
-                                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
+                                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URI; next/image can't optimize it and needs fixed width/height
                                             <img
                                                 src={`data:image/png;base64,${history.signatureImage}`}
                                                 alt={t("signatureAlt", { name: history.approverFullName ?? history.approverUserName })}

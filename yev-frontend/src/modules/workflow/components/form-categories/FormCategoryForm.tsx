@@ -32,7 +32,7 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// Đơn vị cha hiển thị thụt lề theo độ sâu trong cây, giống hệt flattenTree() ở OrgUnitList.tsx.
+// Parent options indented by tree depth, same as flattenTree() in OrgUnitList.tsx.
 function flattenOrgUnits(nodes: OrgUnitTreeDto[], depth = 0): SelectOption[] {
     const result: SelectOption[] = [];
     for (const node of nodes) {

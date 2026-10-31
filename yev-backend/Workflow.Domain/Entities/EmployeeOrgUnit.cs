@@ -1,9 +1,7 @@
 namespace Workflow.Domain.Entities;
 
-// Nhân sự x đơn vị x chức danh (kiêm nhiệm 兼務). Bảng duy nhất trả lời "ai đang là Trưởng phòng
-// Kế toán" — xem workflow-module.md §3.1. Ràng buộc "1 Employee tối đa 1 dòng IsPrimary=1 còn hiệu
-// lực" và "1 cặp (OrgUnitId, JobTitleId) chỉ 1 người tại 1 thời điểm" validate ở Service, KHÔNG ở DB,
-// vì có thời hiệu (ValidFrom/ValidTo).
+// "One active IsPrimary per Employee" and "one holder per (OrgUnitId, JobTitleId)" are validated in the Service,
+// not the DB, because rows have validity periods (ValidFrom/ValidTo).
 public partial class EmployeeOrgUnit
 {
     public int Id { get; set; }

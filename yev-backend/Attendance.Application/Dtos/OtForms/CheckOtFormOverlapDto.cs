@@ -7,7 +7,6 @@ namespace Attendance.Application.Dtos.OtForms
     {
         public DateOnly Date { get; set; }
         
-        // Giờ bắt đầu chung của đơn
         public TimeOnly StartTime { get; set; }
 
         public List<CheckOtFormOverlapEmployeeDto> Employees { get; set; } = new();
@@ -19,10 +18,9 @@ namespace Attendance.Application.Dtos.OtForms
     {
         public int EmployeeId { get; set; }
 
-        // Giờ bắt đầu riêng của từng người — null = giờ bắt đầu chung của đơn
+        // Null = the form's StartTime.
         public TimeOnly? StartTime { get; set; }
         
-        // Giờ kết thúc riêng của từng người
         public TimeOnly EndTime { get; set; }
     }
 }

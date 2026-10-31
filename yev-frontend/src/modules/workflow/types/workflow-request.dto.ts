@@ -1,4 +1,4 @@
-// workflow-module.md §4 — khớp enum ở BE (Workflow.Domain.Enums).
+// Must match BE enums (Workflow.Domain.Enums).
 export const RequestStatus = {
     Draft: 1,
     Submitted: 2,
@@ -31,7 +31,7 @@ export const RequestAction = {
 } as const;
 export type RequestAction = (typeof RequestAction)[keyof typeof RequestAction];
 
-// DataJson/FormSchemaJson — BE trả object đã parse sẵn (không phải chuỗi), workflow-module.md §6.
+// BE returns DataJson/FormSchemaJson already parsed, not as strings.
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 export interface AvailableFormDto {
@@ -127,10 +127,8 @@ export interface WorkflowRequestDto {
     attachments: WorkflowAttachmentDto[];
 }
 
-// Khớp CHÍNH XÁC shape do WorkflowRequestService.BuildFormSchemaJson dựng lúc nộp (workflow-module.md
-// §5.1 bước 7) — chỉ có đúng các khoá này, KHÔNG có placeholder/helpText/min-max (không cần cho xem
-// lại/in, xem §5.7). Đọc chỉ dùng cho đơn đã nộp (readOnly) — Draft dùng FormFieldDto sống thay vì
-// snapshot này (form-field.dto.ts, qua WorkflowRequestApi.getFormSchema).
+// Must match WorkflowRequestService.BuildFormSchemaJson exactly. Submitted (read-only) requests only;
+// Drafts use the live FormFieldDto instead.
 export interface FormSchemaFieldSnapshot {
     fieldKey: string;
     labelVn: string;
@@ -157,7 +155,7 @@ export interface FormSchemaConditionSnapshot {
 export interface FormSchemaSnapshot {
     fields: FormSchemaFieldSnapshot[];
     conditions: FormSchemaConditionSnapshot[];
-    // Layout .docx đã snapshot lúc nộp (workflow-module.md §1.5) — NULL nếu form ở chế độ lưới.
+    // .docx layout snapshotted at submit; null in grid mode.
     layoutHtml: string | null;
 }
 
@@ -216,8 +214,7 @@ export interface ResubmitRequestDto {
     comment: string | null;
 }
 
-// Pha 4C: duyệt qua email — không có OnBehalfOfEmployeeId (không ủy quyền qua kênh email) và không có
-// SignatureImageBase64 (chữ ký tự lấy từ EmployeeSignatures nếu bước yêu cầu, BE tự xử lý).
+// Email approval: no OnBehalfOfEmployeeId (no delegation via email) and no signature image (BE uses EmployeeSignatures).
 export interface EmailApproveRequestDto {
     comment: string | null;
 }

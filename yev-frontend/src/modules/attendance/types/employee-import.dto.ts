@@ -1,4 +1,3 @@
-// docs/attendance-module.md §API — import Excel nhân sự hàng loạt (Admin), pattern Preview → Confirm.
 
 // Filters of the employee list, sent to the "export filtered" endpoints.
 export interface EmployeeExportFilter {
@@ -49,9 +48,8 @@ export interface EmployeeImportConfirmResultDto {
     skippedRows: SkippedEmployeeImportRowDto[];
 }
 
-// Import hàng loạt giới hạn OT tháng/năm riêng từng nhân viên (mục 5, 2026-08-27). KHÔNG có bước
-// Preview/Confirm — file Excel cột B=MNV, C=Giới hạn Tháng, D=Giới hạn Năm, áp dụng thẳng, trả lại kết
-// quả từng dòng để xem lại. Ô Giới hạn để trống ở 1 dòng = giữ nguyên override cũ của nhân viên đó.
+// Applied directly (no Preview/Confirm); columns B=employee code, C=monthly, D=yearly limit.
+// An empty limit cell keeps the employee's existing override.
 export interface EmployeeOtHourLimitImportRowResultDto {
     rowNumber: number;
     employeeCode: string;

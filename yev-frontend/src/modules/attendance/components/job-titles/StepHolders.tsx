@@ -20,9 +20,6 @@ interface HolderItem {
     badge?: string | null;
 }
 
-// "Đang giữ chức vụ X" — chip list + combobox thêm, dùng chung cho khối Nhóm/Bộ phận VÀ nhánh
-// "không tự động theo Line Leader" của khối Chuyền (2026-09-05, tách khỏi ApprovalStepManager.tsx cùng
-// đợt với StepCard.tsx — 3 nơi copy y hệt JSX này trước đó).
 export default function StepHolders({
     holders,
     isLoadingEmployees,

@@ -1,6 +1,5 @@
 namespace Workflow.Domain.Enums;
 
-// workflow-module.md §4 — toán tử so sánh dùng ở FormFieldConditions.
 public enum ConditionOperator
 {
     Equals = 1,

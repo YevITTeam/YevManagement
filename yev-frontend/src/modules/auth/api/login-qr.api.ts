@@ -12,19 +12,18 @@ const ENDPOINTS = {
 } as const;
 
 export const LoginQrApi = {
-  // User đang có mã QR còn hiệu lực.
   getActive: async () => {
     const response = await api.get<ApiResponse<LoginQrStatusDto[]>>(ENDPOINTS.LOGIN_QR.list);
     return response.data;
   },
 
-  // Tạo mã mới cho user và vô hiệu mã cũ (nếu có). Mã thô chỉ có trong response này.
+  // Revokes the previous code; the raw code is only in this response.
   generate: async (userId: number) => {
     const response = await api.post<ApiResponse<LoginQrGeneratedDto>>(ENDPOINTS.LOGIN_QR.byUser(userId));
     return response.data;
   },
 
-  // Tạo mã mới cho nhiều user cùng lúc (in tem hàng loạt); mã cũ của từng người bị thu hồi.
+  // Bulk version for label printing; each user's old code is revoked.
   generateBatch: async (userIds: number[]) => {
     const response = await api.post<ApiResponse<LoginQrGeneratedDto[]>>(ENDPOINTS.LOGIN_QR.batch, { userIds });
     return response.data;

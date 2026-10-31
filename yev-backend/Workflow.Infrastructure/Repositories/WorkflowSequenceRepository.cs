@@ -4,10 +4,7 @@ using Workflow.Infrastructure.Context;
 
 namespace Workflow.Infrastructure.Repositories
 {
-    // Cấp số atomic (workflow-module.md §5.4) — MERGE ... WITH (HOLDLOCK) ... OUTPUT khoá đúng 1 dòng
-    // (SequenceKey, Year) trong lúc tăng. Chạy bên trong transaction tường minh của
-    // WorkflowRequestService.SubmitAsync (Database.SqlQuery dùng chung connection/transaction đang mở
-    // của cùng DbContext instance — không cần truyền transaction thủ công).
+    // MERGE WITH (HOLDLOCK) locks the (SequenceKey, Year) row; Database.SqlQuery joins the caller's open transaction.
     public class WorkflowSequenceRepository : IWorkflowSequenceRepository
     {
         private readonly WorkflowDbContext _dbContext;

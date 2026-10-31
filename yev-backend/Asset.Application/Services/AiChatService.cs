@@ -10,12 +10,8 @@ using Shared.Application.Interfaces.External;
 
 namespace Asset.Application.Services
 {
-    // Orchestrates 1 chat turn against the LLM server with tool-calling (docs/docs-be/asset-module.md §1.18
-    // §4; server was Ollama until 2026-08-24, now LM Studio — see LmStudioChatClient): stream the
-    // model's answer, execute any tool the model asks for by calling straight into internal
-    // Application services (AiChatToolExecutorService), feed the result back, repeat up to
-    // MaxToolRounds times. Stateless — the FE resends the whole history every turn, nothing is
-    // persisted server-side.
+    // One chat turn with tool-calling: stream the answer, run requested tools via AiChatToolExecutorService, feed
+    // results back, up to MaxToolRounds. Stateless: the FE resends the whole history every turn.
     public class AiChatService : IAiChatService
     {
         // Blocks the model from calling tools forever — matches MAX_TOOL_ROUNDS on the old FE
@@ -24,9 +20,7 @@ namespace Asset.Application.Services
 
         private const string PersonaIntro = "Bạn là trợ lý AI nội bộ của công ty. ";
 
-        // Language rule branches on the FE UI locale (request.Locale, §StreamChatAsync) — everything
-        // else in the prompt stays Vietnamese regardless, since it's an instruction TO the model, not
-        // part of what the model outputs to the user.
+        // Only the language rule follows request.Locale; the rest stays Vietnamese since it instructs the model, not the user.
         private const string LanguageRuleVi =
             "QUY TẮC NGÔN NGỮ (quan trọng nhất, luôn tuân theo): LUÔN " +
             "LUÔN trả lời bằng tiếng Việt, kể cả khi người dùng hỏi bằng ngôn ngữ khác hoặc dữ liệu tool trả " +
@@ -105,17 +99,14 @@ namespace Asset.Application.Services
             "sắp có kết quả, và không được tự bịa số liệu để hoàn thành những gì đã nói trước đó — nếu không " +
             "chắc, hãy gọi lại tool cần thiết ngay trong lượt hiện tại thay vì suy đoán.";
 
-        // Kept for backward compatibility (Vietnamese default, matches pre-2026-08-22 behavior) — use
-        // BuildDefaultSystemPrompt(locale) for the locale-aware version.
+        // Vietnamese default for callers without a locale; use BuildDefaultSystemPrompt(locale) otherwise.
         public const string DefaultSystemPrompt = PersonaIntro + LanguageRuleVi + PromptBody;
 
         // locale = FE UI locale (next-intl, "vi" | "ja"). Anything other than "ja" (null, "vi", unknown) -> Vietnamese.
         public static string BuildDefaultSystemPrompt(string? locale) =>
             PersonaIntro + (string.Equals(locale, "ja", StringComparison.OrdinalIgnoreCase) ? LanguageRuleJa : LanguageRuleVi) + PromptBody;
 
-        // Matches an assistant reply that promises to look something up ("tôi sẽ tra cứu ngay bây giờ",
-        // "để tôi kiểm tra", "xin chờ trong giây lát"...) without actually calling a tool — see the
-        // unfulfilled-promise guard below and docs/docs-be/asset-module.md §1.18.
+        // Detects a reply that promises a lookup without actually calling a tool.
         private static readonly Regex UnfulfilledPromisePattern = new(
             @"(sẽ\s+(thực hiện|tra cứu|kiểm tra|gọi)|ngay bây giờ|trong giây lát|xin chờ|để tôi\s+(kiểm tra|tra cứu))",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -141,15 +132,10 @@ namespace Asset.Application.Services
             var maxRounds = _configuration.GetValue<int?>("AiChatSettings:MaxToolRounds") ?? DefaultMaxToolRounds;
             var think = request.Think ?? false;
 
-            // Emit each device deep-link button at most once per conversation turn, even if the model
-            // looks the same device up through several tools/rounds (e.g. search_devices then
-            // get_device_detail on the same result) — the FE dedupes on its side too, this just saves
-            // a few redundant stream lines.
+            // Emit each device deep-link at most once per turn even if several tools return the same device.
             var emittedDeviceIds = new HashSet<int>();
 
-            // Bounds the same-turn auto-retry below (separate from maxRounds' tool-call budget) — a
-            // model that just keeps promising instead of calling a tool must not be allowed to silently
-            // burn every round on empty talk; after this many nudges we give up and end the turn normally.
+            // Caps same-turn retries so a model that keeps promising cannot burn every round on empty talk.
             const int MaxPromiseRetries = 2;
             var promiseRetriesUsed = 0;
 
@@ -166,14 +152,8 @@ namespace Asset.Application.Services
             foreach (var historyMessage in request.History)
                 messages.Add(new ChatMessageWire { Role = historyMessage.Role, Content = historyMessage.Content });
 
-            // Guard against a reproduced small-model failure mode (docs §14): "tool" messages are never
-            // persisted/resent by the FE (AiChatMessageDto only has user/assistant), so if a PAST turn's
-            // assistant reply was just a promise ("tôi sẽ tra cứu ngay bây giờ") that ended the round
-            // without any real tool_calls, nothing in the resent history proves the lookup happened —
-            // yet the model tends to treat its own unfulfilled promise as already-done and fabricates a
-            // plausible "result" in the next turn instead of calling the tool for real. Detect that
-            // specific shape and inject an explicit correction so the new turn doesn't build on a false
-            // premise.
+            // Tool messages are never resent by the FE, so a past bare promise looks like a done lookup and the model
+            // fabricates a result; inject an explicit correction for that shape.
             var lastHistoryMessage = request.History.Count > 0 ? request.History[^1] : null;
             if (lastHistoryMessage != null &&
                 lastHistoryMessage.Role == "assistant" &&
@@ -190,15 +170,8 @@ namespace Asset.Application.Services
                 });
             }
 
-            // Reinforce the language rule right before the user's turn when locale is "ja" — the small
-            // local model (gemma4:e2b) otherwise defaults back to Vietnamese despite the language rule
-            // in the system prompt (verified 2026-08-22: request.Locale correctly reaches here and the
-            // Japanese rule IS in the built prompt, but with ~90 lines of Vietnamese PromptBody right
-            // after it and a Vietnamese persona line right before it, the model just pattern-matches to
-            // Vietnamese). A short reminder placed immediately before the user message — closer to
-            // where the model actually generates — is far more reliable for this model than a rule
-            // buried at the top of a long system prompt. Skipped when the caller supplies a custom
-            // SystemPrompt (locale is ignored entirely in that case, same as BuildDefaultSystemPrompt).
+            // The small local model drifts back to Vietnamese despite the system-prompt rule; a reminder right before the
+            // user message works. Skipped for a custom SystemPrompt (locale is ignored then).
             if (string.IsNullOrWhiteSpace(request.SystemPrompt) &&
                 string.Equals(request.Locale, "ja", StringComparison.OrdinalIgnoreCase))
             {
@@ -243,21 +216,11 @@ namespace Asset.Application.Services
                         if (!string.IsNullOrEmpty(chunk.Message?.Content))
                         {
                             contentBuilder.Append(chunk.Message!.Content);
-                            // Đẩy ngay từng mẩu chữ ra FE khi vừa nhận được từ Ollama, đúng thiết kế gốc
-                            // (docs/docs-be/asset-module.md §1.18: "stream thẳng ra client trong lúc chờ") — TRƯỚC
-                            // đây đoạn code này chỉ Append vào contentBuilder mà không yield, nên FE không
-                            // nhận được gì cho tới khi CẢ round sinh xong (có thể vài-chục giây với model
-                            // cục bộ), rồi mới nhận 1 cục text dồn hết 1 lần ở dòng bên dưới (đã xoá) — cảm
-                            // giác "đứng hình rồi dump chữ" chính là nguyên nhân phản hồi có vẻ chậm
-                            // (2026-07-27 fix). `yield return` hợp lệ ở đây vì nằm trong try-finally (không
-                            // có catch) của vòng ngoài — không nằm trong try-catch của MoveNextAsync() phía
-                            // trên.
+                            // Stream each chunk immediately so the FE doesn't wait for the whole round; yield is legal here (try-finally, no catch).
                             yield return AiChatStreamEventDto.Content(chunk.Message!.Content);
                         }
 
-                        // tool_calls position is NOT fixed in the stream (docs §3) — some models put
-                        // it in the middle with more (empty) chunks after; keep whatever we've seen so
-                        // far, never let a later empty chunk erase it.
+                        // tool_calls may arrive mid-stream followed by empty chunks; never let a later chunk erase them.
                         if (chunk.Message?.ToolCalls is { Count: > 0 })
                             toolCalls = chunk.Message.ToolCalls;
                     }
@@ -279,11 +242,7 @@ namespace Asset.Application.Services
                 {
                     messages.Add(new ChatMessageWire { Role = "assistant", Content = text });
 
-                    // Same-turn version of the cross-turn guard above: don't hand control back to the
-                    // user on a bare promise — the model has already proven (in production use) that it
-                    // will just repeat the promise again next turn instead of calling the tool. Force
-                    // another model round right now, within the same HTTP request, up to
-                    // MaxPromiseRetries times.
+                    // Same-turn version of the guard above: force another round instead of returning a bare promise to the user.
                     if (UnfulfilledPromisePattern.IsMatch(text) && promiseRetriesUsed < MaxPromiseRetries && round < maxRounds - 1)
                     {
                         promiseRetriesUsed++;
@@ -311,10 +270,7 @@ namespace Asset.Application.Services
                     AiChatToolExecutionResult toolResult;
                     try
                     {
-                        // LM Studio sends `arguments` as a JSON-ENCODED STRING (OpenAI wire format),
-                        // unlike Ollama which sent a JSON object — parse it into the JsonElement shape
-                        // AiChatToolExecutorService already expects, so the 7 tool implementations
-                        // there needed no change for the Ollama->LM Studio migration (2026-08-24).
+                        // LM Studio sends `arguments` as a JSON-encoded string (OpenAI format); parse it into the JsonElement the executor expects.
                         var argumentsJson = string.IsNullOrWhiteSpace(call.Function.Arguments) ? "{}" : call.Function.Arguments;
                         using var argumentsDoc = JsonDocument.Parse(argumentsJson);
                         toolResult = await _toolExecutor.ExecuteAsync(call.Function.Name, argumentsDoc.RootElement, cancellationToken);
@@ -326,12 +282,10 @@ namespace Asset.Application.Services
                         toolResult = new AiChatToolExecutionResult { Json = $"{{\"error\":\"Lỗi khi thực thi tool: {ex.Message}\"}}" };
                     }
 
-                    // ToolCallId echoes call.Id back per the OpenAI Chat Completions spec (docs §9) —
-                    // required by LM Studio's wire format, unused/ignored under Ollama's old shape.
+                    // ToolCallId must echo call.Id per the OpenAI Chat Completions format.
                     messages.Add(new ChatMessageWire { Role = "tool", Content = toolResult.Json, ToolCallId = call.Id });
 
-                    // Device deep-link buttons (§11) — pure FE metadata, never part of the message
-                    // history sent back to the model.
+                    // Device deep-link buttons are FE-only metadata, never sent back to the model.
                     foreach (var deviceRef in toolResult.DeviceReferences)
                     {
                         if (emittedDeviceIds.Add(deviceRef.Id))

@@ -18,9 +18,8 @@ type PreviewKind = "image" | "pdf" | "unsupported";
 
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"];
 
-// contentType do trình duyệt gửi lúc upload đôi khi không đáng tin (vd application/octet-stream) —
-// dự phòng thêm bằng đuôi file. Chỉ hỗ trợ xem trước ảnh + PDF (2 loại trình duyệt tự render được
-// bằng thẻ HTML thuần, KHÔNG cần thư viện đọc docx/xlsx — ngoài phạm vi tính năng này).
+// Browser-sent contentType is unreliable (e.g. octet-stream), so fall back to the extension.
+// Only images and PDF are previewed since browsers render them natively.
 function getPreviewKind(contentType: string, fileName: string): PreviewKind {
     if (contentType.startsWith("image/")) return "image";
     if (contentType === "application/pdf") return "pdf";
@@ -47,8 +46,7 @@ export default function AttachmentPreviewDialog({ attachment, onClose }: Attachm
         (message) => toast.error(message)
     );
 
-    // Blob URL chỉ sống trong bộ nhớ trình duyệt — phải tự revoke, không thì rò rỉ bộ nhớ mỗi lần
-    // mở/đóng preview 1 file khác.
+    // Blob URLs must be revoked or each preview leaks memory.
     useEffect(() => {
         return () => {
             if (blobUrl) URL.revokeObjectURL(blobUrl);
@@ -98,7 +96,7 @@ export default function AttachmentPreviewDialog({ attachment, onClose }: Attachm
                     ) : error || !blobUrl ? (
                         <p className="text-sm text-[#930006]">{error ?? t("previewLoadError")}</p>
                     ) : kind === "image" ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- blob URL, next/image không hỗ trợ
+                        // eslint-disable-next-line @next/next/no-img-element -- blob URL, unsupported by next/image
                         <img src={blobUrl} alt={attachment.originalFileName} className="max-h-full max-w-full object-contain" />
                     ) : kind === "pdf" ? (
                         <iframe src={blobUrl} title={attachment.originalFileName} className="h-full w-full rounded-lg border border-[#e0e3e5] bg-white" />

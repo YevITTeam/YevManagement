@@ -2,7 +2,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Audit trail — CHỈ INSERT, không IsDeleted, không Update/Delete (workflow-module.md §3.3).
+// Audit trail: insert-only, no IsDeleted/Update/Delete.
 public partial class WorkflowRequestHistory
 {
     public int Id { get; set; }

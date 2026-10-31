@@ -21,9 +21,7 @@ const STATUS_LABEL_KEY: Record<number, string> = {
     7: "statusCancelled",
 };
 
-// Bản in = chính layout form trên màn hình (workflow-module.md §5.7, chốt 2026-08-20) — KHÔNG mô
-// phỏng biểu mẫu giấy chính thức như OtFormPrintView.tsx đang làm. window.print() + CSS @media print,
-// KHÔNG html2canvas. Số ô chữ ký khớp đúng số bước duyệt THẬT của đơn này (không cố định).
+// Prints the on-screen layout via window.print() + @media print (no html2canvas); one signature box per actual approval step.
 export default function WorkflowRequestPrintView({ request, onClose }: WorkflowRequestPrintViewProps) {
     const t = useTranslations("Workflow.WorkflowRequest");
 
@@ -104,7 +102,7 @@ export default function WorkflowRequestPrintView({ request, onClose }: WorkflowR
                                             <div className="flex flex-wrap items-center justify-center gap-2">
                                                 {acted.map((h) =>
                                                     h.signatureImageBase64 ? (
-                                                        // eslint-disable-next-line @next/next/no-img-element -- base64 data URI trong bản in
+                                                        // eslint-disable-next-line @next/next/no-img-element -- base64 data URI in print view
                                                         <img key={h.id} src={`data:image/png;base64,${h.signatureImageBase64}`} alt={h.actorNameSnapshot} className="h-16 object-contain" />
                                                     ) : (
                                                         <p key={h.id} className="text-xs text-[#5e3f3a]">

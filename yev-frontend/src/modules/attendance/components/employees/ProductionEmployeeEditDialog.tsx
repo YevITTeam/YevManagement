@@ -20,9 +20,7 @@ interface ProductionEmployeeEditDialogProps {
 const toOptions = (options: ProductionOptionDto[]): SelectOption[] =>
     options.map((o) => ({ value: o.id, label: o.nameVn ? `${o.code} - ${o.nameVn}` : o.code, searchText: o.code.toLowerCase() }));
 
-// Sửa tay Team/Line/Nhóm ca/Trưởng nhóm của 1 dòng "Nhân viên dưới chuyền" (2026-09-04) — bổ sung cho
-// Import Excel (nguồn chính, nạp lại đè hết mỗi tháng), dùng khi cần sửa nhanh 1 người giữa 2 đợt
-// import. 3 dropdown cascading Team→Line→Nhóm ca mirror đúng bộ lọc ở ProductionEmployeeList.tsx.
+// Quick single-row fix between Excel imports (the import is the main source and overwrites monthly).
 export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }: ProductionEmployeeEditDialogProps) {
     const t = useTranslations("Attendance.ProductionEmployeeList");
     const tCommon = useTranslations("Common");

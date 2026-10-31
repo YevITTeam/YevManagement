@@ -13,12 +13,7 @@ using Shared.Core.Exceptions;
 
 namespace Asset.Application.Services
 {
-    // Import cấu hình phần cứng hàng loạt từ file kiểm kê Tanium (Computer Name/Tanium
-    // Client IP Address/Last Logged In User/Custom Registry UserEmail/Manufacturer/Model/
-    // Computer Serial Number/CPU/Total Memory/Size — format 10 cột). Khác với
-    // DeviceImportService (tạo Device mới) — service này CHỈ cập nhật Device đã có sẵn,
-    // không tự tạo Device mới (2026-07-10, theo quyết định người dùng: file Tanium không
-    // có Xưởng/Loại thiết bị/Nhà cung cấp/Ngày mua nên không đủ dữ liệu để tạo Device hợp lệ).
+    // Updates existing Devices only: the Tanium file lacks branch/type/supplier/purchase date, so it can't create valid Devices.
     public class DeviceConfigurationImportService : BaseService<IAssetUnitOfWork>, IDeviceConfigurationImportService
     {
         private static readonly Regex EmailPattern = new(@"^[^\s@]+@[^\s@]+\.[^\s@]+$", RegexOptions.Compiled);
@@ -99,8 +94,7 @@ namespace Asset.Application.Services
 
         public async Task<DeviceConfigurationImportConfirmResultDto> ConfirmAsync(ConfirmDeviceConfigurationImportDto request)
         {
-            // Validate lại theo dữ liệu DB hiện tại (không tin Id do client gửi lên) —
-            // phòng trường hợp dữ liệu đã đổi kể từ lúc người dùng xem bản Preview.
+            // Re-validate against current DB (never trust client Ids); data may have changed since Preview.
             var (validatedRows, _) = await ValidateAndResolveRowsAsync(request.Rows);
             var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
             if (invalidRows.Count > 0)
@@ -159,8 +153,7 @@ namespace Asset.Application.Services
                         {
                             Id = existingConfig.Id,
                             DeviceId = deviceId,
-                            // Chỉ ghi đè 5 field Tanium báo cáo được, giữ nguyên toàn bộ field
-                            // còn lại của cấu hình đã có (Mainboard/Monitor/Mouse/...).
+                            // Only overwrite the 5 fields Tanium reports; keep the rest of the existing configuration.
                             Cpu = string.IsNullOrWhiteSpace(row.Cpu) ? existingConfig.Cpu : row.Cpu,
                             Ram = string.IsNullOrWhiteSpace(row.Ram) ? existingConfig.Ram : row.Ram,
                             HardDrive = string.IsNullOrWhiteSpace(row.Size) ? existingConfig.HardDrive : row.Size,
@@ -202,18 +195,8 @@ namespace Asset.Application.Services
             return result;
         }
 
-        // Đối chiếu Tanium (2026-07-27, yêu cầu người dùng): so danh sách Device đang Status=InUse
-        // trong hệ thống với danh sách máy Tanium vừa quét được trong file này — Tanium chỉ quét
-        // được máy đang bật/đang dùng thật sự, nên PendingUse/PendingLiquidation/Liquidated không
-        // xuất hiện trong file Tanium là chuyện bình thường, KHÔNG phải sai lệch cần báo cáo.
-        // "Đã được Tanium quét thấy" = dòng trong file có Computer Name khớp được 1 Device có thật
-        // (ResolvedDeviceId != null), bất kể dòng đó có lỗi ở field khác hay không (VD trùng mã
-        // trong file, hoặc lỗi TSE-Error ở 1 cột) — máy vẫn rõ ràng có mặt trong lần quét, không
-        // phải "thiếu". Đọc lại file độc lập với Preview/Confirm (không nhận Id/mã từ client) —
-        // hành động chỉ đọc nên vẫn parse lại đúng file thay vì tin dữ liệu preview cũ.
-        // deviceCodePrefixes (2026-07-27, yêu cầu người dùng): người dùng tự nhập tiền tố mã máy
-        // cần đối chiếu (mặc định gợi ý ở FE là YDC/YDF/YLC) — Device ngoài các tiền tố này không
-        // thuộc phạm vi Tanium quét nên không được tính là "thiếu", tránh báo sai.
+        // Tanium only sees powered-on devices, so only InUse ones are reconciled; a device counts as seen when its
+        // Computer Name resolves, even if the row has other errors. Prefixes narrow scope to avoid false "missing" hits.
         private async Task<List<DeviceMissingInTaniumDto>> FindMissingDevicesAsync(Stream excelFileStream, string? fileName, IEnumerable<string>? deviceCodePrefixes)
         {
             var rawRows = CsvFileHelper.HasCsvExtension(fileName) ? ParseCsv(excelFileStream) : ParseXlsx(excelFileStream);
@@ -224,7 +207,6 @@ namespace Asset.Application.Services
                 .Select(r => r.ResolvedDeviceId!.Value)
                 .ToHashSet();
 
-            // Tiền tố người dùng nhập (VD "YDC","YDF","YLC") — trim, bỏ rỗng, không phân biệt hoa/thường.
             var prefixes = (deviceCodePrefixes ?? Enumerable.Empty<string>())
                 .Select(p => p.Trim())
                 .Where(p => p.Length > 0)
@@ -236,9 +218,7 @@ namespace Asset.Application.Services
             if (scannedDeviceIds.Count > 0)
                 query = query.Where(d => !scannedDeviceIds.Contains(d.Id));
 
-            // Lấy list IP thô trước (projection dịch được sang SQL), rồi nối chuỗi hiển thị ở bộ nhớ
-            // bên dưới — cùng khuôn 2 bước với DeviceService.GetReportListAsync
-            // (string.Join trên 1 subquery không dịch được ổn định qua mọi provider).
+            // Load raw IP lists first and join in memory: string.Join over a subquery isn't reliably translatable.
             var rawDevices = await _unitOfWork.Devices.ToListAsync(
                 query.OrderBy(d => d.DeviceCode),
                 d => new
@@ -287,9 +267,7 @@ namespace Asset.Application.Services
             return new DeviceMissingInTaniumReportDto
             {
                 FileContent = BuildMissingDevicesExcel(missingDevices),
-                // ASCII-only trên mục đích: filename trong header Content-Disposition mà kèm dấu
-                // tiếng Việt phải encode RFC 5987 (filename*=UTF-8''...) mới an toàn — tránh hẳn rắc
-                // rối đó bằng cách không dùng ký tự có dấu ở tên file tự sinh.
+                // ASCII-only so the Content-Disposition filename needs no RFC 5987 encoding.
                 FileName = $"BaoCaoDoiChieuTanium_{TimeHelper.GetCurrentUtcTime():yyyyMMdd_HHmm}.xlsx",
                 MissingCount = missingDevices.Count
             };
@@ -408,8 +386,7 @@ namespace Asset.Application.Services
                 .Select(g => g.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            // Cùng 1 serial xuất hiện ở nhiều dòng → không dòng nào được ghi serial (unique index sẽ
-            // làm hỏng cả transaction ở bước Confirm). Chỉ Warning, không chặn dòng.
+            // A serial repeated in the file is written for no row: the unique index would fail the whole Confirm transaction.
             var duplicatedSerialsInFile = rawRows
                 .Select(r => r.SerialNumber?.Trim())
                 .Where(s => !string.IsNullOrWhiteSpace(s))
@@ -418,12 +395,7 @@ namespace Asset.Application.Services
                 .Select(g => g.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            // Batch-fetch device/IP/serial lookups thay vì query từng dòng: file Tanium export có thể
-            // lên tới hàng nghìn dòng, mỗi dòng trước đây bắn 3 query riêng (device theo mã, IP theo
-            // taniumIp, device theo serial) → hàng nghìn round-trip DB tuần tự (2026-08-11, xem
-            // AGENTS.md §hiệu năng). Gom về 3 query duy nhất bằng `Contains` (SQL IN), dựng Dictionary
-            // để tra trong bộ nhớ — kết quả nghiệp vụ giữ nguyên (collation SQL vẫn không phân biệt
-            // hoa/thường như query cũ, GroupBy...First giữ đúng 1 bản ghi/khoá khi trùng mã ngoài ý muốn).
+            // Batch the lookups (SQL IN) and resolve from dictionaries; Tanium files can have thousands of rows.
             var candidateCodes = rawRows
                 .Select(r => ComputerNameParser.Parse(r.ComputerName ?? string.Empty))
                 .Where(c => c != null)
@@ -472,8 +444,7 @@ namespace Asset.Application.Services
                 var parsedCode = ComputerNameParser.Parse(row.ComputerName ?? string.Empty);
                 if (parsedCode == null)
                 {
-                    // Không khớp 5 họ mã cần import (YDC/YLC/YDF/AC/TYC) — loại thầm
-                    // lặng, không phải lỗi, không đưa vào kết quả trả về.
+                    // Outside the 5 imported code families (YDC/YLC/YDF/AC/TYC): skipped silently, not an error.
                     outOfScopeSkippedCount++;
                     continue;
                 }
@@ -494,9 +465,7 @@ namespace Asset.Application.Services
                 else resolvedDeviceId = device.Id;
                 var isLiquidated = device != null && device.Status.IsLiquidationStatus();
 
-                // Tanium IP is only assigned when it is still Available. An IP in use (another
-                // device, or an external device) is never taken over; those cases and unknown or
-                // duplicated IPs are warnings that skip the IP but keep the row.
+                // Tanium IP is assigned only while still Available; in-use, unknown or duplicated IPs are warnings that skip the IP but keep the row.
                 int? resolvedIpAddressId = null;
                 var warnings = new List<string>();
                 var taniumIp = row.TaniumIpAddress?.Trim();
@@ -534,10 +503,7 @@ namespace Asset.Application.Services
                     }
                 }
 
-                // Serial number (cột "Computer Serial Number", format mới 2026-07-23): ghi vào
-                // Device.SerialNumber. SerialNumber là unique-khi-có trong DB nên nếu số này đang
-                // thuộc về 1 Device KHÁC thì chỉ Warning + bỏ qua việc ghi serial (không chặn
-                // dòng — cấu hình vẫn cập nhật bình thường), cùng triết lý với quy tắc IP ở trên.
+                // SerialNumber is unique when present: if it belongs to another Device, warn and skip the serial but keep the row.
                 string? resolvedSerialNumber = null;
                 var serialNumber = row.SerialNumber?.Trim();
                 if (!string.IsNullOrWhiteSpace(serialNumber) && !errors.Any(e => e.StartsWith("Dòng bị lỗi Tanium")))
@@ -698,10 +664,8 @@ namespace Asset.Application.Services
             OutOfScopeSkippedCount = outOfScopeSkippedCount
         };
 
-        // Fixed columns in the order of the Tanium inventory file (10 columns, row 1 is the header):
-        // A=Computer Name, B=Tanium Client IP Address, C=Last Logged In User, D=Custom Registry
-        // UserEmail, E=Manufacturer, F=Model, G=Computer Serial Number, H=CPU, I=Total Memory
-        // (maps to Ram), J=Size. Files in an older layout shift the columns and must be re-exported.
+        // Tanium columns: A=Computer Name, B=IP, C=Last Logged In User, D=UserEmail, E=Manufacturer, F=Model,
+        // G=Serial, H=CPU, I=Total Memory (Ram), J=Size. Row 1 is the header.
         private static List<DeviceConfigurationImportRowDto> ParseXlsx(Stream stream)
         {
             XLWorkbook workbook;
@@ -711,12 +675,7 @@ namespace Asset.Application.Services
             }
             catch (Exception ex) when (ex is not DomainException)
             {
-                // ClosedXML ném nhiều loại exception khác nhau (FileFormatException,
-                // InvalidOperationException...) khi file không phải .xlsx hợp lệ hoặc bị
-                // hỏng — quy về 1 DomainException (400, thông báo rõ ràng) thay vì để lọt
-                // ra ngoài thành lỗi 500 chung chung qua HandleExceptionMiddleware. Đây
-                // chính là nguyên nhân bug thật gặp phải: file Tanium xuất ra thực chất là
-                // .csv nhưng bị đổi đuôi/hiểu nhầm là .xlsx.
+                // ClosedXML throws various exceptions on invalid/corrupt files (e.g. a .csv renamed to .xlsx); map to a clear 400.
                 throw new DomainException("File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx hoặc .csv).");
             }
 

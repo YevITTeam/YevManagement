@@ -25,7 +25,7 @@ namespace Workflow.Application.Dtos.FormDefinitions
         [Required(ErrorMessage = "Tiền tố mã số không được để trống")]
         public string CodePrefix { get; set; } = null!;
 
-        // BẤT BIẾN sau khi tạo — không có trong UpdateFormDefinitionDto (workflow-module.md §3.2).
+        // Immutable after creation (absent from UpdateFormDefinitionDto).
         [Required(ErrorMessage = "Kiểu điều kiện rẽ nhánh không được để trống")]
         public RouteConditionType RouteConditionType { get; set; }
 

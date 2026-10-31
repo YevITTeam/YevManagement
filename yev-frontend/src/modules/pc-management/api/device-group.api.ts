@@ -18,7 +18,7 @@ export interface GetDeviceGroupPageNationParams {
     pageIndex?: number;
     pageSize?: number;
     keyword?: string;
-    // Lọc theo Bộ phận cha (docs/asset-module.md §4) — bỏ trống trả toàn bộ Nhóm.
+    // Omit to get all groups.
     departmentId?: number;
 }
 
@@ -35,8 +35,7 @@ export const DeviceGroupApi = {
         const response = await api.get<ApiResponseWithPageNation<DeviceGroupDto>>(url);
         return response.data;
     },
-    // Dùng cho dropdown "Nhóm" cascading theo "Bộ phận" đã chọn (docs/asset-module.md §4) —
-    // bỏ departmentId để lấy toàn bộ Nhóm (màn quản lý danh mục Nhóm).
+    // Cascades from the selected department; omit departmentId for the full catalog.
     getAllDeviceGroups: async (departmentId?: number) => {
         const query = new URLSearchParams();
         if (departmentId !== undefined) query.set("DepartmentId", String(departmentId));

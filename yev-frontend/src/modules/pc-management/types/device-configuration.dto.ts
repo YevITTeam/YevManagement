@@ -1,5 +1,4 @@
-// 18 field linh kiện dùng chung cho cấu hình hiện tại / snapshot ban đầu / lịch sử.
-// Tất cả đều optional string ở BE → luôn có thể null trong response.
+// All optional strings on BE, so any may be null.
 export interface DeviceComponentFields {
     mainboard: string | null;
     cpu: string | null;
@@ -21,8 +20,7 @@ export interface DeviceComponentFields {
     nic: string | null;
 }
 
-// Cấu hình phần cứng hiện tại — GET /DeviceConfiguration/by-device/{deviceId}.
-// (response có thể là null nếu thiết bị chưa nhập cấu hình — xử lý ở tầng gọi.)
+// The response itself may be null when the device has no configuration yet.
 export interface DeviceConfigurationDto extends DeviceComponentFields {
     id: number;
     deviceId: number;
@@ -31,18 +29,15 @@ export interface DeviceConfigurationDto extends DeviceComponentFields {
     note: string | null;
 }
 
-// Body cho POST & PUT /DeviceConfiguration.
-// deviceId [Required]; 18 field linh kiện + other/note đều optional.
-// KHÔNG đổi được deviceId khi update (gửi khác đi → 400).
+// deviceId is required and immutable on update (a different value returns 400).
 export interface CreateUpdateDeviceConfigurationDto extends Partial<DeviceComponentFields> {
-    id?: number;              // dùng cho PUT, phải khớp {id} trên URL
+    id?: number;              // PUT only; must match {id} in the URL
     deviceId: number;
     other?: string | null;
     note?: string | null;
 }
 
-// "Cấu hình ban đầu" — snapshot bất biến lúc tạo.
-// GET /DeviceConfiguration/{configId}/initial (null nếu chưa có).
+// Immutable snapshot taken at creation.
 export interface DeviceConfigurationInitialDto extends DeviceComponentFields {
     id: number;
     deviceConfigurationId: number;
@@ -50,8 +45,7 @@ export interface DeviceConfigurationInitialDto extends DeviceComponentFields {
     note: string | null;
 }
 
-// 1 dòng "Lịch sử sửa chữa / thay thế" — GET /DeviceConfiguration/{configId}/history.
-// Mỗi dòng = 18 field linh kiện tại thời điểm sửa + thông tin ai sửa / khi nào.
+// Component values at the time of each repair plus who/when.
 export interface DeviceConfigurationHistoryDto extends DeviceComponentFields {
     id: number;
     editedAt: string;

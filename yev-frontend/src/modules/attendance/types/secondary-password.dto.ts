@@ -1,4 +1,4 @@
-// GET /api/SecondaryPassword/me — không bao giờ trả hash/plaintext, chỉ trạng thái đã đăng ký hay chưa.
+// Never returns hash/plaintext, only whether one is registered.
 export interface SecondaryPasswordStatusDto {
     isRegistered: boolean;
     updatedAt: string | null;
@@ -8,7 +8,7 @@ export interface UpsertSecondaryPasswordDto {
     password: string;
 }
 
-// GET /api/SecondaryPassword/confirm/{token} — trang xác nhận qua email, không trả lại mật khẩu.
+// Does not return the password.
 export interface SecondaryPasswordConfirmationPreviewDto {
     userName: string;
     expiresAt: string;

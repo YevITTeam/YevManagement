@@ -13,8 +13,7 @@ const MOVE_FIELD_DRAG_KEY = "application/x-workflow-move-field-key";
 
 export interface DocumentFieldCanvasHandle {
     getHtml: () => string;
-    // Thứ tự field xuất hiện trong văn bản — dùng làm SortOrder khi lưu (workflow-module.md §1.5),
-    // vì ở chế độ tài liệu người dùng không kéo-sắp-xếp 1 danh sách riêng như canvas lưới.
+    // Document order becomes SortOrder on save, since this mode has no separate sortable list.
     getOrderedFieldKeys: () => string[];
 }
 
@@ -27,11 +26,8 @@ interface DocumentFieldCanvasProps {
     onFieldClick: (clientId: string) => void;
 }
 
-// Canvas chính của chế độ "Nhập từ Word" (workflow-module.md §1.5) — mirror TemplateEditorCanvas.tsx
-// của POC thực nghiệm (Test-drag-drop-form/) nhưng field vẫn là EditableField/FormFields thật của
-// YEV (FieldKey = data-field-key), không phải id riêng của POC. Văn bản được viết thẳng vào DOM 1
-// lần rồi mutate imperatively trên mỗi lần thả — render lại từ React state mỗi lần đổi sẽ mất đúng vị
-// trí caret đã chèn.
+// The document is written into the DOM once and mutated imperatively on drop;
+// re-rendering from React state would lose the caret position.
 const DocumentFieldCanvas = forwardRef<DocumentFieldCanvasHandle, DocumentFieldCanvasProps>(function DocumentFieldCanvas(
     { initialContent, fields, onFieldsChange, onFieldClick },
     ref
@@ -76,8 +72,7 @@ const DocumentFieldCanvas = forwardRef<DocumentFieldCanvasHandle, DocumentFieldC
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialContent.type === "html" ? initialContent.html : initialContent.bytes]);
 
-    // Đồng bộ nhãn hiển thị của placeholder theo dữ liệu field mới nhất (React giữ mảng fields, không
-    // phải markup) — sửa nhãn/loại field ở FormFieldEditDialog phải phản ánh ngay trong văn bản.
+    // Keep placeholder labels in sync with field data so FormFieldEditDialog edits show in the text.
     useEffect(() => {
         if (!containerRef.current) return;
         for (const field of fields) {
@@ -90,9 +85,7 @@ const DocumentFieldCanvas = forwardRef<DocumentFieldCanvasHandle, DocumentFieldC
         }
     }, [fields]);
 
-    // Văn bản trong canvas có thể sửa trực tiếp (contentEditable) nên 1 placeholder cũng có thể biến
-    // mất qua thao tác gõ/xoá chữ thường, không chỉ qua nút xoá ở FormFieldEditDialog — đồng bộ lại
-    // mảng field theo đúng những gì còn thật sự tồn tại trong DOM.
+    // The canvas is contentEditable, so placeholders can vanish by typing; resync fields with what's left in the DOM.
     useEffect(() => {
         const container = containerRef.current;
         if (!container) return;

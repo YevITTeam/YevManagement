@@ -2,9 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Attendance.Application.Dtos.JobTitlePermissions
 {
-    // Thay NGUYÊN danh sách permission code do 1 Chức vụ tự động cấp — mỗi code PHẢI thuộc
-    // JobTitlePermissionWhitelist.AllowedCodes (validate ở JobTitlePermissionService.ReplaceAsync).
-    // Gửi mảng rỗng để bỏ hết quyền tự động cấp của Chức vụ đó.
+    // Replaces the whole list; each code must be in JobTitlePermissionWhitelist.AllowedCodes. Empty clears it.
     public class ReplaceJobTitlePermissionsDto
     {
         [Required]

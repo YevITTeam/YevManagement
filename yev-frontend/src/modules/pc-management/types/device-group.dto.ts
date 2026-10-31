@@ -1,5 +1,4 @@
-// docs/asset-module.md §4 (2026-07-13) — mỗi Nhóm bắt buộc thuộc về 1 DeviceDepartment
-// (1 Bộ phận - N Nhóm). departmentName server tự gộp sẵn, FE không cần gọi thêm API.
+// Every group belongs to exactly one department; departmentName is joined by the server.
 export interface DeviceGroupDto {
     id: number,
     groupCode: string,

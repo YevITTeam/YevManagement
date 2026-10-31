@@ -5,7 +5,7 @@ namespace Asset.Application.Interfaces.Service
 {
     public interface IInventoryService
     {
-        // Phiên InProgress của xưởng người gọi được phân công (asset-module.md §1.22) — dùng cho màn quét kiosk.
+        // Caller's assigned branch InProgress session, for the kiosk scan screen.
         Task<InventorySessionDto?> GetCurrentSessionAsync();
 
         Task<InventorySessionDto> StartSessionAsync();

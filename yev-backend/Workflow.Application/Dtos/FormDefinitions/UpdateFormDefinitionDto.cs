@@ -2,8 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Workflow.Application.Dtos.FormDefinitions
 {
-    // KHÔNG có RouteConditionType — bất biến sau khi tạo (workflow-module.md §3.2). Đổi kiểu điều
-    // kiện phải tạo FormDefinition mới.
+    // No RouteConditionType: it is immutable, changing it requires a new FormDefinition.
     public class UpdateFormDefinitionDto
     {
         public int Id { get; set; }

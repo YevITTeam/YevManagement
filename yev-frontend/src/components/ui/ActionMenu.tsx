@@ -17,9 +17,7 @@ interface ActionMenuProps {
     disabled?: boolean;
 }
 
-// Nút "Thao tác" gom nhiều hành động (vd Nhập/Xuất Excel) dưới 1 dropdown thay vì mỗi hành động
-// 1 nút riêng — giảm số nút/chữ trên toolbar. Không dùng portal (khác RowActionsMenu) vì luôn nằm
-// trong toolbar không bị table overflow che khuất.
+// No portal (unlike RowActionsMenu): it always sits in a toolbar, never clipped by table overflow.
 export default function ActionMenu({ label, icon, items, disabled }: ActionMenuProps) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);

@@ -10,7 +10,7 @@ namespace Shared.Application.Authorization
             AuthorizationHandlerContext context,
             PermissionRequirement requirement)
         {
-            // OR — chỉ cần có 1 trong các permission liệt kê (xem PermissionRequirement).
+            // OR: any one of the listed permissions suffices.
             if (requirement.Permissions.Any(permission => context.User.HasClaim("Permission", permission)))
             {
                 context.Succeed(requirement);

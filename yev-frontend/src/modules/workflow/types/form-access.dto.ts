@@ -1,4 +1,4 @@
-// workflow-module.md §3.2 FormAccesses — khớp enum AccessTargetType ở BE (Workflow.Domain.Enums).
+// Must match BE enum AccessTargetType.
 export const AccessTargetType = {
     Role: 1,
     OrgUnit: 2,
@@ -7,8 +7,7 @@ export const AccessTargetType = {
 
 export type AccessTargetType = (typeof AccessTargetType)[keyof typeof AccessTargetType];
 
-// RoleId là cross-DB (Identity.Roles, workflow-module.md §1.4) — BE không resolve được tên Role,
-// FE tự ánh xạ bằng danh sách AuthApi.getAllRoles().
+// RoleId lives in the Identity DB so BE can't resolve the name; FE maps it via AuthApi.getAllRoles().
 export interface FormAccessDto {
     id: number;
     targetType: AccessTargetType;

@@ -1,7 +1,6 @@
 namespace Attendance.Domain.Enums;
 
-// Quyết định của Trưởng phòng cho TỪNG đơn nhỏ trong 1 "Đơn tổng" — chỉ dùng trong DTO xử lý batch,
-// không lưu DB (mỗi đơn nhỏ vẫn ghi OtFormApprovalHistory bình thường qua ApproveAsync/RejectAsync).
+// DTO-only (not persisted); each child form still records its own OtFormApprovalHistory.
 public enum OtFormBatchFormDecision
 {
     Approve = 0,

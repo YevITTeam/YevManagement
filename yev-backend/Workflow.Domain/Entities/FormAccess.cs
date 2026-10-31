@@ -2,9 +2,8 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Ai được TẠO ĐƠN form này (workflow-module.md §3.2) — khác FormCategoryCoordinators (ai SỬA được
-// cấu hình form). Quản lý kiểu "thay nguyên danh sách" (ReplaceAsync), không Create/Update/Delete
-// từng dòng. Đúng 1 trong 3 cột đích khác NULL theo TargetType, Service tự validate.
+// Who may create requests (FormCategoryCoordinators = who may edit the form). Exactly one target column is set
+// per TargetType, validated in the Service.
 public partial class FormAccess
 {
     public int Id { get; set; }
@@ -13,7 +12,7 @@ public partial class FormAccess
 
     public AccessTargetType TargetType { get; set; }
 
-    // Cross-DB -> Identity.Roles.Id, KHÔNG FK thật (workflow-module.md §1.4/§3.2).
+    // Cross-DB reference to Identity.Roles.Id, no real FK.
     public int? RoleId { get; set; }
 
     public int? OrgUnitId { get; set; }

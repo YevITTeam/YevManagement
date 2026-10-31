@@ -17,8 +17,7 @@ namespace Attendance.Application.Dtos.Employees
 
         public string? UserName { get; set; }
 
-        // Nullable (2026-08-08) — bắt buộc/cấm tuỳ theo TerminalLevel của JobTitleId, validate ở
-        // EmployeeService.ValidateOrganizationAssignmentAsync (xem docs §Cây chức vụ).
+        // Required or forbidden depending on the JobTitle's TerminalLevel (EmployeeService.ValidateOrganizationAssignmentAsync).
         public int? GroupId { get; set; }
 
         public int? DepartmentId { get; set; }
@@ -28,9 +27,6 @@ namespace Attendance.Application.Dtos.Employees
 
         public int? JobTitleId { get; set; }
 
-        // KHÔNG có CustomMonthlyOtHourLimit/CustomYearlyOtHourLimit ở đây (2026-08-29, cố ý tách khỏi
-        // DTO này) — sửa riêng qua PUT /api/Employee/{id}/ot-limit (permission hẹp hơn
-        // Attendance.Employee.UpdateOtLimit, scope theo Phòng ban), xem
-        // docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban.
+        // OT limits are edited via PUT /api/Employee/{id}/ot-limit, which has a narrower permission.
     }
 }

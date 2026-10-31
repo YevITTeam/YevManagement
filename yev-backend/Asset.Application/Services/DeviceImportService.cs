@@ -13,11 +13,8 @@ namespace Asset.Application.Services
 {
     public class DeviceImportService : BaseService<IAssetUnitOfWork>, IDeviceImportService
     {
-        // The sample Excel file (see docs/asset-module.md) has no DeviceName/Manager/Email/
-        // DepreciationMonths — per user decision (2026-07-10): DeviceName is taken from the MQL
-        // (device code), Manager/Email are left blank (optional since 2026-08-01, see
-        // CreateDeviceDto), DepreciationMonths defaults to 60 months, edit later via the Device
-        // screen if needed.
+        // The template has no DeviceName/Manager/Email/DepreciationMonths: DeviceName = MQL, Manager/Email blank,
+        // depreciation defaults to 60 months.
         private const int DefaultDepreciationMonths = 60;
 
         private readonly IDeviceService _deviceService;
@@ -45,9 +42,7 @@ namespace Asset.Application.Services
             // in case data has changed since the user viewed the Preview.
             var validatedRows = await ValidateAndResolveRowsAsync(request.Rows);
 
-            // Rows that still have errors are SKIPPED, no longer blocking the whole batch (2026-07-11,
-            // changed per user request — previously any error row would throw a DomainException and
-            // nothing would be saved). Only valid rows get a Device created.
+            // Invalid rows are skipped instead of blocking the whole batch; only valid rows create a Device.
             var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
             var validRows = validatedRows.Where(x => x.IsValid).ToList();
 
@@ -66,10 +61,8 @@ namespace Asset.Application.Services
             {
                 foreach (var row in validRows)
                 {
-                    // The MQL already exists and is still PendingUse -> update it instead of creating
-                    // a duplicate (2026-07-23). Handled in a dedicated method because DeviceService.
-                    // UpdateAsync would sync Emails/IpAddresses from the request and the Excel file
-                    // carries neither — going through it would wipe them.
+                    // Existing MQL still PendingUse -> update instead of duplicating; not via DeviceService.UpdateAsync because
+                    // it would wipe Emails/IpAddresses that the Excel file doesn't carry.
                     if (row.ResolvedExistingDeviceId.HasValue)
                     {
                         await UpdateExistingDeviceFromRowAsync(row, result);
@@ -97,23 +90,14 @@ namespace Asset.Application.Services
                     result.CreatedDeviceIds.Add(created.Id);
                     result.CreatedCount++;
 
-                    // Persist the "Old MQL" suggestion to the DB (2026-07-11, added afterward —
-                    // previously it was only returned once in the Confirm response as PendingTransfers,
-                    // not saved; 2026-07-13, reversed direction — writes the new device's Id directly
-                    // into SuggestedNewDeviceId of the OLD device instead of setting ReplacesOldDeviceId
-                    // on the new device) so the "Transfer Device" screen opened on the old device later
-                    // can still automatically show this suggestion via
-                    // GET /api/Device/{oldId}/replacement-suggestion, even though it isn't handled at import time.
+                    // Persist the "Old MQL" suggestion on the OLD device so the Transfer screen can show it later
+                    // (GET /api/Device/{oldId}/replacement-suggestion).
                     if (row.ResolvedOldDeviceId.HasValue)
                     {
                         await _deviceService.SetSuggestedNewDeviceAsync(row.ResolvedOldDeviceId.Value, created.Id);
                     }
 
-                    // Create an accompanying DeviceConfiguration if the Excel row has at least 1 of the
-                    // 5 configuration columns (Maker/Model/CPU/RAM/HardDrive, new Excel template
-                    // 2026-07-11) — the just-created Device definitely has no config yet, so always
-                    // CreateAsync, no need to check existence like DeviceConfigurationImportService
-                    // (which imports updates).
+                    // The new Device has no config yet, so create one whenever any of the 5 config columns is filled.
                     if (HasAnyConfigurationValue(row))
                     {
                         await _deviceConfigurationService.CreateAsync(new CreateDeviceConfigurationDto
@@ -128,10 +112,7 @@ namespace Asset.Application.Services
                         result.CreatedConfigCount++;
                     }
 
-                    // No longer transfers the device automatically here (2026-07-11) — it's only a
-                    // suggestion, the user manually clicks "Transfer" on a separate screen (calls
-                    // POST /api/TransferHistory) because at import time it's only tentative — which
-                    // old device gets replaced may still change once installation actually happens.
+                    // Transfer stays a manual step (POST /api/TransferHistory): which old device gets replaced may change at installation.
                     if (row.ResolvedOldDeviceId.HasValue)
                     {
                         result.PendingTransfers.Add(new DeviceImportPendingTransferDto
@@ -155,13 +136,8 @@ namespace Asset.Application.Services
             return result;
         }
 
-        // Updates a device that already exists with this MQL (validated as still PendingUse and not
-        // deleted). Only the columns the Excel template actually carries are touched:
-        //   overwritten always : Branch / DeviceType / Supplier / PurchaseDate (+ recomputed ExpirationDate)
-        //   overwritten if the cell is not empty : Note / SerialNumber
-        //   never touched : DeviceName, Manager, Emails, IpAddresses, DepreciationMonths, Status,
-        //                   GroupId, DepartmentId, IsOutsourced, IsUseUsb
-        // An empty cell must not erase data that was entered by hand on the Device screen.
+        // Only template columns are touched: Branch/DeviceType/Supplier/PurchaseDate always; Note/SerialNumber when not empty.
+        // An empty cell must not erase data entered by hand on the Device screen.
         private async Task UpdateExistingDeviceFromRowAsync(DeviceImportRowDto row, DeviceImportConfirmResultDto result)
         {
             var deviceId = row.ResolvedExistingDeviceId!.Value;
@@ -201,9 +177,7 @@ namespace Asset.Application.Services
             }
         }
 
-        // Config for an update row: the device may already have a DeviceConfiguration, so only the 5
-        // columns of the template are overwritten (and only when not empty), every other field of the
-        // existing configuration is carried over untouched — same rule as the Tanium import.
+        // Only the 5 template config columns are overwritten (when not empty); same rule as the Tanium import.
         private async Task UpsertConfigurationFromRowAsync(int deviceId, DeviceImportRowDto row, DeviceImportConfirmResultDto result)
         {
             if (!HasAnyConfigurationValue(row)) return;
@@ -267,9 +241,7 @@ namespace Asset.Application.Services
             var duplicatedOldCodesInFile = FindDuplicates(rawRows, r => r.OldDeviceCode);
             var duplicatedSerialsInFile = FindDuplicates(rawRows, r => r.SerialNumber);
 
-            // Batch-fetch device-exists-by-code thay vì query từng dòng (file import có thể lên tới hàng
-            // trăm dòng) — KHÔNG lọc !IsDeleted, giữ đúng hành vi cũ (unique index của DeviceCode là
-            // global, bản ghi xoá mềm vẫn giữ chỗ mã đó — xem architecture-core.md).
+            // No !IsDeleted filter: the DeviceCode unique index is global, so soft-deleted rows still hold the code.
             var candidateCodes = rawRows
                 .Select(r => r.DeviceCode?.Trim())
                 .Where(c => !string.IsNullOrWhiteSpace(c))
@@ -464,13 +436,8 @@ namespace Asset.Application.Services
             InvalidRows = rows.Count(r => !r.IsValid)
         };
 
-        // Fixed columns matching the order of the current Excel template (2026-07-11, changed —
-        // added 5 configuration columns): A=MQL, B=Branch, C=Device Type, D=Supplier, E=Purchase Date,
-        // F=Note, G=Serial Number, H=Maker, I=Model, J=CPU, K=RAM, L=Hard Drive, M=Old MQL
-        // (previously Old MQL was in column H — the old template had no configuration columns). Row 1 is the header.
-        // 2026-07-13: column B (Branch)/D (Supplier) changed to enter the CODE (BranchCode/
-        // SupplierCode) instead of the Name. 2026-07-23: column C (Device Type) followed suit —
-        // it is now the TypeCode, so all 3 lookup columns are code-based.
+        // Columns: A=MQL, B=BranchCode, C=TypeCode, D=SupplierCode, E=Purchase Date, F=Note, G=Serial Number,
+        // H=Maker, I=Model, J=CPU, K=RAM, L=Hard Drive, M=Old MQL. Row 1 is the header.
         private static List<DeviceImportRowDto> ParseXlsx(Stream stream)
         {
             XLWorkbook workbook;
@@ -480,10 +447,7 @@ namespace Asset.Application.Services
             }
             catch (Exception ex) when (ex is not DomainException)
             {
-                // ClosedXML throws various exception types (FileFormatException,
-                // InvalidOperationException...) when the file is not a valid .xlsx or is
-                // corrupted — normalize to a single DomainException (400, with a clear message)
-                // instead of letting it escape as a generic 500 error via HandleExceptionMiddleware.
+                // ClosedXML throws various exceptions on invalid/corrupt files; map to a clear 400 instead of a generic 500.
                 throw new DomainException("File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx hoặc .csv).");
             }
 
@@ -554,10 +518,7 @@ namespace Asset.Application.Services
             return rows;
         }
 
-        // Cùng 13 cột/thứ tự như ParseXlsx nhưng đọc từ file .csv (2026-07-11, thêm sau —
-        // dùng CsvFileHelper chung, tự nhận diện dấu phẩy/chấm phẩy). CSV không có kiểu
-        // Date thật như Excel nên Ngày Mua luôn parse qua TryParsePurchaseDate (dd/MM/yyyy),
-        // giống hệt nhánh "cell text" của ParseXlsx.
+        // Same columns as ParseXlsx; CSV has no real dates, so Purchase Date always goes through TryParsePurchaseDate.
         private static List<DeviceImportRowDto> ParseCsv(Stream stream)
         {
             var csvRows = CsvFileHelper.ReadRows(stream);
@@ -617,8 +578,7 @@ namespace Asset.Application.Services
 
         private static string GetCsvCell(string[] cells, int index) => index < cells.Length ? cells[index] : string.Empty;
 
-        // Định dạng ngày mặc định duy nhất khi ô Excel là text: dd/MM/yyyy (không dùng
-        // CurrentCulture của server — dễ hiểu nhầm ngày/tháng tuỳ môi trường chạy).
+        // Fixed format rather than server CurrentCulture, which could swap day/month.
         private const string PurchaseDateFormat = "dd/MM/yyyy";
 
         private static bool TryParsePurchaseDate(string value, out DateTime result)

@@ -11,8 +11,6 @@ const initials = (name: string) => {
     return (parts[parts.length - 1]?.[0] ?? "?").toUpperCase();
 };
 
-// Chồng avatar tròn (chữ cái đầu) — tóm tắt nhanh "đang có những ai" trước khi liệt kê đầy đủ bằng chip
-// tên bên cạnh. Dùng chung cho StepHolders.tsx + CoordinatorsBox.tsx (job-titles/).
 export default function AvatarStack({ people, max = 4 }: { people: AvatarStackPerson[]; max?: number }) {
     if (people.length === 0) return null;
     const visible = people.slice(0, max);

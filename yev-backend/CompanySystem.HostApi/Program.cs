@@ -9,7 +9,6 @@ using Shared.Application.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddControllers()
     .AddApplicationPart(typeof(Identity.Api.AssemblyReference).Assembly)
     .AddApplicationPart(typeof(Asset.Api.AssemblyReference).Assembly)
@@ -79,25 +78,18 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Configure dependency injection for Identity and Asset modules
 builder.Services.AddDIConfig(builder.Configuration);
 
-// Bật lại (2026-08-22) nhưng đổi việc: không còn tự chuyển trạng thái Device
-// PendingUse/InUse -> PendingLiquidation -> Liquidated nữa (chuyển trạng thái giờ chỉ còn thao
-// tác thủ công hoặc import thanh lý hàng loạt) — job chỉ còn tự soft-delete Device đang Liquidated.
+// Only soft-deletes Liquidated devices; status transitions are manual or via import.
 builder.Services.AddHostedService<DeviceLiquidationBackgroundService>();
-// Redesign xong theo Cây chức vụ (2026-08-07, Giai đoạn 3.2) — xem docs/attendance-module.md §Đơn tổng.
 builder.Services.AddHostedService<OtFormBatchBackgroundService>();
-// Gửi email duyệt OT chạy nền, không chặn response Create/Approve (2026-09-03) — xem IBackgroundTaskQueue.
 builder.Services.AddHostedService<QueuedHostedService>();
 builder.Services.AddHostedService<EmailOutboxBackgroundService>();
 
 var app = builder.Build();
 
-// Add the exception handling middleware to the pipeline
 app.UseMiddleware<HandleExceptionMiddleware>();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi().AllowAnonymous();

@@ -12,8 +12,7 @@
     <ProjectReference Include="..\Shared.Infrastructure\Shared.Infrastructure.csproj" />
   </ItemGroup>
 
-  <!-- File mẫu Excel "Check Sheet KT" gốc (YEV–22–CV–IT-QD-810-FR) — copy cạnh DLL sau build, đọc bởi
-       ServerCheckTemplateService, giống cách Attendance.Infrastructure copy EmailTemplates/. -->
+  <!-- Original "Check Sheet KT" template, copied next to the DLL for ServerCheckTemplateService. -->
   <ItemGroup>
     <Content Include="Templates\*.xlsx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

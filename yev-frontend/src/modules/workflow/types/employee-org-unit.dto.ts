@@ -10,8 +10,7 @@ export interface EmployeeOrgUnitDto {
     validTo: string | null;
 }
 
-// PUT /Workflow/Employee/{id}/org-units thay NGUYÊN danh sách — không có id riêng từng dòng,
-// gửi cả mảng item để BE xoá hết rồi tạo lại (workflow-module.md §6).
+// PUT replaces the whole list (BE deletes and recreates), so rows carry no id.
 export interface ReplaceEmployeeOrgUnitItemDto {
     orgUnitId: number;
     jobTitleId: number | null;

@@ -1,4 +1,4 @@
-// workflow-module.md §4 — khớp enum ở BE (Workflow.Domain.Enums).
+// Must match BE enums (Workflow.Domain.Enums).
 export const OrgUnitScope = {
     Fixed: 1,
     ApplicantUnit: 2,
@@ -68,9 +68,8 @@ export interface FormRouteDto {
     steps: FormApprovalStepDto[];
 }
 
-// Replace* — KHÔNG có Id ở cấp Step/Participant (luôn xoá-tất-tạo-lại mỗi lần lưu route, workflow-
-// module.md §3.2). Chỉ FormRoute có Id (nullable = route mới) vì WorkflowRequests.FormRouteId (Pha
-// 3B) sẽ là FK thật trỏ vào đây.
+// Steps/participants have no Id (recreated on every save); only FormRoute keeps one because
+// WorkflowRequests.FormRouteId references it.
 export interface ReplaceFormApprovalStepParticipantItemDto {
     participantSource: ParticipantSource;
     employeeId: number | null;

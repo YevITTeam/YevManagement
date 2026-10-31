@@ -1,6 +1,6 @@
 # attendance-otform-pdf-mapping.md — Ô trên phiếu giấy ↔ field dữ liệu (in PDF)
 
-FE dựng PDF từ `GET /api/OtForm/{id}` (code: `yev-frontend/src/modules/attendance/components/ot-form/OtFormPrintView.tsx`). File này chỉ ghi **ô nào trên phiếu giấy lấy field nào**. Hợp đồng API ở `attendance-module.md §API`, nghiệp vụ ở `attendance-module.md`.
+FE dựng phiếu từ `GET /api/OtForm/{id}` bằng **một mẫu HTML** `yev-frontend/src/modules/attendance/lib/otFormPrintTemplate.ts` (A4 + A5, đơn vị pt): in đơn lẻ hiển thị thẳng HTML (`OtFormPrintView.tsx`, `window.print()`), xuất ZIP chuyển cùng HTML sang PDF (`otFormPdf.ts`, html-to-pdfmake + pdfmake). Sửa mẫu chỉ sửa file template; chỉ dùng thẻ/CSS inline mà html-to-pdfmake hiểu (bảng, `font-size/weight`, `color`, `text-align`, `vertical-align`, `margin-top`, `<img>` `max-width/max-height`), viền/đệm ô nằm ở `pageCss` và `GRID_LAYOUT` (phải khớp nhau). File này chỉ ghi **ô nào trên phiếu giấy lấy field nào**. Hợp đồng API ở `attendance-module.md §API`, nghiệp vụ ở `attendance-module.md`.
 
 ## 0. Phiếu đang mapping
 
@@ -65,8 +65,8 @@ Phiếu giấy không có ô cho số phiếu ăn. Khi `isEat=true`, ô "Ăn" **
 | Họ và tên / 氏名 | `employees[i].fullName` |
 | Mã NV / 社員コード | `employees[i].employeeCode` |
 | Thời gian / 時間 | `startTime – endTime` (`HH:mm - HH:mm`); `startTime` = giờ đầu đơn |
-| Lũy kế — Tháng / 月間 | `employees[i].monthToDate + actualHours` (lũy kế **sau** khi cộng đơn này) |
-| Lũy kế — Năm / 年間 | `employees[i].yearToDate + actualHours` |
+| Lũy kế — Tháng / 月間 | `employees[i].monthToDate` (BE đã cộng giờ của chính đơn) |
+| Lũy kế — Năm / 年間 | `employees[i].yearToDate` (như trên) |
 | Ghi chú / 備考 | `employees[i].noteVn` (+ `noteJp`) |
 
 ## 6. Chú thích TH1/TH2/TH3 (footer)

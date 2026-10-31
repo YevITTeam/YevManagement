@@ -11,8 +11,7 @@ export interface ApprovalDelegationDto {
     reason: string | null;
 }
 
-// delegatorEmployeeId KHÔNG có trong DTO gửi lên — luôn resolve = người dùng hiện tại ở BE
-// (workflow-module.md §7, mirror CreatedByEmployeeId).
+// No delegatorEmployeeId: BE always resolves it to the current user.
 export interface CreateUpdateApprovalDelegationDto {
     delegateEmployeeId: number;
     formDefinitionId: number | null;

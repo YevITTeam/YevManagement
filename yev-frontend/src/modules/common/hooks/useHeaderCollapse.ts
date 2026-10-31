@@ -4,8 +4,7 @@ import { useCallback, useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "yev-header-collapsed";
 
-// Cùng khuôn với useSidebarCollapse: đọc localStorage qua useSyncExternalStore (không setState trong effect,
-// an toàn SSR — server luôn render "đang mở"). Thu gọn Header để nhường thêm chiều dọc cho nội dung.
+// Same approach as useSidebarCollapse: useSyncExternalStore over localStorage, SSR renders expanded.
 const listeners = new Set<() => void>();
 
 function subscribe(onStoreChange: () => void) {
@@ -32,7 +31,7 @@ export function useHeaderCollapse() {
     try {
       window.localStorage.setItem(STORAGE_KEY, getSnapshot() ? "0" : "1");
     } catch {
-      // storage bị chặn (chế độ riêng tư…) — chỉ mất việc nhớ trạng thái, không ảnh hưởng UI.
+      // Storage blocked (private mode): only persistence is lost.
     }
     listeners.forEach((listener) => listener());
   }, []);

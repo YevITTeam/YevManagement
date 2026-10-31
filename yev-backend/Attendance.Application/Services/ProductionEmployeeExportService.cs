@@ -5,20 +5,14 @@ using Shared.Application.Services;
 
 namespace Attendance.Application.Services
 {
-    // Xuất "Nhân sự dưới chuyền" (ProductionEmployee) ra .xlsx theo ĐÚNG vị trí cột của file mẫu
-    // Import_Nhan_Su_Che_Tao.xlsx (sheet OT(N+1): A=KHOI SU, B=MNV, C=BOPHAN, D=HO, E=TEN, F=CÔNG VIỆC,
-    // G=OT month, H=OT year, I=BLOCK, J=NHOM, K=GROUP, O=LEADER — xem ProductionEmployeeImportService.
-    // ParseXlsx) để file xuất ra dùng lại được ngay làm file nhập tháng sau (2026-08-27, theo yêu cầu
-    // người dùng), 1 sheet / Phòng ban THẬT của hệ thống (Employee.Group.Department — KHÁC cột BOPHAN
-    // trong file gốc, vốn không gắn gì với Department thật). Cột OT month/OT year lấy SỐNG từ
-    // EmployeeAccumulationHistory tại thời điểm xuất. Cột KHOI SU (A) để trống — hệ thống chưa lưu dữ
-    // liệu này (xem docs §Import nhân sự dưới chuyền, mục còn thiếu).
+    // Mirrors the column layout of Import_Nhan_Su_Che_Tao.xlsx so the export can be re-imported next month; one sheet per
+    // real system department (not the file's BOPHAN). Column A (KHOI SU) stays empty because it is not stored yet.
     public class ProductionEmployeeExportService : BaseService<IAttendanceUnitOfWork>, IProductionEmployeeExportService
     {
         private const string UnknownDepartmentLabel = "Chưa xác định";
         private readonly IDepartmentAccessGuard _departmentAccessGuard;
 
-        // Đúng vị trí cột A..O của file mẫu — cột rỗng (L/M/N) giữ chỗ để LEADER rơi đúng cột O.
+        // Columns A..O of the template; empty L/M/N keep LEADER in column O.
         private static readonly string[] Headers =
         {
             "KHOI SU", "MNV", "BOPHAN", "HO", "TEN", "CÔNG VIỆC", "OT month", "OT year",
@@ -33,9 +27,7 @@ namespace Attendance.Application.Services
 
         public async Task<(byte[] Content, string FileName)> ExportAsync(string callerUserName, bool isAdmin)
         {
-            // Scope theo Bộ phận phụ trách (2026-09-28) — dòng chưa gắn Employee (chưa resolve, không
-            // xác định được Bộ phận) đã bị loại ở filter `x.EmployeeId != null` sẵn có bên dưới, nên
-            // không cần xử lý riêng như GetPagedAsync/UpdateAsync.
+            // Unresolved rows (no Employee, hence no department) are already excluded by the EmployeeId filter.
             var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
 
             var rows = await _unitOfWork.ProductionEmployees.SelectAsync(
@@ -98,7 +90,7 @@ namespace Attendance.Application.Services
                         : 0m;
                     var yearHours = employeeLedger?.Where(x => x.Month <= todayMonth).Sum(x => x.TotalHours) ?? 0m;
 
-                    // Cột A (KHOI SU) để trống có chủ đích — xem ghi chú đầu class.
+                    // Column A (KHOI SU) intentionally empty.
                     sheet.Cell(rowIndex, 2).Value = item.EmployeeCode;
                     sheet.Cell(rowIndex, 3).Value = item.CongDoan;
                     sheet.Cell(rowIndex, 4).Value = item.LastName;
@@ -126,8 +118,7 @@ namespace Attendance.Application.Services
             return (stream.ToArray(), fileName);
         }
 
-        // Tên sheet Excel: tối đa 31 ký tự, không được chứa \ / ? * [ ] : — và phải duy nhất trong
-        // cùng 1 workbook (thêm hậu tố số nếu trùng sau khi cắt bớt/thay ký tự cấm).
+        // Excel sheet names: max 31 chars, no \ / ? * [ ] :, unique per workbook.
         private static string MakeUniqueSheetName(string rawName, HashSet<string> usedNames)
         {
             var sanitized = new string(rawName.Select(c => "\\/?*[]:".Contains(c) ? '-' : c).ToArray()).Trim();

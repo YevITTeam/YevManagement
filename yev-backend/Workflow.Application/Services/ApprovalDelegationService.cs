@@ -98,9 +98,7 @@ namespace Workflow.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // Chỉ chấp nhận ủy quyền 1 cấp (workflow-module.md §3.4/§5.6): chặn nếu Delegate của dòng mới
-        // đang là Delegator của 1 dòng khác còn hiệu lực (A->B rồi B->C), và ngược lại (chặn cả 2
-        // chiều để không ai vô tình trở thành mắt xích giữa của một dây chuyền).
+        // Single-level delegation only: blocks both directions (A->B then B->C) so nobody becomes a middle link.
         private async Task GuardNoDelegationChainAsync(int delegatorEmployeeId, int delegateEmployeeId, int? excludeId = null)
         {
             var now = TimeHelper.GetCurrentUtcTime();

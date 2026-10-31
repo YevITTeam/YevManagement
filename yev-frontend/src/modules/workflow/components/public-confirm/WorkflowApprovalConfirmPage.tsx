@@ -29,12 +29,8 @@ const STEP_STATUS_KEY: Record<number, string> = {
     [StepStatus.Skipped]: "stepSkipped",
 };
 
-// Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — mở qua link email "Đơn chờ duyệt"
-// (Pha 4C). Bilingual (VN/JP) cố định bất kể route đang là /vi hay /ja, mirror
-// EmployeeSignatureConfirmPage.tsx / modules/attendance/components/public-confirm/OtFormEmailConfirmPage.tsx
-// (không import chéo module). Không có UI chọn ảnh chữ ký — BE tự lấy từ EmployeeSignatures nếu bước
-// yêu cầu (workflow-module.md §10). File đính kèm chỉ hiện TÊN, không cho tải xuống ở trang ẩn danh này
-// (endpoint tải file đòi JWT+quyền xem đơn — ngoài phạm vi Pha 4C, xem quyết định 2026-08-27 §10).
+// Public token-secured page opened from the email link; always bilingual. BE picks the signature from EmployeeSignatures.
+// Attachments show names only: downloading requires JWT + view permission.
 export default function WorkflowApprovalConfirmPage() {
     const t = createBilingualTranslator("Workflow.ApprovalConfirm");
     const searchParams = useSearchParams();

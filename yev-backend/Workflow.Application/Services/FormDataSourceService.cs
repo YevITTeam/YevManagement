@@ -122,17 +122,14 @@ namespace Workflow.Application.Services
         {
             var entity = (await _unitOfWork.FormDataSources.GetByIdAsync(id)).OrThrowNotFound("Nguồn dữ liệu", id);
 
-            // FormFields chưa scaffold ở Pha 2A (workflow-module.md §8 Pha 2C) — chưa có gì để check
-            // "còn ô nhập nào đang dùng nguồn này" ở đây. Bổ sung guard này khi FormFields có.
+            // TODO: block deleting a data source still used by FormFields.
             entity.IsDeleted = true;
 
             _unitOfWork.FormDataSources.Update(entity);
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // workflow-module.md §3.2 FormDataSources: SqlText chạy bằng tài khoản DB chỉ đọc, chặn từ
-        // khoá ghi, có timeout — cơ chế này chưa được chốt/triển khai, nên SqlQuery bị chặn tạo/sửa
-        // cho tới Pha sau. Chỉ 3 loại built-in được dùng ở Pha 2A.
+        // SqlQuery stays blocked until a read-only DB account, write-keyword filter and timeout are in place.
         private static void GuardSourceKindSupported(DataSourceKind sourceKind)
         {
             if (sourceKind == DataSourceKind.SqlQuery)

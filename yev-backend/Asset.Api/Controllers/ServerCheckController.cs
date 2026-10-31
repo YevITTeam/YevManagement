@@ -90,8 +90,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
-        // Trả file .xlsx điền vào ĐÚNG file mẫu giấy gốc — KHÔNG phải ApiResponse<T> (cùng lý do
-        // DeviceConfigurationImportController.GetMissingDevicesReport: body là 1 file nhị phân).
+        // Fills the original paper template; returns a binary file, not ApiResponse<T>.
         [RequirePermission("Asset.ServerCheck.View")]
         [HttpGet("report/export")]
         public async Task<IActionResult> ExportReport([FromQuery] DateTime fromDate, [FromQuery] DateTime toDate, [FromQuery] int? branchId = null)

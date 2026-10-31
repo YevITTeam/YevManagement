@@ -17,8 +17,7 @@ interface InventoryEndSessionDialogProps {
     onEnded: (session: InventorySessionDto) => void;
 }
 
-// Kết thúc phiên kiểm kê: máy còn Pending bị ép thành Missing kèm ghi chú tự do (không có checklist lỗi
-// dạng tick sẵn — cùng quyết định đơn giản hoá như ServerCheckEndSessionDialog). Khoá cứng sau khi gửi.
+// Remaining Pending devices become Missing with a free-text note (no checklist, same as server check); locked once sent.
 export default function InventoryEndSessionDialog({ isOpen, session, onClose, onEnded }: InventoryEndSessionDialogProps) {
     const t = useTranslations("Asset.Inventory");
     const tCommon = useTranslations("Common");

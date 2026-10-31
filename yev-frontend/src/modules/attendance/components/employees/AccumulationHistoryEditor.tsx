@@ -22,7 +22,7 @@ const monthInputClass =
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
-// Số hợp lệ ≥ 0 (cho phép dấu phẩy thập phân kiểu Việt); rỗng/không hợp lệ → null.
+// Accepts a Vietnamese decimal comma; empty/invalid → null.
 function parseHours(text: string): number | null {
     const normalized = text.trim().replace(",", ".");
     if (normalized === "") return null;
@@ -30,8 +30,8 @@ function parseHours(text: string): number | null {
     return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-// Form sửa tay lũy kế 1 năm: nhập giờ từng tháng và/hoặc tổng cả năm. Sửa 1 tháng → tổng năm nhảy theo
-// (số dư đầu kỳ giữ nguyên); sửa tổng năm → số dư đầu kỳ = tổng năm − tổng 12 tháng (không được âm).
+// Editing a month shifts the yearly total (opening balance unchanged); editing the yearly total sets
+// opening balance = total − sum of 12 months, which must not go negative.
 export default function AccumulationHistoryEditor({ data, onSaved, onCancel }: AccumulationHistoryEditorProps) {
     const t = useTranslations("Attendance.AccumulationHistory");
     const [monthTexts, setMonthTexts] = useState<string[]>(() => data.months.map((m) => String(m.totalHours)));

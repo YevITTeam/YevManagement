@@ -10,7 +10,7 @@ interface UsbMachineDetailProps {
     deviceId?: number;
 }
 
-// Log USB của 1 máy: các lần cắm (mới nhất trước), bấm "Xem" để mở thao tác file của từng lần.
+// Newest sessions first.
 export default function UsbMachineDetail({ machineName, deviceId }: UsbMachineDetailProps) {
     return (
         <div className="space-y-4">

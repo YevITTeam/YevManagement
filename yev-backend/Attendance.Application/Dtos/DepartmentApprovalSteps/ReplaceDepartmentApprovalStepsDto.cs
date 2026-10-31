@@ -7,13 +7,10 @@ namespace Attendance.Application.Dtos.DepartmentApprovalSteps
         [Required]
         public int JobTitleId { get; set; }
 
-        // Bước này bắt buộc ký tay hay chỉ cần xác nhận — cấu hình riêng theo từng Phòng ban (xem
-        // DepartmentApprovalStep.RequiresSignature).
         public bool RequiresSignature { get; set; }
     }
 
-    // Thay NGUYÊN danh sách bước duyệt của 1 Department — thứ tự phần tử trong Steps chính là
-    // StepOrder (phần tử đầu = bước 1). Gửi mảng rỗng để xoá hết cây duyệt của Department đó.
+    // Replaces the whole list; element order is StepOrder. Empty clears the Department's tree.
     public class ReplaceDepartmentApprovalStepsDto
     {
         [Required]

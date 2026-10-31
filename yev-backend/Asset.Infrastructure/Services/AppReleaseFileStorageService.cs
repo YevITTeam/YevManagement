@@ -3,12 +3,8 @@ using Microsoft.Extensions.Configuration;
 
 namespace Asset.Infrastructure.Services
 {
-    // Lưu file .apk trên đĩa cục bộ của máy chạy CompanySystem.HostApi (asset-module.md §1.23) — mirror
-    // Workflow.Infrastructure.Services.WorkflowAttachmentStorageService, chưa hỗ trợ multi-instance/network
-    // share, đủ dùng cho 1 server hiện tại. Thư mục gốc cấu hình qua appsettings
-    // AppSettings:AppReleaseStoragePath; nếu để trống, mặc định "App_Data/AppReleaseFiles" tính từ
-    // AppContext.BaseDirectory (production nên trỏ ra đường dẫn tuyệt đối bên ngoài thư mục build để
-    // không mất file khi redeploy).
+    // Local disk only (single server, no multi-instance). Production should set AppSettings:AppReleaseStoragePath
+    // outside the build folder so files survive redeploys.
     public class AppReleaseFileStorageService : IAppReleaseFileStorage
     {
         private readonly string _rootPath;

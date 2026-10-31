@@ -6,10 +6,7 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Quản lý danh sách Employee được Admin CHỈ ĐỊNH TAY phụ trách cấu hình Cây duyệt của 1 Bộ phận
-    // (2026-08-11, sửa 2026-08-11b: khoá theo EmployeeId, chỉ chọn được Employee thuộc đúng Bộ phận)
-    // — xem docs/docs-be/attendance-module.md §Cây chức vụ, mục "Người phụ trách Cây duyệt". Quản lý
-    // kiểu "thay nguyên danh sách" (mirror JobTitlePermissionService).
+    // Coordinators are assigned manually by Admin and keyed by EmployeeId; managed as a whole-list replace.
     public class DepartmentApprovalStepCoordinatorService : BaseService<IAttendanceUnitOfWork>, IDepartmentApprovalStepCoordinatorService
     {
         private readonly IEmployeeService _employeeService;
@@ -57,9 +54,7 @@ namespace Attendance.Application.Services
             var employeeIds = request.EmployeeIds.Distinct().ToList();
             if (employeeIds.Count > 0)
             {
-                // Chỉ được chọn Employee đang thuộc ĐÚNG Bộ phận này — trực tiếp (Trưởng phòng) hoặc
-                // qua Group con (nhân viên thường), cùng cách khớp Department đã dùng ở
-                // EmployeeService.GetPagedAsync.
+                // Only employees of this department, directly or via a child group, matching EmployeeService.GetPagedAsync.
                 var validEmployees = await _unitOfWork.Employees.FindAsync(x =>
                     employeeIds.Contains(x.Id) && !x.IsDeleted &&
                     (x.DepartmentId == departmentId || x.ApprovalScopes.Any(s => s.DepartmentId == departmentId) || (x.GroupId != null && x.Group!.DepartmentId == departmentId)));
@@ -81,9 +76,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.DepartmentApprovalStepCoordinators.AddRangeAsync(newItems);
             await _unitOfWork.SaveChangesAsync();
 
-            // Đồng bộ lại quyền tự động cấp cho MỌI Employee bị ảnh hưởng (vừa thêm lẫn vừa bị gỡ) —
-            // có hiệu lực NGAY nếu họ đã liên kết UserName; nếu chưa, lần EmployeeService.UpdateAsync
-            // liên kết UserName sau này sẽ tự cấp đúng bộ quyền hiện hành, không cần thao tác gì thêm.
+            // Resync both added and removed employees so permissions apply immediately; unlinked ones get them on UserName link.
             var affectedEmployeeIds = oldEmployeeIds.Union(employeeIds).Distinct();
             foreach (var employeeId in affectedEmployeeIds)
             {

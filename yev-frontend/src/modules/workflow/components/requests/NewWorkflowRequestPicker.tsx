@@ -9,14 +9,8 @@ import { WorkflowRequestApi } from "@/modules/workflow/api/workflow-request.api"
 import type { AvailableFormDto } from "@/modules/workflow/types/workflow-request.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
-// Chọn loại đơn để bắt đầu — nguồn WorkflowRequestApi.getAvailableForms() (mới thêm ở Pha 3B-2, lọc
-// IsPublished + FormAccesses của chính người dùng, KHÔNG dùng FormDefinitionApi.grid-list vì endpoint
-// đó đứng sau Workflow.FormDesign.View, người nộp đơn thường không có quyền này).
-//
-// CHỈ điều hướng sang trang chi tiết với ?formDefinitionId= — KHÔNG gọi createDraft ở đây. Trước đây
-// bấm chọn 1 loại đơn là tạo WorkflowRequests ngay lập tức, kể cả khi người dùng bấm nhầm/chưa nhập gì
-// — WorkflowRequestDetail chỉ thật sự gọi createDraft khi người dùng bấm "Lưu nháp"/"Nộp đơn" lần đầu
-// (workflow-module.md §10, yêu cầu người dùng 2026-08-26).
+// getAvailableForms() (published + caller's FormAccesses), not grid-list, which needs FormDesign.View.
+// Only navigates with ?formDefinitionId=; the draft is created on first save/submit to avoid junk requests.
 export default function NewWorkflowRequestPicker() {
     const t = useTranslations("Workflow.WorkflowRequest");
     const router = useRouter();

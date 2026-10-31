@@ -68,7 +68,6 @@ namespace Attendance.Api.Controllers
             return Success(true, "Xóa chức vụ thành công.");
         }
 
-        // Kéo-thả đổi thứ tự Cấp độ ở màn Danh mục — dùng chung quyền Update, không tách quyền riêng.
         [RequirePermission("Attendance.JobTitle.Update")]
         [HttpPut("reorder")]
         public async Task<ActionResult<ApiResponse<List<JobTitleDto>>>> Reorder([FromBody] ReorderJobTitleDto request)
@@ -77,8 +76,7 @@ namespace Attendance.Api.Controllers
             return Success(result, "Cập nhật thứ tự chức vụ thành công.");
         }
 
-        // Xem trước chuỗi duyệt tự động (Giai đoạn 2 "Cây chức vụ", xây song song — KHÔNG đụng tới
-        // OtForm/cơ chế duyệt hiện tại). Dùng để test thuật toán trên dữ liệu thật trước khi wiring.
+        // Preview only; does not touch OtForm approvals.
         [RequirePermission("Attendance.JobTitle.View")]
         [HttpGet("resolve-chain")]
         public async Task<ActionResult<ApiResponse<ResolveApprovalChainResultDto>>> ResolveChain(

@@ -109,8 +109,7 @@ export default function DeviceConfigurationPanel({ deviceId, deviceCode, configu
     const [initialSnapshot, setInitialSnapshot] = useState<DeviceConfigurationInitialDto | null>(null);
     const [history, setHistory] = useState<DeviceConfigurationHistoryDto[]>([]);
 
-    // Đổ lại field khi `configuration` (prop) đổi — so sánh snapshot ngay trong render thay effect
-    // (xem AGENTS.md "Pattern reset Form dialog"), vì đây là "adjust state when a prop changes".
+    // Re-seed fields when the `configuration` prop changes; snapshot compared during render instead of an effect.
     const [prevConfiguration, setPrevConfiguration] = useState(configuration);
     if (prevConfiguration !== configuration) {
         setPrevConfiguration(configuration);

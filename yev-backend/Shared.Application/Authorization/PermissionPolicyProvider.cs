@@ -9,9 +9,7 @@ namespace Shared.Application.Authorization
     {
         public const string PolicyPrefix = "Permission:";
 
-        // Nhiều permission trong CÙNG 1 policy string được nối bằng ký tự này (quan hệ OR, xem
-        // PermissionRequirement) — permission code luôn dạng "Module.Entity.Action" nên không bao giờ
-        // chứa ký tự này, tách an toàn (2026-09-28).
+        // Joins OR-ed permissions in one policy name; safe because codes ("Module.Entity.Action") never contain it.
         public const string PermissionSeparator = "|";
 
         private readonly DefaultAuthorizationPolicyProvider _fallbackPolicyProvider;

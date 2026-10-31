@@ -56,8 +56,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
     const [deletingGroup, setDeletingGroup] = useState<GroupDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    // grid-list toàn cục không lọc theo Phòng ban trong docs — nên khi có bộ lọc, tải toàn bộ theo
-    // by-department rồi tự phân trang phía FE; khi không lọc thì dùng grid-list bình thường.
+    // grid-list can't filter by department, so with a filter load by-department and paginate on the client.
     const { isLoading, error, refetch: fetchGroups } = useFetchEffect<GroupPageResult>(
         async () => {
             if (departmentFilter) {

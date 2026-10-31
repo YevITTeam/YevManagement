@@ -3,10 +3,8 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Application.Dtos.FormFields
 {
-    // Thay NGUYÊN danh sách ô nhập của 1 FormDefinition (workflow-module.md §6
-    // PUT /FormDefinition/{id}/fields) — NHƯNG merge theo Id/FieldKey chứ KHÔNG xoá-tất-tạo-lại như
-    // các pattern "replace" khác trong module, vì FormFieldConditions trỏ Id thẳng vào đây (xem
-    // FormDefinitionService.ReplaceFieldsAsync). Item.Id = null nghĩa là dòng mới.
+    // Merged by Id/FieldKey instead of delete-and-recreate because FormFieldConditions reference field Ids.
+    // Item.Id = null means a new row.
     public class ReplaceFormFieldsDto
     {
         [Required]

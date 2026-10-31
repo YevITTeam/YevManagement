@@ -21,8 +21,7 @@ const SCAN_ROLE_NAME = "Kiểm tra Server";
 const selectClass =
     "h-10 min-w-[14rem] rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
-// Admin gán user ↔ xưởng cho kiểm tra server (asset-module.md §1.21). Mỗi user đúng 1 xưởng: chọn lại
-// user đã có phân công thì là ĐỔI xưởng (BE upsert theo userId), không sinh dòng thứ hai.
+// One branch per user; re-picking an assigned user changes their branch (BE upserts by userId).
 export default function ServerCheckAssignmentPage() {
     const t = useTranslations("Asset.ServerCheck");
 

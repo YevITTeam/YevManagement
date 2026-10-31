@@ -2,9 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Workflow.Application.Dtos.ApprovalDelegations
 {
-    // DelegatorEmployeeId KHÔNG có trong DTO — luôn resolve = người dùng hiện tại (mirror
-    // CreatedByEmployeeId ở FormDefinitionService), tránh việc 1 người tạo ủy quyền thay mặt người
-    // khác qua body request.
+    // No DelegatorEmployeeId: always the current user, so nobody can create a delegation on someone else's behalf.
     public class CreateUpdateApprovalDelegationDto
     {
         [Required(ErrorMessage = "Người duyệt thay không được để trống")]

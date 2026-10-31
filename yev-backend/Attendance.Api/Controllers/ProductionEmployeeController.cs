@@ -17,13 +17,8 @@ namespace Attendance.Api.Controllers
             _productionEmployeeService = productionEmployeeService;
         }
 
-        // Dùng chung quyền tạo đơn OT hiện có — không tạo permission riêng (2026-08-24, theo yêu cầu
-        // người dùng — xem docs/docs-be/attendance-module.md §Cây chức vụ & Cây duyệt). Create/CreateProduction
-        // là 2 quyền TÁCH RỜI (Giai đoạn 14/17) — 4 endpoint dưới đây CHỈ phục vụ tìm/lọc nhân sự dưới
-        // chuyền để tạo đơn "Theo chuyền", nên OR cả CreateProduction vào, không thì Line Leader chỉ có
-        // CreateProduction (không có Create) bị 403 ngay từ bước tìm nhân viên — 403 rơi vào .catch() ở
-        // FE nên không có lỗi hiện rõ, chỉ thấy triệu chứng "Không tìm thấy ai khớp bộ lọc" (2026-09-28,
-        // sửa cùng đợt với OtFormController.Create/Update/check-overlap).
+        // Reuses OT-create permissions; CreateProduction included so production-only Line Leaders can search employees
+        // (a 403 here surfaces in the FE only as "no matches").
         [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
         [HttpGet("search")]
         public async Task<ActionResult<ApiResponse<List<ProductionEmployeeSearchItemDto>>>> Search(
@@ -59,8 +54,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Màn "Nhân viên dưới chuyền" — quyền xem RIÊNG (2026-09-26): trước đây dùng chung
-        // Attendance.Employee.View nên mọi Người phụ trách/Trưởng nhóm đều vào xem được.
+        // Dedicated permission so not every coordinator/team leader can see this screen.
         [RequirePermission("Attendance.ProductionEmployee.View")]
         [HttpGet("page-nation")]
         public async Task<ActionResult<ApiResponse<PagedResponse<ProductionEmployeeListItemDto>>>> GetPaged(
@@ -72,8 +66,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Sửa tay Line/Team/Nhóm ca/Trưởng nhóm giữa 2 đợt import (2026-09-04) — permission RIÊNG với
-        // Import (khác population: Import là nạp cả file, Update là sửa nhanh 1 người ngay trên UI).
+        // Separate from Import: quick single-person edits between imports.
         [RequirePermission("Attendance.ProductionEmployee.Update")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateProductionEmployeeDto request)

@@ -7,11 +7,7 @@ using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
 {
-    // "Đơn tổng" — gom nhiều OtForm đang chờ đúng 1 trong 3 cấp quản lý (DepartmentManager theo từng
-    // Department, WorkshopManager/GeneralDirector company-wide), duyệt 1 lần thay vì từng đơn (see
-    // docs/attendance-module.md — §Đơn tổng). Tái dùng permission Attendance.OTForm.Approve đã gán sẵn
-    // cho 3 cấp này — không cần permission mới, gate dữ liệu vẫn qua candidate của đúng bước như mọi
-    // nơi khác.
+    // Batches pending OtForms per approval level so they are approved once; reuses OTForm.Approve and the per-step candidate check.
     public class OtFormBatchController : BaseController
     {
         private readonly IOtFormService _otFormService;
@@ -47,8 +43,7 @@ namespace Attendance.Api.Controllers
             return Success(result, "Duyệt đơn tổng thành công.");
         }
 
-        // Kênh bổ sung qua email — cùng nguyên tắc [AllowAnonymous] như OtFormController: token tự nó
-        // là thông tin xác thực duy nhất (see docs/attendance-module.md).
+        // Email channel: the token is the only credential, as in OtFormController.
         [AllowAnonymous]
         [HttpGet("email-confirm/{token}")]
         public async Task<ActionResult<ApiResponse<OtFormBatchDto>>> GetByEmailToken(string token)
@@ -65,10 +60,7 @@ namespace Attendance.Api.Controllers
             return Success(result, "Duyệt đơn tổng thành công.");
         }
 
-        // Chạy ngay đợt gom "Đơn tổng" hằng ngày (bình thường tự chạy theo AttendanceSetting.
-        // BatchAutoSendTime, xem OtFormBatchBackgroundService) — dùng khi test hoặc có lý do cấp bách
-        // cần gửi ngay, không đợi tới giờ cấu hình. Cùng quyền với sửa Cấu hình (hành động cấp Admin,
-        // ảnh hưởng toàn bộ Department chứ không riêng 1 đơn).
+        // Runs the daily batch now instead of waiting for BatchAutoSendTime; Admin-level because it affects every Department.
         [RequirePermission("Attendance.Setting.Update")]
         [HttpPost("run-now")]
         public async Task<ActionResult<ApiResponse<bool>>> RunNow()

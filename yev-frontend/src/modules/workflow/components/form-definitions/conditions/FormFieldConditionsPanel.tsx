@@ -19,9 +19,7 @@ interface FormFieldConditionsPanelProps {
 const selectClassName =
     "h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
-// Chỉ cấu hình (không kéo-thả) — Target/Source chọn từ field ĐÃ LƯU (workflow-module.md §3.2:
-// TargetFieldId/SourceFieldId là FK trỏ FormFields.Id thật, không thể trỏ vào field chưa lưu ở tab
-// "Ô nhập"). Không autosave, giống hệt pattern FormFieldDesigner.
+// Target/Source must be saved fields (FKs to FormFields.Id), not unsaved ones from the fields tab. No autosave.
 export default function FormFieldConditionsPanel({ formDefinitionId }: FormFieldConditionsPanelProps) {
     const t = useTranslations("Workflow.FormDefinition");
     const [fields, setFields] = useState<FormFieldDto[]>([]);

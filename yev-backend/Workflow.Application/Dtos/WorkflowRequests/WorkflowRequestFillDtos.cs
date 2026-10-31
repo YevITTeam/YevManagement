@@ -3,9 +3,8 @@ using Workflow.Application.Dtos.FormFields;
 
 namespace Workflow.Application.Dtos.WorkflowRequests
 {
-    // 3 DTO phục vụ Pha 3B-2 (FE nộp/duyệt đơn) — workflow-module.md §6: người nộp đơn thường KHÔNG có
-    // quyền Workflow.FormDesign.View (chỉ người thiết kế form), nên không đọc được qua
-    // FormDefinitionController. Đứng sau Workflow.Request.Create, tự lọc IsPublished + FormAccesses.
+    // Requesters usually lack Workflow.FormDesign.View, so these are served behind Workflow.Request.Create,
+    // filtered by IsPublished + FormAccesses.
     public class AvailableFormDto
     {
         public int Id { get; set; }
@@ -17,8 +16,7 @@ namespace Workflow.Application.Dtos.WorkflowRequests
         public bool RequireAttachment { get; set; }
     }
 
-    // Field/condition SỐNG (khác FormSchemaJson đã snapshot lúc nộp) — dùng dựng màn điền đơn lúc còn
-    // Draft, trước khi FormSchemaJson tồn tại (§3.3: NULL khi còn Draft).
+    // Live fields/conditions (unlike the FormSchemaJson snapshot taken on submit), used while still Draft.
     public class WorkflowRequestFormSchemaDto
     {
         public int FormDefinitionId { get; set; }
@@ -33,8 +31,7 @@ namespace Workflow.Application.Dtos.WorkflowRequests
         public List<FormFieldConditionDto> Conditions { get; set; } = new();
     }
 
-    // {id} của Employee ứng với người đang đăng nhập — FE cần để so khớp "dòng participant nào là
-    // tôi" và lọc đúng chiều ApprovalDelegations (GetMineAsync trả cả 2 chiều Delegator/Delegate).
+    // Lets the FE match "which participant is me" and pick the right direction of ApprovalDelegations.
     public class MyEmployeeDto
     {
         public int Id { get; set; }

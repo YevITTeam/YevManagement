@@ -1,4 +1,4 @@
-// workflow-module.md §4 — khớp enum ConditionOperator/ConditionEffect ở BE.
+// Must match BE enums ConditionOperator/ConditionEffect.
 export const ConditionOperator = {
     Equals: 1,
     NotEquals: 2,

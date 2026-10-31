@@ -38,9 +38,7 @@ function flattenUnits(nodes: OrgUnitTreeDto[], depth = 0): FlatUnit[] {
     return result;
 }
 
-// Thay NGUYÊN danh sách đơn vị/chức danh kiêm nhiệm của 1 nhân sự — mirror pattern
-// PUT /Workflow/Employee/{id}/org-units (workflow-module.md §6): không có id riêng từng dòng, sửa
-// xong bấm Lưu là gửi lại toàn bộ mảng.
+// PUT replaces the whole list (rows have no ids), so Save resends the full array.
 export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOrgUnitsDialogProps) {
     const t = useTranslations("Workflow.Employee");
     const tCommon = useTranslations("Common");
@@ -94,8 +92,7 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
         setItems((current) =>
             current.map((item) => {
                 if (item.clientId !== clientId) {
-                    // BE chỉ cho tối đa 1 dòng IsPrimary=1 (workflow-module.md §3.1) — nếu dòng đang sửa
-                    // vừa được đánh dấu chính, bỏ tick ở mọi dòng khác ngay trên UI.
+                    // BE allows at most one IsPrimary row, so marking one unticks the others.
                     return patch.isPrimary ? { ...item, isPrimary: false } : item;
                 }
                 return { ...item, ...patch };

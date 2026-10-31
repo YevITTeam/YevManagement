@@ -20,7 +20,7 @@ export interface GetAppReleasePageNationParams {
 }
 
 export const AppReleaseApi = {
-    // [AllowAnonymous] phía BE — không cần token, nhưng client.ts vẫn gắn Bearer nếu có sẵn, không sao.
+    // [AllowAnonymous] on BE; an attached Bearer token is harmless.
     getLatest: async () => {
         const response = await api.get<ApiResponse<AppReleaseDto | null>>(ENDPOINTS.APP_RELEASE.getLatest);
         return response.data;
@@ -48,8 +48,7 @@ export const AppReleaseApi = {
         const response = await api.delete<ApiResponse<boolean>>(ENDPOINTS.APP_RELEASE.deleteAppRelease(id));
         return response.data;
     },
-    // Upload file .apk, BE trả về link tải nội bộ (dùng thẳng làm giá trị apkUrl) — không tự lưu vào
-    // AppRelease, FE phải POST/PUT create/update với apkUrl này riêng.
+    // Only uploads and returns the internal download URL; the caller must still create/update the AppRelease with it.
     uploadApk: async (file: File) => {
         const formData = new FormData();
         formData.append("file", file);

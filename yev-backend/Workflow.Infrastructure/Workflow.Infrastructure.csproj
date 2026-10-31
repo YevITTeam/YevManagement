@@ -13,8 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Template email của module Workflow — copy nguyên thư mục EmailTemplates/ ra cạnh DLL sau build
-         để EmailTemplateService (Shared.Infrastructure) đọc được lúc chạy, mirror Attendance.Infrastructure. -->
+    <!-- EmailTemplateService reads templates next to the DLL at runtime. -->
     <Content Include="EmailTemplates\**\*.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

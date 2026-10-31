@@ -8,9 +8,7 @@ using Shared.Core.Exceptions;
 
 namespace Identity.Application.Services
 {
-    // Implements IUserDirectoryService (Shared.Application) — a bridge that lets the Attendance module look up
-    // a User's mail recipient/FullName/effective permission without a direct ProjectReference to Identity.Application.
-    // Scrutor auto-registers this class against the interface at host startup (see docs/architecture-core.md §DI).
+    // Lets other modules query Identity users without referencing Identity.Application.
     public class UserDirectoryService : BaseService<IIdentityUnitOfWork>, IUserDirectoryService
     {
         private const int MaxParallelDirectoryLookups = 8;
@@ -32,12 +30,7 @@ namespace Identity.Application.Services
             return (routed?.UserEmail.Email ?? user.Email, user.FullName);
         }
 
-        // Effective permission = Role-based permissions, plus individually granted permissions
-        // (UserPermission.IsGranted=true), minus individually revoked permissions (IsGranted=false) —
-        // a deny override always wins over a Role grant. Mirrors the exact same computation as the JWT
-        // claim builder (Identity.Infrastructure/Authentication/MyClaimsTransformation.cs:162-179), kept
-        // separate here since that lives in Infrastructure and reads straight from the DB by UserName
-        // instead of an already-loaded ClaimsPrincipal.
+        // Role grants plus individual grants minus individual denies (deny wins); must match MyClaimsTransformation's JWT claim logic.
         public async Task<bool> UserHasPermissionAsync(string userName, string permissionCode)
         {
             var user = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == userName, x => x.Roles);
@@ -62,7 +55,7 @@ namespace Identity.Application.Services
             if (string.IsNullOrWhiteSpace(userName)) return;
 
             var user = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.UserName == userName);
-            if (user == null) return; // Chưa có tài khoản Identity — lần sync tiếp theo (khi UserName được gán) sẽ tự cấp.
+            if (user == null) return; // No Identity account yet; the next sync after UserName is linked grants it.
 
             var desiredCodes = (desiredPermissionCodes ?? Array.Empty<string>()).ToHashSet();
             var desiredPermissionIds = desiredCodes.Count == 0
@@ -72,7 +65,7 @@ namespace Identity.Application.Services
             var existingOverrides = await _unitOfWork.UserPermissions.FindAsync(x => x.UserId == user.Id);
             var existingPermissionIds = existingOverrides.Select(x => x.PermissionId).ToHashSet();
 
-            // 1) Thu hồi: dòng đang IsAutoGranted=true mà giờ không còn trong desired set nữa.
+            // Revoke auto rows no longer desired.
             foreach (var existing in existingOverrides)
             {
                 if (existing.IsAutoGranted && !desiredPermissionIds.Contains(existing.PermissionId))
@@ -81,8 +74,7 @@ namespace Identity.Application.Services
                 }
             }
 
-            // 2) Cấp thêm: permission desired mà CHƯA có override nào (manual lẫn auto) — không đụng
-            //    tới permission đã có override (dù đang grant/deny tay, hay đã đúng là auto rồi).
+            // Grant only permissions with no existing override (manual or auto).
             foreach (var permissionId in desiredPermissionIds)
             {
                 if (!existingPermissionIds.Contains(permissionId))
@@ -100,10 +92,7 @@ namespace Identity.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // Idempotent — dùng bởi EmployeeIdentityLinkImportService (import hàng loạt liên kết
-        // Identity↔Attendance, 2026-09-03). Khác UserService.CreateUserAsync (throw nếu UserName đã
-        // tồn tại, dùng cho form "Tạo user" tay từng người) — ở đây UserName đã tồn tại là chuyện BÌNH
-        // THƯỜNG (nhiều dòng import có thể trỏ tới người đã có tài khoản từ trước), nên no-op thay vì lỗi.
+        // Idempotent for bulk link import: an existing UserName is normal here, unlike CreateUserAsync which throws.
         public async Task<bool> EnsureUserExistsAsync(string userName, string? fullName, string? roleName)
         {
             var trimmedUserName = userName.Trim();

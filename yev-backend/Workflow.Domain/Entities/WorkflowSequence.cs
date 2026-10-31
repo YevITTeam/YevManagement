@@ -1,7 +1,6 @@
 namespace Workflow.Domain.Entities;
 
-// Cấp số atomic (workflow-module.md §3.4, §5.4) — PK composite (SequenceKey, Year). Không có Id
-// surrogate, không IsDeleted (bảng counter thuần).
+// Pure counter table: composite PK (SequenceKey, Year), no surrogate Id, no IsDeleted.
 public partial class WorkflowSequence
 {
     public string SequenceKey { get; set; } = null!;

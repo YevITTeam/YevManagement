@@ -99,16 +99,12 @@ namespace Attendance.Application.Services
                         _unitOfWork.Employees.Update(employee);
                         await _unitOfWork.SaveChangesAsync();
 
-                        // Đổi sang UserName khác (không phải gán lần đầu) — thu hồi quyền tự động đã cấp
-                        // khỏi tài khoản cũ, cùng nguyên tắc EmployeeService.UpdateAsync.
+                        // Re-linking to a different UserName revokes auto-granted permissions from the old account.
                         if (!string.IsNullOrWhiteSpace(oldUserName))
                             await _userDirectoryService.SyncAutoGrantedPermissionsAsync(oldUserName, Array.Empty<string>());
                     }
 
-                    // Gán Chức vụ (nếu có) — LUÔN theo đúng phạm vi Bộ phận/Nhóm HIỆN TẠI của Employee,
-                    // tái dùng nguyên xi 2 hàm đã có (AssignDepartmentJobTitleAsync/AssignGroupJobTitleAsync)
-                    // để không lặp lại luật validate TerminalLevel — isAdmin=true nên userName truyền vào
-                    // không được dùng tới (chỉ dùng khi !isAdmin).
+                    // Reuse the scoped assign methods so TerminalLevel rules aren't duplicated; isAdmin=true makes userName unused.
                     if (!string.IsNullOrWhiteSpace(row.JobTitleCode))
                     {
                         var jobTitle = await _unitOfWork.JobTitles.FirstOrDefaultAsync(x => x.Code == row.JobTitleCode && !x.IsDeleted);
@@ -124,8 +120,7 @@ namespace Attendance.Application.Services
                         result.JobTitleAssignedCount++;
                     }
 
-                    // Người phụ trách Cây duyệt (nếu đánh dấu) — phạm vi suy ra từ tổ chức hiện tại,
-                    // CHỈ THÊM vào danh sách, không đụng người phụ trách khác đã gán từ trước.
+                    // Additive only; never removes coordinators assigned elsewhere.
                     if (row.IsCoordinator)
                     {
                         if (employee.GroupId.HasValue)
@@ -138,9 +133,7 @@ namespace Attendance.Application.Services
                         result.CoordinatorAddedCount++;
                     }
 
-                    // Permission theo Chức vụ/Coordinator có hiệu lực NGAY — không cần đăng nhập lại.
-                    // (Assign*/EnsureCoordinatorAsync ở trên đã tự đồng bộ, gọi lại đây để chắc chắn khớp
-                    // trạng thái CUỐI CÙNG sau khi cả 2 bước cùng chạy trong 1 dòng — idempotent.)
+                    // Idempotent resync of the final state after both steps, so permissions apply without re-login.
                     await _employeeService.SyncAutoGrantedPermissionsForEmployeeAsync(employee.Id);
 
                     if (imagesByRow.TryGetValue(row.RowNumber, out var signatureImage))
@@ -197,8 +190,7 @@ namespace Attendance.Application.Services
                 .Select(g => g.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            // 1 UserName đã gán cho 1 Employee KHÁC trong hệ thống — không cho import gán tiếp cho
-            // Employee khác trong file này nữa (1 UserName chỉ nên link đúng 1 Employee).
+            // A UserName already linked to another employee may not be linked again.
             var employeesHoldingUserNames = userNamesInFile.Count == 0
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 : (await _unitOfWork.Employees.SelectAsync(
@@ -294,9 +286,7 @@ namespace Attendance.Application.Services
                     CurrentUserNameOnEmployee = employee?.UserName,
                     ResolvedJobTitleName = resolvedJobTitleName,
                     CoordinatorScopeDescription = coordinatorScopeDescription,
-                    // Preview không truy vấn Identity DB (khác module) — chỉ biết chắc "đã tồn tại" khi
-                    // UserName hiện tại của chính Employee này khớp đúng UserName trong file; ngoài ra để
-                    // NewIdentityUserCount là ước tính (Confirm mới là nguồn chân lý thật).
+                    // Preview can't query the Identity DB, so NewIdentityUserCount is an estimate; Confirm is authoritative.
                     IdentityUserAlreadyExists = employee?.UserName == userName,
                     IsValid = errors.Count == 0,
                     Errors = errors
@@ -327,8 +317,7 @@ namespace Attendance.Application.Services
             var worksheet = workbook.Worksheets.First();
             var usedRange = worksheet.RangeUsed();
 
-            // Ảnh chữ ký nhúng — neo theo đúng hàng qua TopLeftCell. 1 ảnh/1 hàng, ảnh sau đè ảnh trước
-            // nếu trùng hàng (không nên xảy ra với file chuẩn).
+            // Images are anchored to rows via TopLeftCell; a later image on the same row wins.
             var imagesByRow = new Dictionary<int, byte[]>();
             foreach (var picture in worksheet.Pictures)
             {
@@ -339,10 +328,7 @@ namespace Attendance.Application.Services
             var rows = new List<(int, string?, string?, string?, string?, bool, bool)>();
             if (usedRange == null) return (rows, imagesByRow);
 
-            // worksheet.Cell(row, col) tuyệt đối — KHÔNG dùng xlRow.Cell(col) (range-relative: cột A
-            // trống hoàn toàn khiến ClosedXML tự thu hẹp usedRange bắt đầu từ cột B, Cell(2) trỏ nhầm
-            // sang cột C) — đã tái hiện lỗi thật với chính file mẫu do GenerateTemplate() sinh ra
-            // (2026-09-03, xem docs/docs-be/attendance-module.md).
+            // Use absolute worksheet.Cell(row, col): range-relative xlRow.Cell(col) shifts when column A is empty.
             var allUsedRows = usedRange.RowsUsed().ToList();
             var headerRow = allUsedRows.FirstOrDefault(r =>
                 string.Equals(worksheet.Cell(r.RowNumber(), 2).GetString().Trim(), HeaderMarkerCellB, StringComparison.OrdinalIgnoreCase));

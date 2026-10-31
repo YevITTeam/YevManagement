@@ -3,10 +3,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Application.Dtos.FormRoutes
 {
-    // Thay NGUYÊN cây nhánh+bước+người của 1 FormDefinition trong 1 lượt PUT (workflow-module.md §6:
-    // "PUT /FormDefinition/{id}/routes — replace cả nhánh + bước + người"). Id chỉ tồn tại ở cấp
-    // FormRoute (merge theo Id, xem FormDefinitionService.ReplaceRoutesAsync) — Steps/Participants
-    // KHÔNG có Id vì luôn xoá-tất-tạo-lại mỗi lần lưu route (không bảng nào tham chiếu Id của chúng).
+    // Only FormRoute carries an Id (merged by Id); steps/participants have none because they are recreated on every save.
     public class ReplaceFormApprovalStepParticipantItemDto
     {
         [Required(ErrorMessage = "Nguồn người duyệt không được để trống")]

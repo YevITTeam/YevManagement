@@ -19,7 +19,6 @@ namespace Asset.Application.Dtos.DeviceTypes
 
         public bool RequiresQrScan { get; set; }
 
-        // True = loại này được đưa vào đợt kiểm kê thiết bị (asset-module.md §1.22).
         public bool IncludedInInventory { get; set; }
     }
 }

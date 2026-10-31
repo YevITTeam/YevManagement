@@ -13,8 +13,7 @@ namespace Attendance.Application.Dtos.GroupApprovalSteps
         public bool IsResponsible { get; set; }
         public bool CanResubmit { get; set; }
 
-        // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — luôn = None (0) cho bước ở đây, giữ
-        // lại field để FE dùng chung style hiển thị với DepartmentApprovalStepDto.
+        // Always None here; kept so the FE shares display logic with DepartmentApprovalStepDto.
         public int TerminalLevel { get; set; }
     }
 }

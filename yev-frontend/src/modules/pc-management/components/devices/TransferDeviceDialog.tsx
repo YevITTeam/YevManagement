@@ -18,8 +18,7 @@ interface TransferableDevice {
 interface TransferDeviceDialogProps {
     isOpen: boolean;
     oldDevice: TransferableDevice | null;
-    // docs/asset-module.md §4 — gợi ý "MQL Cũ" từ import Excel (pendingTransfers):
-    // điền sẵn máy mới nhưng vẫn cho người dùng sửa lại trước khi bấm "Chuyển".
+    // Suggestion from an Excel import's pendingTransfers; still editable before confirming.
     initialNewDeviceId?: number | null;
     onClose: () => void;
     onTransferred: () => void;
@@ -32,14 +31,12 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
     const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
     const [note, setNote] = useState("");
     const [isSaving, setIsSaving] = useState(false);
-    // Gợi ý máy mới suy ra từ cột "MQL Cũ" lúc import Excel (docs/asset-module.md §4) — chỉ tự tra khi
-    // dialog KHÔNG được mở sẵn với 1 gợi ý cụ thể từ màn "Import Excel" (initialNewDeviceId).
+    // Looked up only when the dialog wasn't opened with initialNewDeviceId.
     const [suggestion, setSuggestion] = useState<DeviceReplacementSuggestionDto | null>(null);
-    // Thông tin máy đang được chọn nhưng chưa/không nằm trong danh sách candidates hiện tại (vd máy được
-    // điền sẵn từ initialNewDeviceId) — tra riêng để luôn hiển thị được máy đã chọn mà không cần tìm kiếm.
+    // Selected device may be outside current candidates (e.g. prefilled), so it's fetched separately for display.
     const [fetchedSelectedDevice, setFetchedSelectedDevice] = useState<TransferableDevice | null>(null);
 
-    // Reset field khi mở lại dialog (đổi máy cũ/gợi ý) — so sánh snapshot ngay trong render thay effect.
+    // Reset on reopen; snapshot compared during render instead of an effect.
     const resetKey = `${isOpen}|${oldDevice?.id ?? ""}|${initialNewDeviceId ?? ""}`;
     const [prevResetKey, setPrevResetKey] = useState(resetKey);
     if (prevResetKey !== resetKey) {
@@ -53,7 +50,7 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
         }
     }
 
-    // Tự tra gợi ý máy mới (docs/asset-module.md §4) — chỉ khi KHÔNG có initialNewDeviceId đã điền sẵn.
+    // Only when no initialNewDeviceId was provided.
     useEffect(() => {
         if (!isOpen || !oldDevice || initialNewDeviceId != null) return;
         let isCancelled = false;
@@ -64,7 +61,7 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
                 setSelectedDeviceId(result.id);
             })
             .catch(() => {
-                // Không có gợi ý hoặc lỗi tra cứu — bỏ qua, người dùng vẫn chọn máy mới thủ công như bình thường.
+                // No suggestion or lookup failed: the user picks manually.
             });
 
         return () => {
@@ -96,9 +93,8 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
         };
     }, [isOpen, oldDevice, search]);
 
-    // Máy đã chọn (selectedDeviceId) có thể không nằm trong candidates hiện tại (vd đã bị lọc bởi ô tìm kiếm,
-    // hoặc điền sẵn từ initialNewDeviceId nhưng không nằm trong danh sách "available") — tra riêng theo id để
-    // vẫn hiển thị được tên/mã máy đã chọn thay vì để trống, bắt người dùng phải tự tìm lại mới thấy.
+    // Selected device may be filtered out of candidates or not in the available list; fetch it by id
+    // so its name/code still shows.
     const knownSelectedDevice =
         candidates.find((device) => device.id === selectedDeviceId) ??
         (suggestion?.id === selectedDeviceId ? suggestion : null) ??
@@ -113,7 +109,7 @@ export default function TransferDeviceDialog({ isOpen, oldDevice, initialNewDevi
                 setFetchedSelectedDevice({ id: result.id, deviceCode: result.deviceCode, deviceName: result.deviceName });
             })
             .catch(() => {
-                // Không tra được thông tin máy đã chọn — vẫn giữ nguyên lựa chọn, chỉ là không hiển thị được tên/mã.
+                // Lookup failed: keep the selection, just without its name/code.
             });
 
         return () => {

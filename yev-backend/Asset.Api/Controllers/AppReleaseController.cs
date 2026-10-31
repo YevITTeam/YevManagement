@@ -8,10 +8,7 @@ using Shared.Application.Wrapper;
 
 namespace Asset.Api.Controllers
 {
-    // Quản lý bản cập nhật app Flutter "YEV Scan" (asset-module.md §1.23). ApkUrl vẫn chỉ là string —
-    // Upload() bên dưới chỉ SINH RA link (không đổi schema): FE tải file .apk lên, nhận về link nội bộ
-    // rồi tự điền vào ô apkUrl như link dán tay bình thường; vẫn có thể dán link ngoài (Drive...) thay vì
-    // upload.
+    // ApkUrl stays a plain string: Upload only produces an internal link the FE fills in; external links still work.
     public class AppReleaseController : BaseController
     {
         private readonly IAppReleaseService _appReleaseService;
@@ -23,8 +20,7 @@ namespace Asset.Api.Controllers
             _fileStorage = fileStorage;
         }
 
-        // App gọi endpoint này TRƯỚC khi đăng nhập (kiểm tra cập nhật lúc mở app) — bề mặt
-        // [AllowAnonymous] tiếp theo của hệ thống, cùng nhóm với UserSignatureController/OtFormController.
+        // Called before login (update check on app start), hence anonymous.
         [AllowAnonymous]
         [HttpGet("latest")]
         public async Task<ActionResult<ApiResponse<AppReleaseDto?>>> GetLatest()
@@ -68,7 +64,7 @@ namespace Asset.Api.Controllers
             return Success(true, "Xóa bản phát hành thành công.");
         }
 
-        // 300MB đủ cho APK thực tế (Kestrel mặc định giới hạn body ~30MB). Chỉ nhận đúng đuôi .apk.
+        // Kestrel's default ~30MB body limit is too small for real APKs.
         [RequirePermission("Asset.AppRelease.Manage")]
         [RequestSizeLimit(300_000_000)]
         [HttpPost("upload")]
@@ -87,15 +83,12 @@ namespace Asset.Api.Controllers
             return Success(downloadUrl, "Tải file lên thành công.");
         }
 
-        // Trả file nhị phân trực tiếp, KHÔNG bọc ApiResponse<T> (rule architecture-core.md chỉ áp dụng cho
-        // JSON) — để app Flutter tải file bằng URL thuần. [AllowAnonymous] vì app gọi GetLatest() trước
-        // khi đăng nhập rồi tải thẳng file này (cùng bề mặt anonymous với GetLatest).
+        // Raw file (not ApiResponse) so the app can download by plain URL; anonymous because it runs before login.
         [AllowAnonymous]
         [HttpGet("download/{fileName}")]
         public IActionResult DownloadApk(string fileName)
         {
-            // Chỉ nhận tên file thuần (GUID + đuôi do chính UploadApk sinh ra) — Path.GetFileName chặn
-            // path traversal (vd "../../web.config").
+            // Path.GetFileName blocks path traversal (e.g. "../../web.config").
             var safeFileName = Path.GetFileName(fileName);
             var physicalPath = _fileStorage.GetPhysicalPath(safeFileName);
 

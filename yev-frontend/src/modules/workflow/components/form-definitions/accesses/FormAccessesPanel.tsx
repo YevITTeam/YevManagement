@@ -23,7 +23,7 @@ interface FormAccessesPanelProps {
 const selectClassName =
     "h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
-// Đơn vị cha hiển thị thụt lề theo độ sâu trong cây (mirror flattenOrgUnits ở FormCategoryForm.tsx).
+// Parent units indented by tree depth.
 function flattenOrgUnits(nodes: OrgUnitTreeDto[], depth = 0): SelectOption[] {
     const result: SelectOption[] = [];
     for (const node of nodes) {
@@ -34,9 +34,7 @@ function flattenOrgUnits(nodes: OrgUnitTreeDto[], depth = 0): SelectOption[] {
     return result;
 }
 
-// Ai được TẠO ĐƠN form này (workflow-module.md §3.2 FormAccesses) — khác FormCategoryCoordinators
-// (ai SỬA cấu hình). Không autosave, giống hệt FormFieldConditionsPanel: sửa state cục bộ, 1 nút Lưu
-// gửi lại toàn bộ danh sách (PUT thay nguyên danh sách).
+// Who may SUBMIT this form (not who edits its config). No autosave: one Save replaces the whole list.
 export default function FormAccessesPanel({ formDefinitionId }: FormAccessesPanelProps) {
     const t = useTranslations("Workflow.FormDefinition");
     const [roleOptions, setRoleOptions] = useState<SelectOption[]>([]);

@@ -10,10 +10,7 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Phục vụ màn "Theo chuyền" khi tạo đơn OT (2026-08-24) — tìm người theo Line/Team/Nhóm
-    // ca/CongDoan thay vì theo Group cố định (xem OtFormService.CreateProductionFormAsync). CHỈ trả
-    // về người ĐÃ có EmployeeId (bảng ProductionEmployees vốn chỉ chứa dòng đã resolve đủ theo policy
-    // nạp, xem ProductionEmployee.cs) — không cần lọc thêm ở đây.
+    // Picks people by Line/Team/shift/CongDoan for production forms; ProductionEmployees only holds resolved rows, so no extra EmployeeId filter.
     public class ProductionEmployeeService : BaseService<IAttendanceUnitOfWork>, IProductionEmployeeService
     {
         private readonly IAttendanceSettingService _attendanceSettingService;
@@ -29,9 +26,7 @@ namespace Attendance.Application.Services
 
         private const int MaxSearchResults = 500;
 
-        // targetDate = ngày trên đơn đang tạo (2026-08-26, mirror EmployeeService.GetByGroupIdAsync) —
-        // thêm lũy kế DỰ KIẾN để cảnh báo vượt giới hạn ngày/tháng/năm NGAY lúc chọn người ở màn "Theo
-        // chuyền" (trước đây bảng này không có cảnh báo gì, khác bảng "Theo Nhóm" đã có từ 2026-08-06).
+        // targetDate = the form's date, used to project accumulation and warn about limits while picking people.
         public async Task<List<ProductionEmployeeSearchItemDto>> SearchAsync(
             int? productionLineId, int? teamId, int? shiftTeamId, string? congDoan, string? keyword, DateOnly? targetDate)
         {
@@ -93,28 +88,17 @@ namespace Attendance.Application.Services
                 var ledger = ledgerByEmployee[item.EmployeeId].ToList();
 
                 item.ProjectedDayToDate = employeeRows.Where(x => x.OtForm.Date == target)
-                    .Sum(x => CalculateProjectedHours(x, mealSettings));
+                    .Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings));
                 item.ProjectedMonthToDate = ledger.Where(x => x.Month == target.Month).Sum(x => x.TotalHours)
-                    + pendingRows.Where(x => x.OtForm.Date.Month == target.Month).Sum(x => CalculateProjectedHours(x, mealSettings));
+                    + pendingRows.Where(x => x.OtForm.Date.Month == target.Month).Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings));
                 item.ProjectedYearToDate = ledger.Sum(x => x.TotalHours)
-                    + pendingRows.Sum(x => CalculateProjectedHours(x, mealSettings));
+                    + pendingRows.Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings));
             }
 
             return result;
         }
 
-        // Mirror EmployeeService.CalculateProjectedHours/OtFormService.CalculateOtHours — mỗi service tự
-        // chứa logic tính giờ của mình, không gọi chéo (quy ước đã có từ redesign 3 bậc phiếu ăn 2026-08-26).
-        private static decimal CalculateProjectedHours(OtFormEmployee row, AttendanceSettingDto mealSettings)
-        {
-            var hours = Math.Round((decimal)(row.EndTime - row.StartTime).TotalHours, 2);
-            var isEarlyWindow = row.StartTime == mealSettings.EarlyMealWindowStartTime && row.EndTime == mealSettings.EarlyMealWindowEndTime;
-            if (!isEarlyWindow && row.DidEat) hours -= mealSettings.MealBreakDeductionHours;
-            return hours;
-        }
-
-        // teamId lọc Line theo đúng Team đã chọn — ProductionLine.TeamId là FK thật (xem ProductionLine.cs),
-        // Team chứa Line CHỨ KHÔNG PHẢI ngược lại, nên chỉ Line mới cần tham số cascade này (2026-08-25).
+        // Only Line needs the team cascade: a Team contains Lines, not the reverse.
         public async Task<List<ProductionOptionDto>> GetLineOptionsAsync(int? teamId)
         {
             if (teamId == null)
@@ -125,13 +109,8 @@ namespace Attendance.Application.Services
                 return allItems.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
             }
 
-            // ProductionLine.TeamId là snapshot TĨNH từ file tham chiếu gốc lúc dựng FK (2026-08-21,
-            // xem migration ConnectProductionLineToTeam), không cập nhật lại theo thời gian — trong khi
-            // Team thật của nhân viên (ProductionEmployee.TeamId) được nạp lại mỗi tháng, nên 1 Line có
-            // thể đã đổi Team thực tế mà FK tĩnh không biết. Lọc theo FK tĩnh khiến FE cho chọn 1 tổ hợp
-            // Team+Line rồi search ra danh sách rỗng. Suy Line có sẵn theo Team TỪ DỮ LIỆU THẬT
-            // (ProductionEmployees) — cùng cách đã áp dụng cho GetShiftTeamOptionsAsync bên dưới từ
-            // 2026-08-25 (2026-09-05, theo yêu cầu người dùng).
+            // ProductionLine.TeamId is a static snapshot while employees' teams are reloaded monthly, so derive the
+            // Team->Line options from actual ProductionEmployees to avoid combos that return nothing.
             var items = await _unitOfWork.ProductionEmployees.SelectAsync(
                 predicate: x => !x.IsDeleted && x.EmployeeId != null && x.ProductionLineId != null && x.TeamId == teamId,
                 selector: x => new ProductionOptionDto { Id = x.ProductionLineId!.Value, Code = x.ProductionLine!.LineCode, NameVn = null });
@@ -147,10 +126,7 @@ namespace Attendance.Application.Services
             return items.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
-        // Nhóm ca KHÔNG phải con của Line/Team (1 Line có thể xuất hiện ở nhiều Nhóm ca khác nhau, xem
-        // ProductionShiftTeam.cs) nên không lọc được bằng FK như GetLineOptionsAsync — thay vào đó suy
-        // ra TỪ DỮ LIỆU THẬT: chỉ trả về Nhóm ca nào thực sự có người trong đúng tập Line/Team đang lọc
-        // (2026-08-25, theo yêu cầu người dùng — tránh cho chọn Nhóm ca rồi tìm ra danh sách rỗng).
+        // Shift teams are not children of Line/Team, so options are derived from actual data to avoid empty results.
         public async Task<List<ProductionOptionDto>> GetShiftTeamOptionsAsync(int? productionLineId, int? teamId)
         {
             var items = await _unitOfWork.ProductionEmployees.SelectAsync(
@@ -162,11 +138,8 @@ namespace Attendance.Application.Services
             return items.DistinctBy(x => x.Id).OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
-        // Màn "Nhân viên dưới chuyền" — view riêng đọc thẳng ProductionEmployees (khác EmployeeService,
-        // đọc bảng Employees) để hiển thị đúng dữ liệu chuyền mới nhất (Line/Team/Nhóm ca/Công đoạn)
-        // (2026-08-27, theo yêu cầu người dùng). Nguồn chính vẫn là Import Excel (nạp lại đè hết mỗi
-        // tháng) — UpdateAsync bên dưới (2026-09-04) chỉ để sửa nhanh Line/Team/Nhóm ca/Trưởng nhóm
-        // giữa 2 đợt import, sẽ bị GHI ĐÈ lại đúng theo file ở lần import kế tiếp.
+        // Reads ProductionEmployees directly for the latest line data. Import is the main source; manual edits
+        // are overwritten by the next import.
         public async Task<PagedResponse<ProductionEmployeeListItemDto>> GetPagedAsync(
             string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword,
             int? productionLineId, int? teamId, int? shiftTeamId, int? departmentId)
@@ -174,13 +147,7 @@ namespace Attendance.Application.Services
             var (todayYear, todayMonth) = GetTodayYearMonth();
             var trimmedKeyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim();
 
-            // Scope theo Người phụ trách BỘ PHẬN (2026-09-28, theo yêu cầu người dùng — "dữ liệu dưới
-            // chuyền" là khái niệm cấp Phòng ban, CHỈ Người phụ trách Bộ phận mới có quyền thao tác,
-            // KHÔNG cấp cho Người phụ trách Nhóm dù đúng lý luôn giống mô hình dept-or-group ở các chỗ
-            // khác — xem ApprovalStepCoordinatorPermissions.ProductionEmployeeViewCode). Admin bỏ qua;
-            // không Admin thì chỉ thấy nhân sự dưới chuyền thuộc Bộ phận mình phụ trách. Dòng
-            // ProductionEmployee CHƯA gắn Employee (chưa resolve) không xác định được phạm vi nên luôn
-            // bị ẩn khỏi người xem có scope hẹp.
+            // Department coordinators only (not group). Rows without a resolved Employee have no scope and stay hidden from non-Admins.
             var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
 
             var query = _unitOfWork.ProductionEmployees.GetQueryable(false).Where(x => !x.IsDeleted
@@ -230,26 +197,19 @@ namespace Attendance.Application.Services
                 });
         }
 
-        // Mirror EmployeeService.GetTodayYearMonth — lũy kế luôn scope theo năm/tháng THỰC TẾ hôm nay.
         private static (int Year, int Month) GetTodayYearMonth()
         {
             var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
             return (today.Year, today.Month);
         }
 
-        // Sửa tay Line/Team/Nhóm ca/Trưởng nhóm (2026-09-04) — bổ sung cho Import Excel, dùng khi cần
-        // sửa nhanh 1-2 người giữa 2 đợt import. LUÔN ghi lại cả cặp Id+Code từ đúng entity đang chọn
-        // (không nhận Code tay từ FE) để BlockCode/TeamCode/ShiftTeamCode không bao giờ lệch khỏi FK —
-        // IsLeader ảnh hưởng trực tiếp candidate duyệt "theo chuyền" của Line này
-        // (JobTitleApprovalChainService, xem docs §Cây chức vụ & Cây duyệt), ghi thẳng không cần đồng bộ gì
-        // thêm (đọc SỐNG lúc resolve chuỗi duyệt, không cache ở đâu khác).
+        // Always store Id+Code from the selected entity so codes never drift from FKs. IsLeader is read live when
+        // resolving the production approval chain, so no extra sync is needed.
         public async Task UpdateAsync(int id, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin)
         {
             var entity = (await _unitOfWork.ProductionEmployees.GetByIdAsync(id)).OrThrowNotFound("Nhân viên dưới chuyền", id);
 
-            // Scope theo Bộ phận phụ trách (2026-09-28, theo yêu cầu người dùng — cùng mô hình
-            // GetPagedAsync, CHỈ Bộ phận). Dòng chưa gắn Employee (chưa resolve) không xác định được
-            // Bộ phận nên non-Admin luôn bị chặn.
+            // Rows without a resolved Employee have no department, so non-Admins are always blocked.
             if (!isAdmin)
             {
                 int? resolvedDepartmentId = null;

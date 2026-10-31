@@ -11,9 +11,7 @@ interface DocumentImportDropzoneProps {
     onImported: (bytes: ArrayBuffer) => void;
 }
 
-// Dialog nhập file .docx làm layout gốc (workflow-module.md §1.5). Tự phát hiện + sửa font tiếng Việt
-// kiểu cũ VNI-Times/VNI-Helve-Condense trước khi đưa vào canvas (chỉ sửa run có khai rFonts VNI-*,
-// không sửa tràn lan — xem lib/vniFix.ts).
+// Legacy VNI-* fonts are fixed only on runs that declare them (see lib/vniFix.ts).
 export default function DocumentImportDropzone({ onClose, onImported }: DocumentImportDropzoneProps) {
     const t = useTranslations("Workflow.FormDefinition");
     const tCommon = useTranslations("Common");

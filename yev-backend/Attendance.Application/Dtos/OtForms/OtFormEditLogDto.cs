@@ -1,7 +1,5 @@
 namespace Attendance.Application.Dtos.OtForms
 {
-    // 1 dòng lịch sử chỉnh sửa đơn (xem OtFormEditLog) — hiển thị trong khu vực "Lịch sử chỉnh sửa"
-    // ở OtFormDetail.tsx (2026-08-28, theo yêu cầu người dùng).
     public class OtFormEditLogDto
     {
         public string ActionByUserName { get; set; } = null!;

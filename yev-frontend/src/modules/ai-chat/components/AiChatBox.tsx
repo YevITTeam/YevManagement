@@ -26,11 +26,8 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useRouter } from "@/navigation";
 
-// Tên tool BE trả về là snake_case kỹ thuật (search_devices...). Người dùng không cần biết tool là
-// gì, chỉ cần biết hệ thống đang tra cứu cái gì — map sang nhãn tiếng Việt, tool lạ thì hiện chung.
-// Khớp đúng 17 tool khai báo ở BE (Asset.Application/Dtos/AiChat/AiChatToolDefinitions.cs).
-// Chỉ 7 tool BE còn cung cấp (AiChatToolDefinitions.cs, rút gọn 2026-07-30). Nhãn của các tool đã bỏ
-// được xoá khỏi đây luôn để danh sách này không gợi ý sai về năng lực thật của trợ lý.
+// Friendly labels for the BE tool names (AiChatToolDefinitions.cs); keep in sync so labels don't imply
+// capabilities the assistant no longer has.
 const TOOL_LABELS: Record<string, string> = {
     search_devices: "thiết bị",
     get_device_detail: "chi tiết thiết bị",
@@ -41,10 +38,7 @@ const TOOL_LABELS: Record<string, string> = {
     get_ip_prefix_usage: "tình trạng dải IP",
 };
 
-// Mỗi gợi ý phải là việc trợ lý LÀM ĐƯỢC THẬT bằng 7 tool trên, và dùng dữ liệu có thật trong hệ thống
-// (mã máy/dải IP thật) để bấm vào là ra kết quả. Bộ gợi ý cũ đã bị xoá vì hứa những thứ không có tool
-// nào làm được — "đếm thiết bị theo trạng thái" (không có tool thống kê theo trạng thái) và "liệt kê
-// thiết bị theo chi nhánh" (DeviceFilterRequest không có filter chi nhánh), nên bấm vào là thất vọng.
+// Each suggestion must be answerable by the tools above with real data (actual machine codes/IP ranges).
 const SUGGESTIONS = [
     "Dải IP 10.45.1 còn bao nhiêu địa chỉ trống?",
     "IP 10.45.1.20 có dùng được không, đang được máy nào dùng?",
@@ -63,9 +57,7 @@ interface ChatBubble extends AiChatMessageDto {
     deviceRefs?: DeviceRef[];
 }
 
-// Tách riêng khỏi component: React Compiler cấm gọi hàm impure (Date.now) trực tiếp trong thân
-// component/render — đưa ra ngoài thành hàm module-level rồi gọi qua tham chiếu là cách chuẩn đã
-// dùng ở modules/schedule/components/ScheduleBoard.tsx (`makeId`).
+// React Compiler forbids calling impure Date.now in render, so it is wrapped at module level.
 const now = (): number => Date.now();
 
 const formatTime = (timestamp?: number) =>
@@ -88,12 +80,12 @@ export default function AiChatBox() {
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const nextIdRef = useRef(1);
 
-    // Chỉ cuộn xuống đáy — không setState nên dùng effect ở đây là hợp lệ với React Compiler.
+    // Scroll only, no setState — a valid effect under React Compiler.
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, [messages, streamingText, activeTools]);
 
-    // Rời trang giữa lúc đang stream thì hủy request, tránh rò kết nối.
+    // Abort the stream on unmount to avoid leaking the connection.
     useEffect(() => {
         return () => abortRef.current?.abort();
     }, []);
@@ -104,8 +96,7 @@ export default function AiChatBox() {
             return;
         }
 
-        // `history` gửi lên là toàn bộ hội thoại TRƯỚC câu này (BE không lưu gì) — không kèm dòng
-        // "tool" vì BE không hiểu nếu FE gửi ngược lại (xem asset-module.md §4).
+        // BE is stateless, so send the whole prior conversation; "tool" rows are excluded since BE rejects them.
         const history: AiChatMessageDto[] = messages.map(({ role, content }) => ({ role, content }));
         const userBubble: ChatBubble = { id: nextIdRef.current++, role: "user", content: trimmed, timestamp: now() };
 
@@ -149,9 +140,7 @@ export default function AiChatBox() {
                 }
             }
         } catch (error) {
-            // Người dùng bấm "Dừng" cũng rơi vào đây, nhưng đó không phải lỗi để báo.
-            // Lỗi 403 (thiếu permission Asset.AiChat.Use) trả body không có field `message` nên
-            // getApiErrorMessage rơi về fallback — viết fallback bao được cả 2 khả năng.
+            // User "Stop" also lands here and isn't an error. 403 bodies have no `message`, so the fallback must cover it.
             if (!controller.signal.aborted) {
                 failed = true;
                 toast.error(
@@ -164,7 +153,7 @@ export default function AiChatBox() {
         } finally {
             abortRef.current = null;
 
-            // Giữ lại phần đã trả lời dở (nếu có) làm 1 bubble hoàn chỉnh, để lượt sau vẫn có ngữ cảnh.
+            // Keep the partial answer as a bubble so the next turn still has context.
             if (answer.trim()) {
                 setMessages((prev) => [
                     ...prev,
@@ -312,7 +301,6 @@ export default function AiChatBox() {
                         value={input}
                         onChange={(event) => setInput(event.target.value)}
                         onKeyDown={(event) => {
-                            // Enter gửi, Shift+Enter xuống dòng — quen thuộc với người dùng chat.
                             if (event.key === "Enter" && !event.shiftKey) {
                                 event.preventDefault();
                                 void send(input);
@@ -381,9 +369,7 @@ function MessageRow({
             </div>
 
             <div className={`flex min-w-0 max-w-[85%] flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
-                {/* Câu trả lời của AI là markdown → render thành HTML. Tin nhắn người dùng giữ nguyên
-                    text thuần (whitespace-pre-wrap) vì họ gõ tay, đem parse markdown sẽ làm méo nội dung
-                    họ vừa nhập. `min-w-0` để bảng markdown cuộn ngang được trong flex item. */}
+                {/* AI replies are markdown; user text stays plain so their input isn't mangled. `min-w-0` lets tables scroll. */}
                 <div
                     className={`min-w-0 rounded-2xl px-3.5 py-2.5 text-sm shadow-sm ${isUser
                         ? "whitespace-pre-wrap bg-[#fff4f2] text-[#191c1e]"

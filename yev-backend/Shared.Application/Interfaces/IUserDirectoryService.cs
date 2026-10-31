@@ -1,8 +1,6 @@
 namespace Shared.Application.Interfaces
 {
-    // Contract dùng chung để module khác (Attendance...) tra cứu Email/FullName/quyền của 1 UserName
-    // mà KHÔNG cần ProjectReference trực tiếp tới Identity.Application — implementation thật nằm ở
-    // Identity.Application (nơi có quyền truy cập IIdentityUnitOfWork), Scrutor tự nối dây lúc DI.
+    // Lets other modules query Identity users without referencing Identity.Application.
     public interface IUserDirectoryService
     {
         // Recipient address for mail sent by moduleCode (EmailModules): the address the admin routed that
@@ -10,25 +8,11 @@ namespace Shared.Application.Interfaces
         // throwing, so a missing address never blocks the calling business flow.
         Task<(string? Email, string? FullName)> GetContactInfoAsync(string userName, string moduleCode);
 
-        // 1 UserName cụ thể có đang có (effective) permission này không — tính CẢ UserPermissionOverride
-        // (grant/deny riêng từng người), không chỉ permission suy ra từ Role, cùng công thức với JWT claim
-        // (Identity.Infrastructure/Authentication/MyClaimsTransformation.cs). Thay cho IsUserInRoleAsync/
-        // GetUserNamesInRoleAsync (xoá 2026-08-05) — kể từ khi khu vực OT chỉ còn 1 Role trên Identity
-        // (`Quản lý tăng ca`), luật "ai được gán quyền duyệt ở cấp nào" không còn tra được theo tên Role
-        // nữa, phải tra theo permission (xem docs/attendance-module.md).
+        // Effective permission including per-user grant/deny overrides, same rule as the JWT claims.
         Task<bool> UserHasPermissionAsync(string userName, string permissionCode);
 
-        // Đồng bộ permission "tự động cấp theo Chức vụ" cho 1 UserName (2026-08-10 — xem
-        // docs/docs-be/attendance-module.md §Cây chức vụ, mục "Quyền theo Chức vụ"). Gọi mỗi khi
-        // Attendance.EmployeeService lưu 1 Employee mà JobTitleId/UserName đổi, và mỗi khi
-        // JobTitlePermissionService.ReplaceAsync sửa mapping của 1 Chức vụ.
-        //   - userName null/rỗng hoặc không khớp User nào ở Identity → no-op (nhân viên chưa có tài
-        //     khoản đăng nhập để cấp — khi sau này UserName được gán, lần sync tiếp theo sẽ tự cấp,
-        //     không cần thao tác gì thêm).
-        //   - desiredPermissionCodes RỖNG → thu hồi hết mọi permission đang IsAutoGranted=true của
-        //     user đó (dùng khi gỡ Chức vụ, đổi UserName sang người khác, hoặc xoá Employee).
-        //   - Chỉ ghi/xoá các dòng UserPermission có IsAutoGranted=true — KHÔNG BAO GIỜ đụng tới dòng
-        //     Admin cấp tay qua "Tuỳ chỉnh quyền" (IsAutoGranted=false), dù trùng permission.
+        // Only touches IsAutoGranted rows, never Admin's manual overrides. Unknown/empty userName is a no-op
+        // (the next sync after linking grants it); an empty desired set revokes all auto grants.
         Task SyncAutoGrantedPermissionsAsync(string? userName, IReadOnlyCollection<string> desiredPermissionCodes);
 
         // Creates the user with roleName (null = "Basic", like first Windows login); returns true only then.
@@ -42,9 +26,7 @@ namespace Shared.Application.Interfaces
         // Effective moduleCode recipient (routed address, else primary) per UserName; unknown users are left out.
         Task<IReadOnlyDictionary<string, string>> GetModuleEmailsAsync(IReadOnlyCollection<string> userNames, string moduleCode);
 
-        // Read-only check of DOMAIN\user accounts: already in Identity, or active in the directory (WillCreate),
-        // or not eligible. Duplicates are collapsed (case-insensitive); the directory is queried only for
-        // accounts Identity does not know.
+        // Read-only: already in Identity, active in the directory (WillCreate), or not eligible; duplicates collapsed case-insensitively.
         Task<IReadOnlyList<DomainAccountInfo>> ResolveDomainAccountsAsync(IEnumerable<string> accounts);
 
         // Resolve, then create a role-Basic User (FullName from the directory) for every WillCreate account.

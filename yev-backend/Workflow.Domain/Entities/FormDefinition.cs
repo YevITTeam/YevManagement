@@ -2,9 +2,6 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// 1 dòng = 1 loại đơn (workflow-module.md §3.2). Đã có FormFields/FormFieldConditions (Pha 2C) +
-// FormAccesses/publish/clone (Pha 2D). Chưa tạo được WorkflowRequest thật cho tới khi có Pha 3
-// (FormRoutes/FormApprovalSteps).
 public partial class FormDefinition
 {
     public int Id { get; set; }
@@ -35,8 +32,7 @@ public partial class FormDefinition
 
     public string? RouteClassFieldKey { get; set; }
 
-    // HTML render từ file .docx nhập vào, có nhúng <span data-field-key="..."> đánh dấu vị trí field
-    // (workflow-module.md §1.5). NULL = chế độ lưới hiện tại, không đổi hành vi gì.
+    // HTML rendered from an imported .docx with <span data-field-key="..."> placeholders; null = grid mode.
     public string? LayoutHtml { get; set; }
 
     public int CreatedByEmployeeId { get; set; }

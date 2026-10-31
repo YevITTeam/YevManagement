@@ -2,9 +2,7 @@ using System.Collections.Generic;
 
 namespace Attendance.Domain.Entities;
 
-// Reference data for khối chuyền (Chế tạo): Team = giá trị cột "Khu/Team" trong
-// Thong_Tin_Line_Team.xlsx (1/2 cho khối sản xuất trực tiếp; HC/GT A/ab/C cho khối
-// hành chính/hỗ trợ — ý nghĩa 4 giá trị này chưa được xác nhận, xem ProductionLine).
+// "Khu/Team" column of Thong_Tin_Line_Team.xlsx; meaning of the admin/support values is unconfirmed.
 public partial class ProductionTeam
 {
     public int Id { get; set; }

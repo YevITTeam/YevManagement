@@ -23,8 +23,7 @@ interface Props {
     onClose?: () => void;
 }
 
-// get-all-users-with-roles trả toàn bộ user (endpoint này còn dùng chung cho các dropdown chọn
-// nhân sự ở nơi khác nên không đổi sang phân trang BE) — phân trang client-side tại đây.
+// The endpoint returns all users and is shared by other pickers, so paging stays client-side.
 const PAGE_SIZE = 15;
 
 export default function UserRoleModal({ isOpen, onClose }: Props) {
@@ -48,9 +47,8 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [isPrintConfirmOpen, setIsPrintConfirmOpen] = useState(false);
     const [isPrintingLabels, setIsPrintingLabels] = useState(false);
 
-    // /api/LoginQr (tạo/thu hồi/xem nhật ký mã QR đăng nhập app YEV Scan) — 1 permission cho cả nhóm.
+    // One permission covers create/revoke/log of YEV Scan login QR codes.
     const canManageLoginQr = hasPermission(currentUser, "Identity.LoginQr.Manage");
-    // /api/UserEmail — danh sách email + email nhận theo từng module của 1 user.
     const canManageUserEmail = hasPermission(currentUser, "Identity.UserEmail.Manage");
 
     const fetchQrStatuses = useCallback(async () => {
@@ -98,13 +96,10 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
         return () => window.clearTimeout(timer);
     }, [fetchData, isOpen]);
 
-    // POST /api/Auth/update-user-roles yêu cầu permission Identity.User.UpdateRoles (docs/identity-module.md §6).
     const canUpdateUserRoles = hasPermission(currentUser, "Identity.User.UpdateRoles");
-    // POST /api/Auth/create-user yêu cầu permission Identity.User.Create (docs/identity-module.md §6).
     const canCreateUser = hasPermission(currentUser, "Identity.User.Create");
-    // DELETE /api/Auth/delete-user/{userId} — cùng quy ước đặt tên permission với delete-role (Identity.Role.Delete).
     const canDeleteUser = hasPermission(currentUser, "Identity.User.Delete");
-    // PUT /api/Auth/update-user-fullname — CHỈ sửa tên hiển thị, không sửa được userName Windows.
+    // Display name only, never the Windows userName.
     const canUpdateFullName = hasPermission(currentUser, "Identity.User.UpdateFullName");
 
     const filteredUsers = useMemo(() => {
@@ -119,7 +114,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     }, [users, searchTerm]);
 
     const [pageIndex, setPageIndex] = useState(1);
-    // Search/filter đổi → về trang 1 (snapshot so sánh ngay trong render, không dùng effect — frontend-conventions.md §3).
+    // Reset to page 1 on filter change; snapshot compared during render instead of an effect.
     const filtersKey = `${searchTerm}|${roleFilter}`;
     const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
     if (prevFiltersKey !== filtersKey) {

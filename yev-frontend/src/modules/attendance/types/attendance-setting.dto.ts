@@ -1,27 +1,22 @@
-// Cấu hình dùng chung của module Attendance — 1 dòng duy nhất trong DB, xem
-// docs/docs-be/attendance-module.md §API (mới 2026-08-01).
-// Redesign 3 bậc phiếu ăn (2026-08-26, chốt với người dùng — xem docs/attendance-module.md §Phiếu ăn):
-// thực tích < noMealTicketMaxHours -> không phiếu; noMealTicketMaxHours..mainMealTicketMinHours ->
-// Phụ; >= mainMealTicketMinHours -> Chính. Ngoại lệ: ca khớp ĐÚNG khung [earlyMealWindowStartTime,
-// earlyMealWindowEndTime) luôn phiếu Phụ, không trừ mealBreakDeductionHours dù có ăn hay không.
+// Single-row module config. Meal tickets: actual < noMealTicketMaxHours -> none, < mainMealTicketMinHours -> secondary,
+// else main; an exact early-window shift is always secondary with no meal-break deduction.
 export interface AttendanceSettingDto {
-    // Số giờ OT THỰC TÍCH tối thiểu để nhận PHIẾU CHÍNH (mặc định 3.5).
+    // Minimum actual OT hours for a main meal ticket.
     mainMealTicketMinHours: number;
-    // Sàn dưới — thực tích dưới mốc này (mặc định 2) thì không có phiếu ăn nào.
+    // Below this no meal ticket is given.
     noMealTicketMaxHours: number;
-    // Số giờ trừ khi có ăn, áp dụng ngoài khung sớm (mặc định 0.5).
+    // Deducted only when the employee ate, outside the early window.
     mealBreakDeductionHours: number;
-    // TimeOnly "HH:mm:ss" — khung giờ OT sớm đặc cách (mặc định 06:00:00 - 08:00:00).
+    // TimeOnly "HH:mm:ss" bounds of the early OT window.
     earlyMealWindowStartTime: string;
     earlyMealWindowEndTime: string;
-    // Ngày: vượt thì BE CHẶN tạo/sửa đơn. Tháng/năm: vượt (mốc riêng của nhân viên nếu có) thì đơn BẮT BUỘC
-    // là TH3, không chặn.
+    // Daily: BE blocks create/edit when exceeded. Monthly/yearly (per-employee override if any): form must be TH3, not blocked.
     dailyOtHourLimit: number;
     monthlyOtHourLimit: number;
     yearlyOtHourLimit: number;
-    // Giới hạn ngày khi ngày đó là ngày nghỉ theo lịch (mặc định 12).
+    // Daily limit when the day is a calendar holiday.
     dailyOtHourLimitHoliday: number;
-    // TimeOnly "HH:mm:ss" — giờ hằng ngày hệ thống tự gom "Đơn tổng" gửi Trưởng phòng.
+    // TimeOnly "HH:mm:ss" when the daily batch to Managers is assembled.
     batchAutoSendTime: string;
     // Days after completion a Manager-signed office form may still be re-submitted.
     resubmitWindowDays: number;
@@ -29,11 +24,9 @@ export interface AttendanceSettingDto {
     backdateDays: number;
 }
 
-// Body PUT /api/AttendanceSetting — cùng shape với AttendanceSettingDto (không có field server tự tính).
 export type UpdateAttendanceSettingDto = AttendanceSettingDto;
 
-// Body POST /api/AttendanceSetting/test-email (2026-09-05) — gửi 1 email mẫu để tự kiểm tra cấu hình
-// SMTP + hiển thị đúng font/layout, không đụng gì tới AttendanceSettingDto.
+// Sends a sample email to check SMTP and font/layout; doesn't touch the setting.
 export interface SendTestEmailDto {
     email: string;
 }

@@ -19,8 +19,7 @@ const PRIORITY_FILTER_ALL = "all";
 const PRIORITY_FILTER_NONE = "none";
 type PrioritySort = "none" | "asc" | "desc";
 
-// Danh mục phần mềm không phân trang phía BE (grid-list chỉ hỗ trợ keyword),
-// nên tải toàn bộ 1 lần rồi lọc/sắp xếp/phân trang phía FE để lọc theo Ưu tiên đúng trên toàn bộ dữ liệu.
+// BE grid-list has no paging/priority filter, so load all once and filter/sort/page on FE across the full set.
 const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareList({ onLoadingChange }, ref) {
     const [allSoftwares, setAllSoftwares] = useState<SoftwareDto[]>([]);
     const [groups, setGroups] = useState<SoftwareGroupDto[]>([]);

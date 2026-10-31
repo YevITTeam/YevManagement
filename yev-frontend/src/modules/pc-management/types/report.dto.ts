@@ -32,8 +32,7 @@ export interface DeviceReportExpiringItemDto {
     daysRemaining: number;
 }
 
-// GET /Report/device-summary — thống kê cho màn "Báo cáo thiết bị", tính sẵn ở BE (COUNT/GROUP BY)
-// thay vì FE tải nguyên bảng Device rồi tự cộng dồn.
+// Aggregated by BE (COUNT/GROUP BY) instead of FE loading the whole Device table.
 export interface DeviceReportSummaryDto {
     totalCount: number;
     inUseCount: number;

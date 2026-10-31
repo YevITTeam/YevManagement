@@ -16,7 +16,7 @@ export const ProductionApprovalStepApi = {
         );
         return response.data;
     },
-    // steps phải là mảng ĐÃ SẮP XẾP theo đúng thứ tự bước duyệt mong muốn (phần tử đầu = bước 1).
+    // `steps` must be in approval order (first item = step 1).
     replaceByDepartment: async (departmentId: number, steps: ReplaceProductionApprovalStepItem[]) => {
         const response = await api.put<ApiResponse<ProductionApprovalStepDto[]>>(
             ENDPOINTS.PRODUCTION_APPROVAL_STEP.replaceByDepartment(departmentId),

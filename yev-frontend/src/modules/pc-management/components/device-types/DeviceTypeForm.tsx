@@ -16,7 +16,7 @@ export interface DeviceTypeFormValues {
     includedInInventory: boolean;
 }
 
-// Khớp Asset.Domain.Enums.ServerCheckCategory bên BE.
+// Mirrors BE Asset.Domain.Enums.ServerCheckCategory.
 const SERVER_CHECK_CATEGORY_OPTIONS = [
     { value: 0, labelKey: "serverCheckCategoryServer" },
     { value: 1, labelKey: "serverCheckCategoryNetwork" },

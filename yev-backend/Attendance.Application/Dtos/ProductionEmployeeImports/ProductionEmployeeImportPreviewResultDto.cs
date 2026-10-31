@@ -12,8 +12,7 @@ namespace Attendance.Application.Dtos.ProductionEmployeeImports
         public int UpdatedProductionEmployeeCount { get; set; }
         public int UnchangedProductionEmployeeCount { get; set; }
 
-        // Người đang có trong ProductionEmployees nhưng file mới không còn nhắc tới — sẽ bị gỡ (soft-delete)
-        // nếu Confirm ngay bây giờ.
+        // Existing ProductionEmployees absent from the new file; Confirm soft-deletes them.
         public int RemovedProductionEmployeeCount { get; set; }
         public List<ProductionEmployeeRemovedRowDto> RemovedRows { get; set; } = new();
     }

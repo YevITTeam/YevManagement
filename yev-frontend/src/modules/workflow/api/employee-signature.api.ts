@@ -20,13 +20,12 @@ export const EmployeeSignatureApi = {
         const response = await api.get<ApiResponse<EmployeeSignatureDto>>(ENDPOINTS.EMPLOYEE_SIGNATURE.getMine);
         return response.data;
     },
-    // KHÔNG áp dụng chữ ký ngay — chỉ gửi email xác nhận, data=true là đã gửi mail thành công, chữ ký
-    // thật sự đổi sau khi tự bấm xác nhận qua confirmSignature().
+    // Does not apply the signature: only emails a confirmation link; it changes after confirmSignature().
     upsertMine: async (data: UpsertEmployeeSignatureDto) => {
         const response = await api.put<ApiResponse<boolean>>(ENDPOINTS.EMPLOYEE_SIGNATURE.upsertMine, data);
         return response.data;
     },
-    // Public, [AllowAnonymous] — trang "Xác nhận cập nhật chữ ký" mở qua link email.
+    // Anonymous: opened from the email link.
     getSignatureConfirmation: async (token: string) => {
         const response = await api.get<ApiResponse<SignatureConfirmationPreviewDto>>(ENDPOINTS.EMPLOYEE_SIGNATURE.confirmGet(token));
         return response.data;

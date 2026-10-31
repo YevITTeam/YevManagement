@@ -22,10 +22,7 @@ interface EmployeeIdentityLinkImportDialogProps {
     exportFilter: EmployeeExportFilter;
 }
 
-// Import Excel hàng loạt liên kết Employee ↔ User Identity + tự tạo tài khoản nếu chưa có + gán chữ ký
-// — Admin-only (2026-09-03). Pattern Preview → Confirm giống EmployeeImportDialog, NHƯNG Confirm gửi
-// lại NGUYÊN file (không phải rows) — mỗi dòng có thể kèm 1 ảnh chữ ký nhúng, không tiện round-trip
-// qua JSON. `file` giữ nguyên trong state nên Confirm tái dùng đúng File object đã Preview.
+// Confirm re-sends the original File (kept in state), not rows, because rows may embed signature images.
 export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onImported, exportFilter }: EmployeeIdentityLinkImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const [file, setFile] = useState<File | null>(null);

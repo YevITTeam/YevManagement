@@ -14,7 +14,7 @@ const ENDPOINTS = {
 } as const;
 
 export const DeviceLiquidationImportApi = {
-  // multipart/form-data — field file tên "file". Chỉ đọc, không ghi DB.
+  // Preview only, no DB writes; multipart field name is "file".
   previewImport: async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -26,7 +26,7 @@ export const DeviceLiquidationImportApi = {
     return response.data;
   },
 
-  // Gửi lại đúng field thô của "rows" nhận từ preview — server tự resolve lại từ đầu, ghi DB thật.
+  // Send the raw preview rows back; the server re-resolves everything before writing.
   confirmImport: async (rows: DeviceLiquidationImportRowDto[]) => {
     const response = await api.post<ApiResponse<DeviceLiquidationImportConfirmResultDto>>(
       ENDPOINTS.DEVICE_LIQUIDATION_IMPORT.confirm,

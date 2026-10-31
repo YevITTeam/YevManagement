@@ -6,8 +6,7 @@ using Workflow.Application.Interfaces.Service;
 
 namespace Workflow.Api.Controllers
 {
-    // Cấu hình module, luôn 1 dòng (workflow-module.md §3.4 WorkflowSettings) — chỉ Get/Update, không
-    // Create/Delete. Permission Workflow.Setting.Manage (§7).
+    // Single-row settings: Get/Update only.
     public class WorkflowSettingController : WorkflowBaseController
     {
         private readonly IWorkflowSettingService _workflowSettingService;

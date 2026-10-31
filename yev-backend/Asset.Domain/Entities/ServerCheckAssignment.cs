@@ -1,9 +1,7 @@
 namespace Asset.Domain.Entities;
 
-// Which Branch (xưởng) a user is responsible for scanning in the daily server check
-// (asset-module.md §1.21). 1 user = exactly 1 Branch (UserId unique) — the scan flow resolves the
-// branch from this row instead of letting the user pick one, so a wrong-branch scan is impossible.
-// UserId is Identity.Users.Id (different DB, so no FK); UserName/FullName are display snapshots.
+// 1 user = 1 Branch so the scan flow resolves it instead of letting users pick one.
+// UserId is Identity.Users.Id (other DB, no FK); names are display snapshots.
 public partial class ServerCheckAssignment
 {
     public int Id { get; set; }

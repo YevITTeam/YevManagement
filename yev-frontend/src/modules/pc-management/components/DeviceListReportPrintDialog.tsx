@@ -33,8 +33,7 @@ function formatDate(value: string | null) {
     return new Date(value).toLocaleDateString("vi-VN");
 }
 
-// Font mặc định của jsPDF (Helvetica) không có dấu tiếng Việt — phải nhúng font Roboto
-// (hỗ trợ Unicode Latin Extended/Vietnamese) qua VFS thì chữ có dấu mới hiển thị đúng trong PDF.
+// jsPDF's default Helvetica lacks Vietnamese glyphs, so Roboto is embedded via VFS.
 function registerVietnameseFont(doc: jsPDF) {
     doc.addFileToVFS("Roboto-Regular.ttf", ROBOTO_REGULAR_BASE64);
     doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
@@ -104,7 +103,7 @@ export default function DeviceListReportPrintDialog({ isOpen, onClose }: DeviceL
     const [branchId, setBranchId] = useState<string>("");
     const [departmentId, setDepartmentId] = useState<string>("");
     const [groupId, setGroupId] = useState<string>("");
-    // "" = both statuses, "0" = Chưa sử dụng, "1" = Đang sử dụng.
+    // "" = both statuses, "0" = unused, "1" = in use.
     const [status, setStatus] = useState<string>("");
     const [isLoading, setIsLoading] = useState(false);
     const [isExportingExcel, setIsExportingExcel] = useState(false);

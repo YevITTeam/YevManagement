@@ -18,7 +18,7 @@ const fieldClassName =
 
 const emptyFilters = { keyword: "", fromDate: "", toDate: "", connectedNowOnly: false };
 
-// docs/docs-be/asset-module.md §1.24 — các PC có hoạt động USB; bấm vào 1 máy để xem log USB của máy đó.
+// PCs with USB activity.
 export default function UsbMachineList() {
     const router = useRouter();
     const [rows, setRows] = useState<UsbMachineDto[]>([]);

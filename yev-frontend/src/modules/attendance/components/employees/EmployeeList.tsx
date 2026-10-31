@@ -63,10 +63,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const canUpdateOtLimit = hasPermission(user, "Attendance.Employee.UpdateOtLimit");
     const canUpdateAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Update");
     const canCreateEmployee = hasPermission(user, "Attendance.Employee.Create");
-    // Chế độ "Nhân viên dưới chuyền" chỉ hiện với người được Admin cấp quyền xem riêng (2026-09-26).
     const canViewProduction = hasPermission(user, "Attendance.ProductionEmployee.View");
-    // Import liên kết Identity ↔ Attendance + tự tạo tài khoản + chữ ký (2026-09-03) — permission riêng
-    // CHỈ Admin có sẵn (không auto-grant qua JobTitle/Coordinator), xem docs/docs-be/attendance-module.md.
+    // Admin-only permission, never auto-granted via JobTitle/Coordinator.
     const canImportIdentityLink = hasPermission(user, "Identity.User.BulkImport");
     const isAdmin = Boolean(user?.roles.includes("Admin"));
     const [signatureEmployee, setSignatureEmployee] = useState<EmployeeDto | null>(null);
@@ -75,8 +73,6 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
 
-    // Lọc theo Phòng ban/Bộ phận — giúp Admin dễ tìm đúng nhóm nhân viên cần gán Chức vụ (docs
-    // §Cây chức vụ). Bộ phận cascading theo Phòng ban đã chọn, giống pattern OtCaseForm/GroupForm.
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [departmentId, setDepartmentId] = useState<number | "">("");
@@ -84,10 +80,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [workshopId, setWorkshopId] = useState<number | "">("");
     const [groupId, setGroupId] = useState<number | "">("");
 
-    // Phạm vi xem của người gọi (2026-09-03, xem EmployeeService.GetMyScopeAsync) — non-Admin không
-    // phải Trưởng Xưởng/Giám đốc chỉ được thu hẹp dropdown lọc đúng phần họ thật sự xem được, tránh
-    // hiện toàn bộ Phòng ban/Nhóm công ty rồi chọn ra bảng rỗng không rõ lý do (BE đã tự scope
-    // GetPagedAsync/GetAllActiveAsync từ trước — đây chỉ là UX, không phải lớp chặn bảo mật).
+    // UX only: narrows the filter dropdowns to what the caller can see (BE already scopes the data),
+    // avoiding unexplained empty tables.
     const [scope, setScope] = useState<EmployeeScopeDto | null>(null);
     const isScopeRestricted = scope !== null && !scope.companyWide;
     const showDepartmentFilter = scope === null || scope.companyWide || scope.departments.length > 0;
@@ -106,11 +100,9 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [deletingEmployee, setDeletingEmployee] = useState<EmployeeDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    // Xem lịch sử lũy kế theo tháng/năm (2026-08-11d) — modal dùng chung, xem AccumulationHistoryModal.tsx.
     const [historyEmployee, setHistoryEmployee] = useState<EmployeeDto | null>(null);
 
-    // Sửa RIÊNG giới hạn OT (2026-08-29) — permission hẹp Attendance.Employee.UpdateOtLimit, dành cho
-    // Người phụ trách Bộ phận không có Attendance.Employee.Update, xem EmployeeOtLimitDialog.tsx.
+    // Narrow Attendance.Employee.UpdateOtLimit permission for coordinators without Employee.Update.
     const [otLimitEmployee, setOtLimitEmployee] = useState<EmployeeDto | null>(null);
 
     const [importOpen, setImportOpen] = useState(false);
@@ -119,12 +111,9 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [otHourLimitImportOpen, setOtHourLimitImportOpen] = useState(false);
     const [monthlyAccumulationImportOpen, setMonthlyAccumulationImportOpen] = useState(false);
     const [isExportingProduction, setIsExportingProduction] = useState(false);
-    // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
     const { setting } = useAttendanceSetting();
 
-    // "Nhân viên" (bảng Employees) <-> "Nhân viên dưới chuyền" (bảng ProductionEmployees, đọc-only) —
-    // 2 view tách riêng trong cùng 1 tab, mỗi view có bộ lọc + thao tác Excel riêng (2026-08-27, theo
-    // yêu cầu người dùng — trước đó dồn hết nút vào 1 hàng gây rối UI).
+    // Employees vs. read-only ProductionEmployees, each view with its own filters and Excel actions.
     const [viewMode, setViewMode] = useState<ViewMode>("employee");
     const productionListRef = useRef<ProductionEmployeeListHandle>(null);
 
@@ -134,9 +123,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
             .catch((err) => console.error(err));
     }, []);
 
-    // Chờ biết phạm vi trước khi tải dropdown — tránh chớp hiện đủ Phòng ban/Nhóm công ty rồi mới rút
-    // gọn lại. Bị giới hạn thì dùng THẲNG danh sách BE đã trả sẵn trong `scope` (2026-09-28 — trước đó
-    // chỉ tải Nhóm CON của 1 Phòng ban duy nhất, không đúng khi phạm vi gồm NHIỀU Phòng ban/Nhóm).
+    // Wait for the scope before loading dropdowns to avoid flashing the full company list; when restricted,
+    // use BE's `scope` lists since the scope may span several departments/groups.
     useEffect(() => {
         if (scope === null) return;
         if (scope.companyWide) {
@@ -155,8 +143,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         setGroupId("");
         setPageIndex(1);
         if (isScopeRestricted) {
-            // Phạm vi đã cố định sẵn trong `scope.groups` (gồm đủ Nhóm của MỌI Phòng ban trong phạm
-            // vi) — chỉ cần lọc lại theo Phòng ban vừa chọn/bỏ chọn, không cần gọi thêm API.
+            // `scope.groups` already covers every department in scope, so filter locally instead of calling the API.
             setGroups(typeof nextId === "number" ? scope!.groups.filter((g) => g.departmentId === nextId) : scope!.groups);
             return;
         }
@@ -329,12 +316,10 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         }
     };
 
-    // Người phụ trách Bộ phận (không phải Admin) có thể chỉ giữ 1-2 trong 3 quyền này — lọc đúng theo
-    // permission thật sự có, tránh hiện nút bấm vào sẽ 403 (2026-08-29).
+    // Coordinators may hold only some of these permissions; hide actions that would 403.
     const canImportProduction = hasPermission(user, "Attendance.ProductionEmployee.Import");
     const canExportProduction = hasPermission(user, "Attendance.ProductionEmployee.Export");
-    // Import lũy kế OT theo THÁNG, tổng quát cho MỌI Phòng ban (2026-09-03) — dùng lại đúng permission
-    // đã tự động cấp cho Người phụ trách Bộ phận từ trước, không phải permission mới.
+    // Applies to every department; this permission is auto-granted to department coordinators.
     const canImportMonthlyAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Import");
     const productionExcelItems = [
         ...(canImportProduction
@@ -363,17 +348,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
               ]
             : []),
     ];
-    // Không còn mục nào được phép → ẩn hẳn nút Excel thay vì hiện menu rỗng.
+    // Nothing permitted → hide the Excel button rather than show an empty menu.
     const productionExcelActions =
         productionExcelItems.length > 0 ? (
             <ActionMenu label={t("excelActionsLabel")} icon={<FileSpreadsheet className="h-3.5 w-3.5" />} items={productionExcelItems} />
         ) : null;
 
-    // Gom "Import Excel" + "Liên kết tài khoản đăng nhập" + "Áp dụng lũy kế OT theo tháng" vào 1 menu
-    // (mirror productionExcelActions ở trên) thay vì nhiều nút rời — giảm số nút tràn hàng trên toolbar
-    // view "Nhân viên" (2026-09-04, theo yêu cầu người dùng "làm lại giao diện cho đẹp lại"). Mục lũy kế
-    // trước đó CHỈ có ở menu Excel của tab "Nhân viên dưới chuyền" dù BE đã tổng quát cho mọi Phòng ban
-    // (kể cả văn phòng) — thiếu sót phát hiện khi người dùng hỏi lại, bổ sung nốt ở đây.
     const exportFilter: EmployeeExportFilter = {
         keyword: appliedKeyword || undefined,
         departmentId: departmentId || undefined,
@@ -405,8 +385,6 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
             <ActionMenu label={t("excelActionsLabel")} icon={<FileSpreadsheet className="h-3.5 w-3.5" />} items={employeeExcelItems} />
         ) : null;
 
-    // Công tắc Nhân viên / Nhân viên dưới chuyền — đặt ngay đầu thanh công cụ của từng bảng (trước là 1 hàng
-    // riêng phía trên) để bớt 1 hàng, nhường chỗ cho bảng.
     const effectiveViewMode: ViewMode = canViewProduction ? viewMode : "employee";
     const viewModeSwitch = !canViewProduction ? null : (
         <div className="inline-flex h-9 shrink-0 items-center rounded-lg border border-[#e0e3e5] bg-white p-0.5">

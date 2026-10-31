@@ -55,10 +55,8 @@ export default function RouteCard({
 
     const addStep = () => onChange({ steps: [...route.steps, createDefaultStep(t("stepDefaultName", { order: route.steps.length + 1 }))] });
 
-    // Trợ giúp — KHÔNG thay cho luật chặn lưu ở BE (workflow-module.md §5.x): tự điền sẵn 1 bước
-    // Fixed cho MỖI đơn vị tổ tiên từ "Từ đơn vị" lên "Đến đơn vị" theo đúng cây tổ chức thật (đi
-    // ngược ParentId qua orgUnitsById), lấy chức danh gợi ý đầu tiên của từng cấp làm mặc định — người
-    // dùng vẫn sửa/xoá tự do trước khi Lưu, giữ đúng tinh thần "gợi ý không ép".
+    // Helper only, BE still validates: adds a Fixed step per ancestor unit from "from" to "to" via orgUnitsById,
+    // defaulting to each level's first suggested job title; the user can still edit before saving.
     const autoFillChain = async () => {
         if (autoFillFromId === "" || autoFillToId === "") return;
 

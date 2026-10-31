@@ -57,7 +57,7 @@ Hợp đồng API (route, quyền, luật đặc biệt) nằm ở mục `§API`
 - **Cấm** đổi connection string DB (Asset production thật là `YevPCManagement_Production`; local trỏ `YevPCManagement` là cố ý).
 - **Cấm** "dọn" nhánh phase trong `next.config.ts` (chỉ bật `output: "export"` khi build, bật ở dev sẽ lỗi middleware).
 - **Cấm** phá cơ chế auto re-login 401 trong `src/lib/client.ts`; không gọi lại `windows-login` khi còn token (dùng `GET /api/Auth/me`).
-- Xuất PDF mới vẽ thẳng bằng `jspdf`, không `html2canvas`. Không viết lại hướng dẫn người dùng cuối vào `docs/` nếu không được yêu cầu.
+- Xuất PDF mới vẽ thẳng bằng `jspdf` (riêng phiếu tăng ca: mẫu HTML → `pdfmake`, xem `attendance-otform-pdf-mapping.md`), không `html2canvas`. Không viết lại hướng dẫn người dùng cuối vào `docs/` nếu không được yêu cầu.
 
 ## 3b. Ponytail
 Ponytail `full` là mặc định khi viết code; kiến trúc lõi (§3, `architecture-core.md`) và luật 2 thắng. Quy trình một việc: `/yev-task` → code → `/yev-done` (checklist §4 + `/yev-docs-sync` + commit). Mỗi session Claude một worktree/nhánh riêng; không `git add -A`, chỉ stage đúng file của mình.

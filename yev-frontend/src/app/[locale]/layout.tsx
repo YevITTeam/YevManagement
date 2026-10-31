@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google"; // Dùng font Inter cho đẹp
+import { Inter } from "next/font/google";
 import { hasLocale } from "next-intl";
 import { NextIntlClientProvider } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
@@ -40,15 +40,8 @@ export default async function RootLayout({
 
   return (
     <html lang={locale}>
-      {/* Khung chiều cao của TOÀN App nằm ở đây và CHỈ ở đây: body cao đúng 1 màn hình, Header chiếm
-          phần của nó, <main> ăn hết phần còn lại và là vùng cuộn DUY NHẤT của app.
-          - `h-screen` + `overflow-hidden` ở body: chặn document tự cuộn. Trước đây body dùng
-            `min-h-screen` (không chặn) trong khi layout con lại khai `100vh`, làm tổng chiều cao trang
-            thành 100vh + chiều cao Header → document sinh thêm 1 thanh cuộn nữa, chồng lên thanh cuộn
-            của layout con → 2 thanh cuộn lệch nhau, nội dung bị cắt/che (lỗi thật người dùng gặp).
-          - `min-h-0` ở <main>: flex item mặc định `min-height:auto` nên không chịu co theo cha.
-          Layout con (pc-manager/ot-manager) TUYỆT ĐỐI không được tự khai `h-screen`/`max-h-screen` hay
-          tự mở thêm `overflow-y-auto` nữa — chỉ dùng `min-h-full`. Xem DESIGN_SYSTEM.md §3. */}
+      {/* The app's only height frame and scroll container: body is h-screen + overflow-hidden, <main> scrolls (min-h-0).
+          Child layouts must not declare h-screen or their own overflow-y-auto, only min-h-full (DESIGN_SYSTEM.md §3). */}
       <body className={`${inter.className} bg-gray-50 flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible`}>
         <NextIntlClientProvider>
           <AuthProvider>

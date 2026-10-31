@@ -19,7 +19,7 @@ const ENDPOINTS = {
 } as const;
 
 export const PermissionApi = {
-    // Nhóm 2 cấp Module > Entity (docs/identity-module.md §6, đổi 2026-07-11) — dùng để dựng UI dạng cây.
+    // Grouped Module > Entity for the tree UI.
     getAll: async () => {
         const response = await api.get<ApiResponse<PermissionModuleGroupDto[]>>(ENDPOINTS.PERMISSION.getAll);
         return response.data;
@@ -28,23 +28,23 @@ export const PermissionApi = {
         const response = await api.get<ApiResponse<PermissionDto[]>>(ENDPOINTS.PERMISSION.getByRole(roleId));
         return response.data;
     },
-    // body là mảng Id permission sau cùng (giống cơ chế update-user-roles) — gửi thiếu 1 Id cũ nghĩa là gỡ quyền đó.
+    // body is the final Id list; omitting an existing Id revokes it.
     updateRolePermissions: async (roleId: number, permissionIds: number[]) => {
         const response = await api.put<ApiResponse<null>>(ENDPOINTS.PERMISSION.updateRolePermissions(roleId), permissionIds);
         return response.data;
     },
 
-    // Override (grant/deny) riêng đang áp dụng cho 1 user, đè lên permission suy ra từ Role — docs/identity-module.md §6
+    // Per-user grant/deny overrides on top of role permissions.
     getUserOverrides: async (userId: number) => {
         const response = await api.get<ApiResponse<UserPermissionOverrideDto[]>>(ENDPOINTS.PERMISSION.getUserOverrides(userId));
         return response.data;
     },
-    // Permission hiệu lực cuối cùng của user (đã cộng/trừ override) — dùng để preview/audit, cùng shape GET /all.
+    // Effective permissions after overrides, same shape as GET /all.
     getUserEffective: async (userId: number) => {
         const response = await api.get<ApiResponse<PermissionDto[]>>(ENDPOINTS.PERMISSION.getUserEffective(userId));
         return response.data;
     },
-    // body là TOÀN BỘ override sau cùng (thay thế hết override cũ, giống cơ chế PUT /role/{roleId}).
+    // body replaces all existing overrides.
     updateUserOverrides: async (userId: number, overrides: UpdateUserPermissionOverridesDto) => {
         const response = await api.put<ApiResponse<null>>(ENDPOINTS.PERMISSION.updateUserOverrides(userId), overrides);
         return response.data;

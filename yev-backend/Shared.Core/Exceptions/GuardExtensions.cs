@@ -37,10 +37,10 @@ namespace Shared.Core.Exceptions
         /// letter casing would match itself and be reported as a duplicate.
         /// </remarks>
         /// <param name="existing">The conflicting row, or null when the code is free.</param>
-        /// <param name="codeLabel">Vietnamese label of the code, e.g. "Mã chi nhánh".</param>
+        /// <param name="codeLabel">User-facing label of the code (shown in the message).</param>
         /// <param name="code">The requested code, echoed back in the message.</param>
         /// <param name="isSoftDeleted">Reads the IsDeleted flag off the conflicting row.</param>
-        /// <param name="scopeSuffix">Optional trailing clause, e.g. " trong bộ phận 'Kho'".</param>
+        /// <param name="scopeSuffix">Optional trailing clause appended to the message, e.g. a parent-scope qualifier.</param>
         public static void ThrowIfDuplicateCode<T>(
             this T? existing,
             string codeLabel,

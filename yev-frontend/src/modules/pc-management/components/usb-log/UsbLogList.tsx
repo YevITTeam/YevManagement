@@ -19,12 +19,12 @@ const fieldClassName =
 const emptyFilters = { keyword: "", fromDate: "", toDate: "", unpermittedOnly: false };
 
 interface UsbLogListProps {
-    // Có deviceId hoặc machineName = chỉ phiên của máy đó (tab chi tiết thiết bị / trang chi tiết máy), không thanh lọc.
+    // With deviceId or machineName, only that machine's sessions are shown and the filter bar is hidden.
     deviceId?: number;
     machineName?: string;
 }
 
-// docs/docs-be/asset-module.md §1.24 — phiên cắm USB trên PC (agent gửi về). Bấm "Xem" để mở các thao tác file.
+// USB plug-in sessions reported by the PC agent.
 export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
     const [rows, setRows] = useState<UsbSessionDto[]>([]);
     const [expandedId, setExpandedId] = useState<string | null>(null);

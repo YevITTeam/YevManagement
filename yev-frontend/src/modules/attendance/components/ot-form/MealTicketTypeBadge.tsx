@@ -1,9 +1,7 @@
 import { MEAL_TICKET_MAIN, MEAL_TICKET_SECONDARY } from "@/modules/attendance/lib/mealTicket";
 
-// Badge "Loại phiếu ăn" dùng chung cho các màn CHỈ XEM đơn đã lưu (OtFormDetail/OtFormBatchDetail/
-// OtFormEmailConfirmPage) — đọc thẳng OtFormEmployeeDto.mealTicketType do BE tính sẵn, khác
-// CreateOtFormPage.tsx (có bản riêng tự tính preview lúc đơn chưa lưu). `t` nhận cả useTranslations()
-// lẫn createBilingualTranslator() vì cùng namespace "Attendance.OtFormDetail".
+// Read-only screens show the BE-computed mealTicketType; CreateOtFormPage has its own preview logic.
+// `t` accepts both useTranslations() and createBilingualTranslator() (same "Attendance.OtFormDetail" namespace).
 export function MealTicketTypeBadge({ type, t }: { type: number; t: (key: string) => string }) {
     if (type === MEAL_TICKET_MAIN) {
         return (

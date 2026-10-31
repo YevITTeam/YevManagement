@@ -1,5 +1,4 @@
-// Schema theo docs/docs-be/asset-module.md §1.24 — nhật ký USB do agent trên PC gửi về, FE chỉ đọc.
-// Mỗi PC có hoạt động USB (gom theo tên máy; deviceId null = tên máy chưa khớp thiết bị nào).
+// Read-only USB log sent by the PC agent, grouped by machine name; deviceId null = name matches no device.
 export interface UsbMachineDto {
     machineName: string;
     deviceId: number | null;
@@ -28,7 +27,7 @@ export interface UsbSessionDto {
     volumeLabel: string | null;
     connectedAt: string;
     disconnectedAt: string | null;
-    // false = máy chưa được cấp phép lúc cắm (BE đã tự bật IsUseUsb); null = tên máy không khớp thiết bị nào.
+    // false = not permitted at plug-in time (BE then enabled IsUseUsb); null = machine name matches no device.
     wasPermitted: boolean | null;
     fileEventCount: number;
 }

@@ -1,7 +1,6 @@
 namespace Attendance.Application.Dtos.OtForms
 {
-    // 1 ngày trong lịch mini ở màn Duyệt hàng loạt (2026-09-04) — xem
-    // IOtFormService.GetPendingApprovalDatesAsync.
+    // One day in the batch-approval mini calendar.
     public class PendingApprovalDateCountDto
     {
         public DateOnly Date { get; set; }

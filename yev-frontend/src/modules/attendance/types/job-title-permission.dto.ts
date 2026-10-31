@@ -1,6 +1,4 @@
-// Mapping Chức vụ -> permission Identity tự động cấp cho người giữ Chức vụ đó (2026-08-10) — xem
-// docs/docs-be/attendance-module.md §API §JobTitlePermission. Chỉ chứa permission thuộc nhóm "tham gia
-// quy trình" (GET /JobTitlePermission/allowed-codes trả đúng danh sách được phép chọn).
+// Identity permissions auto-granted to holders of a job title; only codes from GET /JobTitlePermission/allowed-codes are allowed.
 export interface JobTitlePermissionDto {
     id: number;
     jobTitleId: number;

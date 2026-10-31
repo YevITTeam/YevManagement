@@ -46,9 +46,7 @@ const formatDateTime = (value: string | null) =>
 
 const location = (item: InventorySessionItemDto) => [item.groupName, item.departmentName].filter(Boolean).join(" / ");
 
-// Font mặc định của jsPDF (Helvetica) không có dấu tiếng Việt — nhúng font Roboto qua VFS, dùng chung
-// file với ProductionOtReportPanel.tsx/DeviceListReportPrintDialog.tsx (frontend-conventions.md §5: PDF mới phải
-// vẽ thẳng bằng jspdf, không chụp DOM).
+// jsPDF's default Helvetica lacks Vietnamese glyphs, so Roboto is embedded via VFS (same file as other PDF exports).
 function registerVietnameseFont(doc: jsPDF) {
     doc.addFileToVFS("Roboto-Regular.ttf", ROBOTO_REGULAR_BASE64);
     doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
@@ -97,9 +95,7 @@ function buildReportPdf(session: InventorySessionDto, items: InventorySessionIte
     doc.save(`KiemKeThietBi_${(session.branchName ?? "").replace(/\s+/g, "")}_${session.startedAt.slice(0, 10).replace(/-/g, "")}.pdf`);
 }
 
-// Không dùng thẳng `item.statusText` từ BE ("Đã tìm thấy" — hơi dài, xuống dòng trong badge hẹp) —
-// FE tự đặt nhãn ngắn hơn, khớp với chữ đã dùng ở ô lọc trạng thái phía trên ("Đã kiểm"/"Chưa
-// kiểm"/"Thiếu") để đồng bộ toàn trang (yêu cầu người dùng 2026-09-28).
+// BE statusText is too long for the narrow badge; use the same short labels as the status filter above.
 function StatusBadge({ item, label }: { item: InventorySessionItemDto; label: string }) {
     const style =
         item.status === 1
@@ -137,7 +133,7 @@ export default function InventoryReportPage() {
         (message) => toast.error(message)
     );
 
-    // Tự chọn phiên mới nhất mỗi khi đổi bộ lọc xưởng — chọn phiên cụ thể khác thì dùng SessionPickerField.
+    // Auto-picks the latest session on branch filter change; SessionPickerField picks a specific one.
     useFetchEffect(
         () => InventoryApi.getPageNation({ pageIndex: 1, pageSize: 1, branchId: branchId ?? undefined }),
         [branchId],
@@ -154,8 +150,7 @@ export default function InventoryReportPage() {
         (message) => toast.error(message)
     );
 
-    // Optimistic: điền ngay dữ liệu tóm tắt từ dòng vừa chọn trong panel (đã có sẵn từ grid-list) để ô
-    // hiển thị không bị trễ trong lúc chờ GET /{id} trả đủ items.
+    // Optimistic: show the summary from the picked row while GET /{id} loads the items.
     const handleSelectSession = (picked: InventorySessionDto) => {
         setSession(picked);
         setSessionId(picked.id);
@@ -380,8 +375,7 @@ export default function InventoryReportPage() {
     );
 }
 
-// Trạng thái "Đã hoàn thành" cần nổi bật hơn hẳn "Đang thực hiện" (yêu cầu người dùng 2026-09-28) —
-// nền xanh đặc + icon thay vì chữ chìm trong ngoặc.
+// Completed must stand out clearly from In progress: solid green with an icon.
 function SessionStatusBadge({ status, statusText }: { status: number; statusText: string }) {
     if (status === 1) {
         return (
@@ -397,10 +391,8 @@ function SessionStatusBadge({ status, statusText }: { status: number; statusText
     );
 }
 
-// Panel thả xuống có phân trang + lọc theo khoảng ngày để chọn phiên kiểm kê — thay cho ô select phẳng
-// cũ (tải cứng 50 phiên gần nhất), vì số phiên sẽ tăng dần theo thời gian (yêu cầu người dùng
-// 2026-09-28). Gọi lại đúng `InventoryApi.getPageNation` (grid-list, hỗ trợ sẵn fromDate/toDate) mỗi
-// khi mở panel hoặc đổi trang/khoảng ngày.
+// Paged, date-filtered picker because sessions keep accumulating; reuses InventoryApi.getPageNation
+// on open and on page/date change.
 function SessionPickerField({
     branchId,
     value,
@@ -645,8 +637,7 @@ function IconSelect({
     );
 }
 
-// Chấm màu theo đúng màu của StatusBadge trong bảng (item.status: 1=Found xanh, 2=Missing đỏ,
-// còn lại xám) — tự dựng thay cho <select> gốc vì danh sách <option> của trình duyệt không style được.
+// Dots match StatusBadge colors; custom-built because native <option> elements can't be styled.
 const statusFilterDotClassName: Record<StatusFilter, string> = {
     all: "bg-[#8a8f94]",
     found: "bg-[#1a7f37]",

@@ -15,12 +15,12 @@ export const ServerCheckAssignmentApi = {
         const response = await api.get<ApiResponse<ServerCheckAssignmentDto[]>>(ENDPOINTS.ASSIGNMENT.base);
         return response.data;
     },
-    // Xưởng của chính user đang đăng nhập; data = null nếu chưa được phân công.
+    // null if the current user has no assignment.
     getMine: async () => {
         const response = await api.get<ApiResponse<ServerCheckAssignmentDto | null>>(ENDPOINTS.ASSIGNMENT.me);
         return response.data;
     },
-    // Upsert theo userId — đổi xưởng nếu user đã có phân công.
+    // Upsert by userId; replaces the existing branch.
     save: async (request: SaveServerCheckAssignmentDto) => {
         const response = await api.put<ApiResponse<ServerCheckAssignmentDto>>(ENDPOINTS.ASSIGNMENT.base, request);
         return response.data;

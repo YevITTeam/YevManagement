@@ -15,8 +15,7 @@ namespace Attendance.Api.Controllers
             _productionEmployeeExportService = productionEmployeeExportService;
         }
 
-        // Trả file .xlsx trực tiếp, KHÔNG bọc ApiResponse<T> — cùng lý do
-        // DeviceConfigurationImportController.GetMissingDevicesReport (body là file nhị phân).
+        // Returns the .xlsx directly, not ApiResponse<T>.
         [RequirePermission("Attendance.ProductionEmployee.Export")]
         [HttpGet("export")]
         public async Task<IActionResult> Export()

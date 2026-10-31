@@ -5,8 +5,7 @@ using Workflow.Application.Interfaces.Service;
 
 namespace Workflow.Application.Services
 {
-    // WorkflowSettings luôn đúng 1 dòng, Id = 1, seed sẵn trong migration (workflow-module.md §3.4) —
-    // Service không có Create/Delete, chỉ Get/Update dòng duy nhất đó.
+    // Exactly one row (Id = 1) seeded by migration, so only Get/Update.
     public class WorkflowSettingService : BaseService<IWorkflowUnitOfWork>, IWorkflowSettingService
     {
         private const int SettingsId = 1;

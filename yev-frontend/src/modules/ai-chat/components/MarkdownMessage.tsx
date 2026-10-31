@@ -3,16 +3,8 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-// Render câu trả lời của AI (markdown) thành HTML.
-//
-// - `react-markdown` KHÔNG render raw HTML nếu không cài thêm `rehype-raw` — cố ý không cài, vì nội
-//   dung ở đây do model sinh ra, cho phép HTML thô là mở đường cho XSS.
-// - `remark-gfm` để có bảng, checklist, ~~gạch ngang~~, autolink — AI hay trả lời dạng bảng khi liệt
-//   kê thiết bị/IP.
-// - Tailwind v4 preflight reset sạch style của h1/ul/table..., và dự án KHÔNG cài
-//   @tailwindcss/typography, nên phải tự khai báo class cho từng thẻ ở `components` bên dưới.
-// - Markdown đang stream dở (chưa đóng ```, bảng thiếu dòng) vẫn render được — react-markdown parse
-//   lại toàn bộ chuỗi mỗi lần text đổi nên không cần xử lý gì thêm.
+// No rehype-raw on purpose: content is model-generated, raw HTML would open XSS.
+// Tailwind preflight resets tags and typography plugin isn't installed, so each tag is styled below.
 export default function MarkdownMessage({ content }: { content: string }) {
     return (
         <ReactMarkdown
@@ -48,8 +40,7 @@ export default function MarkdownMessage({ content }: { content: string }) {
                     </a>
                 ),
 
-                // Bảng dễ tràn ngang trong bubble hẹp → cho cuộn ngang trong chính nó,
-                // không để đẩy vỡ layout khung chat.
+                // Scroll wide tables inside the narrow bubble instead of breaking the chat layout.
                 table: ({ children }) => (
                     <div className="my-2 overflow-x-auto">
                         <table className="w-full border-collapse text-xs">{children}</table>
@@ -66,8 +57,7 @@ export default function MarkdownMessage({ content }: { content: string }) {
                 ),
 
                 code: ({ className, children }) => {
-                    // react-markdown phân biệt code block bằng class "language-*"; không có class
-                    // nghĩa là code inline.
+                    // react-markdown marks code blocks with "language-*"; no class means inline code.
                     const isBlock = Boolean(className);
 
                     if (isBlock) {

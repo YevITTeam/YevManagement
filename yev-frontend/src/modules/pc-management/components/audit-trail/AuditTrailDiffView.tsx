@@ -3,25 +3,21 @@ import { formatAuditValue, parseAuditValues, parseBulkAuditValues } from "./audi
 interface AuditTrailDiffViewProps {
     oldValues: string | null;
     newValues: string | null;
-    // >1 = 1 dòng log đại diện cho nhiều bản ghi đã gộp (docs §7b.1) — newValues khi đó là
-    // AuditTrailBulkValuesDto (danh sách recordNames) thay vì diff field bình thường.
+    // >1 = one log row for several merged records; newValues is then AuditTrailBulkValuesDto (recordNames), not a field diff.
     affectedCount?: number;
 }
 
-// recordName BE dựng dạng "Nhãn (MÃ)" — vd "YEV.QA38@YEV.VN (YDC-1426)", "192.168.1.5 (PC-001)".
-// Tách mã ra để hiện thành badge canh cột, phần còn lại là nhãn; không khớp thì để label = cả chuỗi.
+// BE builds recordName as "Label (CODE)", e.g. "192.168.1.5 (PC-001)"; unmatched names stay whole.
 function splitRecordName(name: string): { label: string; code: string | null } {
     const match = name.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
     if (match) return { label: match[1].trim(), code: match[2].trim() };
     return { label: name, code: null };
 }
 
-// oldValues/newValues chỉ chứa field THỰC SỰ đổi (docs §7b.1) — gộp theo tên field để hiện dạng
-// "trước → sau" thay vì 2 khối JSON thô rời nhau.
+// old/new values hold only changed fields; merge them by field name into before -> after rows.
 export default function AuditTrailDiffView({ oldValues, newValues, affectedCount = 1 }: AuditTrailDiffViewProps) {
     if (affectedCount > 1) {
-        // Chỉ Create/Update hàng loạt mới gộp dạng bulk (có recordNames — key có thể Pascal/camelCase).
-        // Delete hàng loạt vẫn ghi newValues theo dạng diff field thường → rơi xuống bảng diff bên dưới.
+        // Only bulk Create/Update use the recordNames shape (Pascal or camelCase keys); bulk Delete still logs a normal diff.
         const bulk = parseBulkAuditValues(newValues);
         if (bulk && bulk.recordNames.length > 0) {
             const hiddenCount = bulk.affectedCount - bulk.recordNames.length;

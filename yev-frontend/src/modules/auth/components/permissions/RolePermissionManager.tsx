@@ -41,11 +41,10 @@ export default function RolePermissionManager() {
     const canDeleteRole = hasPermission(user, "Identity.Role.Delete");
 
     const [roles, setRoles] = useState<RoleDto[]>([]);
-    // Nhóm 2 cấp Module > Entity trả thẳng từ GET /api/Permission/all (docs/identity-module.md §6).
     const [moduleGroups, setModuleGroups] = useState<PermissionModuleGroupDto[]>([]);
     const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
     const [selectedPermissionIds, setSelectedPermissionIds] = useState<Set<number>>(new Set());
-    // Quyền đã lưu của vai trò đang chọn — để biết có thay đổi chưa lưu hay không.
+    // Saved permissions of the selected role, to detect unsaved changes.
     const [savedPermissionIds, setSavedPermissionIds] = useState<Set<number>>(new Set());
 
     const [isSaving, setIsSaving] = useState(false);
@@ -183,7 +182,7 @@ export default function RolePermissionManager() {
     const currentRolePage = Math.min(rolePage, roleTotalPages);
     const pagedRoles = filteredRoles.slice((currentRolePage - 1) * ROLE_PAGE_SIZE, currentRolePage * ROLE_PAGE_SIZE);
 
-    // Back to page 1 when the search text changes (snapshot compared during render, frontend-conventions.md §3).
+    // Back to page 1 when the search text changes; snapshot compared during render instead of an effect.
     const [prevRoleSearch, setPrevRoleSearch] = useState(roleSearch);
     if (prevRoleSearch !== roleSearch) {
         setPrevRoleSearch(roleSearch);

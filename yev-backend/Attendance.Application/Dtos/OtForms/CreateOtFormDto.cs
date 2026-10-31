@@ -4,8 +4,7 @@ namespace Attendance.Application.Dtos.OtForms
 {
     public class CreateOtFormDto
     {
-        // Bắt buộc khi IsProductionForm = false (đơn "theo Nhóm"); phải để trống khi = true (đơn
-        // "theo chuyền" — xem OtFormService.CreateAsync, OtForm.GroupId).
+        // Required for group forms; must be empty for production-line forms (IsProductionForm = true).
         public int? GroupId { get; set; }
 
         public bool IsProductionForm { get; set; }
@@ -37,8 +36,7 @@ namespace Attendance.Application.Dtos.OtForms
 
         public ProcessPartDto? ProcessPart { get; set; }
 
-        // Second-factor password — bắt buộc từ 2026-08-28 (theo yêu cầu người dùng, tạo đơn cũng phải
-        // nhập mật khẩu cấp 2 giống lúc Ký/Duyệt), cùng cơ chế với ApproveOtFormDto.SecondaryPassword.
+        // Required on create too, same as approving.
         [Required(ErrorMessage = "Mật khẩu cấp 2 không được để trống")]
         public string SecondaryPassword { get; set; } = null!;
     }

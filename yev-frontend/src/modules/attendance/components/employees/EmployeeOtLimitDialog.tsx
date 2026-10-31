@@ -21,9 +21,7 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// Sửa RIÊNG giới hạn OT/tháng/năm (2026-08-29) — permission hẹp Attendance.Employee.UpdateOtLimit,
-// dùng cho Người phụ trách Bộ phận (không có Attendance.Employee.Update nên không mở được EmployeeForm
-// chung) — xem docs/attendance-module.md §API §Phân quyền theo Phòng ban.
+// Uses the narrow Attendance.Employee.UpdateOtLimit permission for coordinators who can't open EmployeeForm.
 export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: EmployeeOtLimitDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const tCommon = useTranslations("Common");

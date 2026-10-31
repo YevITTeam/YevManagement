@@ -3,17 +3,8 @@ using Shared.Application.Helper;
 
 namespace CompanySystem.HostApi.BackgroundServices
 {
-    // Runs a daily sweep (giờ chạy đọc từ AttendanceSetting.BatchAutoSendTime, Admin tự đổi qua màn
-    // Cấu hình — mặc định 15:00, xem AttendanceSettingService.DefaultBatchAutoSendTime): bundles every
-    // OT Form still un-batched and waiting on the Department Manager (OtFormStatus.Pending) into ONE
-    // NEW "Đơn tổng" per Department, and sends a reminder mail for every batch from a previous day
-    // that is still unresolved (see docs/attendance-module.md — §Đơn tổng). Same daily-delay +
-    // scoped-service pattern as DeviceLiquidationBackgroundService.
-    //
-    // Giờ được đọc lại MỖI vòng lặp (không cache) — đổi cấu hình sẽ áp dụng cho lần tính delay TIẾP
-    // THEO (sau khi vòng chờ hiện tại kết thúc), không đánh thức sớm 1 vòng chờ đang Task.Delay dở —
-    // chấp nhận được vì đây là tác vụ chạy 1 lần/ngày, không cần phản hồi tức thời (cần gấp thì dùng
-    // nút "Gửi ngay" ở màn Cấu hình, xem OtFormBatchController.RunNow).
+    // Run time is re-read each loop, so a settings change applies from the next wait, not the current one;
+    // acceptable for a daily job (use RunNow when urgent).
     public class OtFormBatchBackgroundService : BackgroundService
     {
         private readonly IServiceScopeFactory _scopeFactory;
@@ -38,8 +29,7 @@ namespace CompanySystem.HostApi.BackgroundServices
                 }
                 catch (ObjectDisposedException)
                 {
-                    // Host đang shutdown ngay đúng lúc vòng lặp mới bắt đầu — root IServiceProvider đã
-                    // bị dispose trước khi kịp check stoppingToken. Coi như tín hiệu dừng, không phải lỗi.
+                    // Root provider disposed during shutdown before stoppingToken was observed; treat as stop.
                     break;
                 }
 

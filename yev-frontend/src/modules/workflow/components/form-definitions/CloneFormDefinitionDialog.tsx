@@ -21,8 +21,7 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// POST /FormDefinition/{id}/clone chỉ cần Code/NameVn/NameJp mới — FormCategoryId, CodePrefix,
-// RouteConditionType... kế thừa nguyên từ form gốc (workflow-module.md §3.2 CloneFormDefinitionDto).
+// Clone only takes new Code/Names; category, prefix and route condition are inherited from the source.
 export default function CloneFormDefinitionDialog({ sourceNameVn, loading = false, onClose, onSubmit }: CloneFormDefinitionDialogProps) {
     const t = useTranslations("Workflow.FormDefinition");
     const tCommon = useTranslations("Common");

@@ -9,12 +9,9 @@ using Workflow.Domain.Entities;
 
 namespace Workflow.Application.Services
 {
-    // Chữ ký đăng ký sẵn — Pha 4 (workflow-module.md §3.4, §10). Mirror
-    // Attendance.Application.Services.UserSignatureService gần như nguyên vẹn, chỉ đổi điểm neo từ
-    // UserName (chuỗi) sang EmployeeId (khớp §1.4 — Workflow không neo theo Windows username).
+    // Anchored on EmployeeId rather than Windows username, unlike Attendance.UserSignatureService.
     public class EmployeeSignatureService : BaseService<IWorkflowUnitOfWork>, IEmployeeSignatureService
     {
-        // Bằng đúng hạn của Attendance.UserSignatureService — không có lý do nghiệp vụ nào để khác.
         private const int ConfirmationExpiryMinutes = 30;
 
         private readonly IEmailService _emailService;
@@ -64,8 +61,7 @@ namespace Workflow.Application.Services
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
             var link = $"{baseUrl}/xac-nhan-chu-ky-quy-trinh?token={pending.Token}";
 
-            // Lỗi render template (thiếu file, sai định dạng...) không được làm hỏng nghiệp vụ chính —
-            // đăng ký chữ ký vẫn phải thành công, cùng nguyên tắc EmailService.SendAsync nuốt lỗi SMTP.
+            // Template render failures must not break the signature request, same as EmailService swallowing SMTP errors.
             try
             {
                 var html = _emailTemplateRenderer.Render("EmployeeSignature/RequestUpdateConfirmation.html", new Dictionary<string, string>
@@ -80,8 +76,7 @@ namespace Workflow.Application.Services
             }
             catch (FileNotFoundException)
             {
-                // Thiếu file template là lỗi triển khai (deploy quên copy EmailTemplates/), bỏ qua gửi
-                // mail chứ không chặn luồng chính.
+                // Missing template is a deployment error (EmailTemplates/ not copied); skip the mail, keep the flow.
             }
         }
 
@@ -125,8 +120,7 @@ namespace Workflow.Application.Services
             return pending;
         }
 
-        // Logic upsert thật — chỉ ConfirmAsync gọi, không expose ra interface (Controller luôn phải
-        // qua request+confirm, mirror UserSignatureService).
+        // Not on the interface: Controllers must always go through request + confirm.
         private async Task<EmployeeSignatureDto> UpsertAsync(int employeeId, byte[] signatureImage)
         {
             var signature = await _unitOfWork.EmployeeSignatures.FirstOrDefaultAsync(x => x.EmployeeId == employeeId);
@@ -160,8 +154,7 @@ namespace Workflow.Application.Services
             UpdatedAt = signature.UpdatedAt
         };
 
-        // Mirror WorkflowRequestService/FormDefinitionService.ResolveCurrentEmployeeIdAsync — không
-        // share helper riêng tư giữa các Service khác nhau (đúng quy ước module này).
+        // Duplicated per Service on purpose: the module doesn't share private helpers across Services.
         private async Task<int> ResolveCurrentEmployeeIdAsync(int? currentUserId)
         {
             if (currentUserId is null)

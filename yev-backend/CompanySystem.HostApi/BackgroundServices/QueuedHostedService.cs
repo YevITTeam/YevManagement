@@ -2,13 +2,8 @@ using Shared.Application.Interfaces;
 
 namespace CompanySystem.HostApi.BackgroundServices
 {
-    // Drains IBackgroundTaskQueue — today the only producer is OtFormService, queuing approval-email
-    // notifications after OtForm Create/Approve/RunNow already committed their own DB transaction, so
-    // the HTTP response doesn't wait on SMTP round-trips to VNMAIL04 (2026-09-03, xem attendance-module.md
-    // "Gửi email duyệt chạy nền"). Each item runs in its own DI scope (mirrors
-    // DeviceLiquidationBackgroundService) since the request scope that queued it is already disposed.
-    // A failing item is only logged, never retried — same best-effort guarantee EmailService already
-    // had when email-sending ran inline (SendAsync swallows its own errors and returns false).
+    // Each item gets its own DI scope because the queuing request scope is already disposed.
+    // Failures are logged only, never retried (best-effort, like EmailService.SendAsync).
     public class QueuedHostedService : BackgroundService
     {
         private readonly IBackgroundTaskQueue _taskQueue;

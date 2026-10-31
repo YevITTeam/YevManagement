@@ -1,9 +1,4 @@
-// Xem docs/asset-module.md §4 — import Device hàng loạt từ Excel, quy trình 2 bước preview/confirm.
-
-// Dữ liệu thô đọc được từ 1 dòng Excel — dùng chung cho response preview và request confirm.
-// 2026-07-11: thêm 5 cột cấu hình (Hãng/Model/CPU/RAM/Ổ Cứng) giữa "Số SerialNumber" và "MQL Cũ".
-// 2026-07-13: cột "Xưởng"/"Nhà Cung Cấp" đổi khớp theo Mã (branchCode/supplierCode) thay vì Tên.
-// 2026-07-23: cột "Loại Thiết Bị" đổi khớp theo Mã (deviceTypeCode) thay vì Tên (deviceTypeName).
+// Shared by preview and confirm; branch, supplier and device type columns are matched by code, not name.
 export interface DeviceImportRowDto {
     rowNumber: number;
     deviceCode: string;
@@ -21,9 +16,7 @@ export interface DeviceImportRowDto {
     oldDeviceCode: string | null;
 }
 
-// Item trả về từ bước preview — thêm các Id đã tra sẵn + kết quả validate.
-// 2026-07-23: MQL đã tồn tại không còn là lỗi — resolvedExistingDeviceId/isUpdate cho biết
-// dòng này sẽ CẬP NHẬT máy có sẵn (đang "Chờ sử dụng") thay vì tạo mới.
+// An existing device code is not an error: resolvedExistingDeviceId/isUpdate mean the row updates an unused device.
 export interface DeviceImportPreviewRowDto extends DeviceImportRowDto {
     resolvedBranchId: number | null;
     resolvedDeviceTypeId: number | null;
@@ -42,9 +35,7 @@ export interface DeviceImportPreviewResultDto {
     invalidRows: number;
 }
 
-// Gợi ý "chuyển máy" suy ra từ cột "MQL Cũ" — KHÔNG tự thực hiện, chỉ điền sẵn
-// (cho sửa) trên màn hình "Chuyển máy"; người dùng phải tự bấm "Chuyển" mới
-// thật sự gọi POST /api/TransferHistory.
+// Only prefills the Transfer screen; nothing moves until the user confirms (POST /api/TransferHistory).
 export interface DeviceImportPendingTransferDto {
     newDeviceId: number;
     newDeviceCode: string;
@@ -52,8 +43,7 @@ export interface DeviceImportPendingTransferDto {
     oldDeviceCode: string;
 }
 
-// Dòng bị bỏ qua ở bước Confirm vì còn lỗi validate (2026-07-11: Confirm không
-// còn chặn cả batch, chỉ bỏ qua đúng dòng lỗi).
+// Confirm skips only the invalid rows instead of rejecting the whole batch.
 export interface DeviceImportSkippedRowDto {
     rowNumber: number;
     deviceCode: string;

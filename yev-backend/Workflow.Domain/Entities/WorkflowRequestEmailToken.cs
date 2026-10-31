@@ -1,10 +1,7 @@
 namespace Workflow.Domain.Entities;
 
-// Duyệt qua email, dùng 1 lần — workflow-module.md §3.3. Token là credential DUY NHẤT (không có mật
-// khẩu cấp 2 như Attendance.OtFormApprovalEmailToken — Workflow không có khái niệm secondary password).
-// KHÔNG neo cứng StepOrder lúc dùng: ApproveByEmailTokenAsync/RejectByEmailTokenAsync luôn tự tra lại
-// bước Current THẬT SỰ của đơn tại thời điểm bấm link (mirror Attendance — token cũ/của bước đã qua tự
-// thất bại êm ái nhờ business logic gốc, không cần chủ động vô hiệu hoá các token anh em cùng bước).
+// Single-use and the only credential. Not bound to StepOrder: approval reloads the real Current step, so
+// stale tokens fail naturally without invalidating sibling tokens.
 public partial class WorkflowRequestEmailToken
 {
     public int Id { get; set; }

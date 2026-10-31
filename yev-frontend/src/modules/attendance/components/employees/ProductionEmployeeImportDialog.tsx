@@ -22,13 +22,10 @@ interface ProductionEmployeeImportDialogProps {
     onImported: () => void;
 }
 
-// Tách bản xem trước thành các tab thay vì dồn hết vào 1 bảng dài (2026-08-27, theo yêu cầu người
-// dùng) — mỗi tab lọc lại từ CÙNG 1 mảng `rows`/`removedRows` đã có sẵn cờ isNew*/isUpdated*/isValid,
-// không cần gọi lại BE.
+// Tabs filter the same `rows`/`removedRows` by their isNew*/isUpdated*/isValid flags; no BE call.
 type PreviewTab = "all" | "new" | "updated" | "unchanged" | "invalid" | "removed";
 
-// Pattern Preview -> Confirm giống EmployeeImportDialog, thêm 1 bước "Áp dụng lũy kế" tách riêng SAU
-// Confirm (chỉ khi đó Employee mới thật sự tồn tại để ghi lũy kế) — docs §Import nhân sự dưới chuyền.
+// "Apply accumulation" is a separate step after Confirm, because only then do the Employees exist.
 export default function ProductionEmployeeImportDialog({ isOpen, onClose, onImported }: ProductionEmployeeImportDialogProps) {
     const t = useTranslations("Attendance.ProductionEmployeeImport");
     const { user } = useAuth();

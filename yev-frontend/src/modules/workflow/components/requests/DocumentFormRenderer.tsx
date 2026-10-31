@@ -23,11 +23,8 @@ interface DocumentFormRendererProps {
 
 const wrapperClassName = "mx-1 inline-block align-middle";
 
-// Chế độ tài liệu (workflow-module.md §1.5) — field đặt ngay trong layout .docx đã nhập, vị trí lấy
-// từ <span data-field-key> thay vì SortOrder+ColumnSpan. Input control TÁI DÙNG parseOptions/
-// inputClassName/evaluateFlags/toDateTimeLocalValue từ DynamicFormRenderer.tsx (chế độ lưới) để 2
-// chế độ luôn khớp behavior — chỉ khác chỗ không bọc label/help-text vì nhãn đã là chữ có sẵn trong
-// văn bản gốc.
+// Fields sit in the imported .docx via <span data-field-key>; reuses DynamicFormRenderer helpers so both
+// modes behave the same. No label wrapper because labels are already in the document text.
 export default function DocumentFormRenderer({
     layoutHtml,
     fields,

@@ -17,8 +17,7 @@ const ENDPOINTS = {
 } as const;
 
 export const EmployeeIdentityLinkImportApi = {
-    // multipart/form-data — field "file". Confirm nhận lại NGUYÊN file (không phải rows đã Preview) vì
-    // mỗi dòng có thể kèm 1 ảnh chữ ký nhúng — BE tự re-đọc + re-validate lại từ đầu.
+    // Confirm re-sends the original file, not preview rows, because rows may embed signature images; BE re-validates.
     preview: async (file: File) => {
         const formData = new FormData();
         formData.append("file", file);

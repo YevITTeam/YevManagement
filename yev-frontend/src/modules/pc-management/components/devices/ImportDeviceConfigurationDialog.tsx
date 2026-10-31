@@ -23,8 +23,7 @@ interface ImportDeviceConfigurationDialogProps {
     onImported: () => void;
 }
 
-// Dòng bị bỏ qua vì còn lỗi validate ở bước preview — bỏ hẳn khỏi request Confirm
-// (không gửi lên server) để tránh bị BE từ chối cả batch, xem device-configuration-import.dto.ts.
+// Rows with preview validation errors are dropped from Confirm so BE doesn't reject the whole batch.
 interface LocalSkippedRow {
     rowNumber: number;
     computerName: string;
@@ -41,7 +40,7 @@ export default function ImportDeviceConfigurationDialog({
     const [isConfirming, setIsConfirming] = useState(false);
     const [isCheckingMissing, setIsCheckingMissing] = useState(false);
     const [isExportingReport, setIsExportingReport] = useState(false);
-    // Báo cáo đối chiếu đang hiện trên màn hình (thay bảng "Xem trước" cho tới khi đóng / xem trước lại).
+    // Replaces the preview table until closed or previewed again.
     const [missingDevices, setMissingDevices] = useState<DeviceMissingInTaniumDto[] | null>(null);
     const [missingPrefixes, setMissingPrefixes] = useState<string[]>([]);
     const [rows, setRows] = useState<DeviceConfigurationImportPreviewRowDto[]>([]);
@@ -55,10 +54,8 @@ export default function ImportDeviceConfigurationDialog({
     const [localSkippedRows, setLocalSkippedRows] = useState<LocalSkippedRow[]>([]);
     const [createMissingUsers, setCreateMissingUsers] = useState(true);
     const [overwriteExistingAccount, setOverwriteExistingAccount] = useState(false);
-    // Tiền tố mã máy đối chiếu báo cáo — người dùng có thể sửa tự do, mặc định đủ 4 họ mã chuẩn
-    // (YDC/YLC/YDF/TYC, xem StandardFamilyPrefixes bên BE), không giới hạn phải nhập đúng 4 mã này.
-    // YDF không có trong bảng LoaiThietBi (nó là 1 họ mã con của YDC/Desktop) nên không xuất hiện
-    // trong danh sách Loại thiết bị chọn nhanh bên dưới — vẫn giữ mặc định trong ô nhập.
+    // Free-form prefixes, defaulting to BE StandardFamilyPrefixes; YDF is a YDC sub-family absent from the
+    // device type list below, so it only appears in this default.
     const [prefixesInput, setPrefixesInput] = useState("YDC, YLC, YDF, TYC");
     const [deviceTypes, setDeviceTypes] = useState<DeviceTypeDto[]>([]);
     const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
@@ -66,7 +63,7 @@ export default function ImportDeviceConfigurationDialog({
     const typePickerRef = useRef<HTMLDivElement>(null);
     const [tableRef, onTableMouseDown] = useDragScroll<HTMLDivElement>();
 
-    // Danh sách Loại thiết bị chỉ dùng để điền nhanh vào ô tiền tố — nạp 1 lần, không phụ thuộc isOpen.
+    // Device types only feed the prefix quick-fill; loaded once, independent of isOpen.
     useFetchEffect(
         () => DeviceTypeApi.getAllDeviceTypes(),
         [],
@@ -157,8 +154,7 @@ export default function ImportDeviceConfigurationDialog({
         }
     };
 
-    // Đối chiếu độc lập với "Xem trước" — BE tự đọc lại đúng file này, không cần đã bấm Xem trước.
-    // Chỉ so Device đang "Đang sử dụng" (Tanium chỉ quét được máy đang bật/đang dùng thật sự).
+    // Independent of preview (BE re-reads the file); only in-use devices are compared since Tanium only sees running machines.
     const handleCheckMissingDevices = async () => {
         if (!file) {
             toast.error("Vui lòng chọn file Tanium trước.");
@@ -176,7 +172,7 @@ export default function ImportDeviceConfigurationDialog({
         }
     };
 
-    // Tải đúng báo cáo đang hiện dưới dạng Excel (dùng lại file + tiền tố đã đối chiếu).
+    // Reuses the file and prefixes of the shown comparison.
     const handleDownloadMissingDevicesReport = async () => {
         if (!file) return;
         setIsExportingReport(true);

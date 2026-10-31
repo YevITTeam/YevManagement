@@ -2,9 +2,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Ô nhập, designer kéo-thả (workflow-module.md §3.2). FieldKey là khoá trong DataJson của
-// WorkflowRequests (Pha 3) và là thứ FormRoutes/FormFieldConditions soi vào — UNIQUE theo
-// (FormDefinitionId, FieldKey).
+// FieldKey is the key in WorkflowRequests.DataJson and what routes/conditions refer to; unique per form.
 public partial class FormField
 {
     public int Id { get; set; }

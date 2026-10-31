@@ -37,7 +37,7 @@ const selectClassName =
 const formatDate = (value: string) =>
     new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 
-// NG reasons go to the "Ghi chú" column (as in the Excel sheet); the cell only keeps the icon.
+// NG reasons go to the note column (as in the Excel sheet); the cell only keeps the icon.
 function StatusCell({ status, note }: { status: boolean | null; note: string | null }) {
     if (status === null) return <Minus className="mx-auto h-4 w-4 text-[#c9ced3]" />;
     if (status) return <CheckCircle2 className="mx-auto h-4 w-4 text-[#1a7f37]" />;
@@ -72,9 +72,8 @@ export default function ServerCheckReportPage() {
     const canScan = hasPermission(user, "Asset.ServerCheck.Scan");
     const canAssign = hasPermission(user, "Asset.ServerCheck.Assign");
 
-    // Mỗi xưởng có phiên + tờ check sheet riêng (asset-module.md §1.21) nên báo cáo luôn lọc theo ĐÚNG
-    // 1 xưởng — mặc định xưởng đầu tiên trong danh sách, không có lựa chọn "tất cả" (sẽ trộn nhiều xưởng
-    // cùng ngày vào 1 tờ).
+    // Each branch has its own sessions and check sheet, so the report is always scoped to exactly one branch
+    // (no "all" option, which would mix branches on one sheet).
     useFetchEffect(
         () => BranchApi.getAllBranches(),
         [],
@@ -94,15 +93,12 @@ export default function ServerCheckReportPage() {
         (message) => toast.error(message)
     );
 
-    // Danh sách mục thủ công CỐ ĐỊNH lấy từ /manual-items (luôn là danh sách đang active mới nhất) —
-    // KHÔNG được dựng cột từ rows[0].manualResults như trước: mỗi phiên chỉ lưu đúng số mục đang active
-    // lúc phiên đó "Kết thúc" (BE chỉ ghi ServerCheckManualResult cho activeManualItemIds tại thời điểm
-    // End), nên phiên cũ (trước khi thêm 3 mục Backup) có 4 cột còn phiên mới có 7 cột — dùng rows[0] làm
-    // chuẩn khiến các dòng khác số cột bị lệch hẳn so với header (đúng lỗi giao diện đã gặp thực tế).
+    // Columns come from /manual-items, not rows[0].manualResults: each session only stores items active when it
+    // ended, so older sessions have fewer columns and would misalign with the header.
     useFetchEffect(
         () => ServerCheckApi.getManualItems(),
         [],
-        // "Máy lạnh" đã có cột riêng (airConditionerStatus) nên không lặp lại trong cột mục thủ công.
+        // Air conditioner already has its own column.
         (result) => setManualColumns(result.filter((m) => !m.isAirConditioner).sort((a, b) => a.displayOrder - b.displayOrder)),
         t("loadReportError"),
         (message) => toast.error(message)
@@ -120,10 +116,10 @@ export default function ServerCheckReportPage() {
     const isOffDay = (day: string) =>
         calendarDays.length > 0 ? calendarDays.some((d) => d.date.slice(0, 10) === day) : new Date(`${day}T00:00:00Z`).getUTCDay() === 0;
 
-    // First manual item (ambient sound/smell/temperature) sits under "Phòng Server", the rest under "Các kiểm tra khác" — same split as the print sheet.
+    // First manual item (ambient sound/smell/temperature) sits under the server-room group, the rest under other checks, as on the print sheet.
     const [ambientColumn, ...otherColumns] = manualColumns;
     const dayRows = rows.length > 0 ? buildDayRows(rows, fromDate, toDate) : [];
-    const totalColumns = 1 /* Ngày */ + 4 /* category */ + manualColumns.length + 3 /* Người kiểm, Ghi chú, Thao tác */;
+    const totalColumns = 1 /* date */ + 4 /* category */ + manualColumns.length + 3 /* checker, note, actions */;
 
     const handleExportExcel = async () => {
         setIsExporting(true);
@@ -221,9 +217,7 @@ export default function ServerCheckReportPage() {
 
             {error && <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
 
-            {/* Bảng tương tác này chỉ để XEM trên màn hình (cột "Ngày" sticky, nút "Xem chi tiết"...) —
-                khi in dùng hẳn ServerCheckReportPrintView bên dưới, khớp đúng layout tờ giấy gốc thay vì
-                in nguyên bảng này (trước đây thiếu print:hidden nên vừa lộ cả Sidebar vừa in sai layout). */}
+            {/* Screen-only interactive table; printing uses ServerCheckReportPrintView to match the paper sheet. */}
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm print:hidden">
                 <div ref={tableScrollRef} onMouseDown={onTableScrollMouseDown} className="cursor-grab overflow-x-auto">
                     <table className="w-full border-separate border-spacing-0 text-center text-sm">

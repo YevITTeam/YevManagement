@@ -10,10 +10,7 @@ import type { SecondaryPasswordStatusDto } from "@/modules/attendance/types/seco
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
-// docs/docs-be/attendance-module.md — Mật khẩu cấp 2: mỗi user tự đăng ký 1 mật khẩu riêng, được yêu
-// cầu nhập lại ở mọi hành động ký/duyệt OtForm (submit/approve/reject). PUT /me KHÔNG áp dụng ngay —
-// chỉ gửi email xác nhận, mật khẩu cũ vẫn có hiệu lực cho tới khi user tự bấm xác nhận qua link email
-// (trang public /xac-nhan-mat-khau-cap-2) — mirror UserSignaturePanel.tsx.
+// PUT /me only sends a confirmation email; the old password stays valid until the user confirms via the link.
 export default function SecondaryPasswordPanel() {
     const t = useTranslations("Attendance.SecondaryPassword");
     const tCommon = useTranslations("Common");

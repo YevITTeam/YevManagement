@@ -13,8 +13,7 @@ const ENDPOINTS = {
     },
 } as const;
 
-// date theo định dạng yyyy-MM-dd (khớp DateOnly model binding từ query string ở BE). departmentId
-// undefined = mọi Phòng ban (không lọc) — 2026-08-29, theo yêu cầu "chọn chuyền ở phòng ban nào".
+// `date` is yyyy-MM-dd to bind to DateOnly; departmentId undefined = all departments.
 export const ProductionOtReportApi = {
     getTicketReport: async (date: string, departmentId?: number, workshopId?: number) => {
         const params = new URLSearchParams({ date });

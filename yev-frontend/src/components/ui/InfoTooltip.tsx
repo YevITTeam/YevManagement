@@ -2,9 +2,7 @@
 
 import { Info } from "lucide-react";
 
-// Icon "i" hover hiện chú thích dài — dùng thay cho đoạn mô tả luôn hiển thị chiếm chỗ dưới tiêu đề
-// section (vd ApprovalStepManager.tsx: "Cấp trung gian"/"Cấp cuối"/CoordinatorsBox). Thuần CSS
-// (group-hover), không cần state/click-outside.
+// Pure CSS (group-hover): no state or click-outside handling needed.
 export default function InfoTooltip({ text }: { text: string }) {
     return (
         <span className="group relative inline-flex">

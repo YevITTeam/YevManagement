@@ -17,8 +17,7 @@ interface ImportDeviceLiquidationDialogProps {
     onImported: () => void;
 }
 
-// Dòng bị bỏ qua vì còn lỗi validate ở bước preview — bỏ hẳn khỏi request Confirm
-// (không gửi lên server) để tránh bị BE từ chối cả batch, xem device-liquidation-import.dto.ts.
+// Rows with preview validation errors are dropped from Confirm so BE doesn't reject the whole batch.
 interface LocalSkippedRow {
     rowNumber: number;
     deviceCode: string;
@@ -122,7 +121,7 @@ export default function ImportDeviceLiquidationDialog({
 
     const canConfirm = summary !== null && rows.some((row) => row.isValid) && result === null;
 
-    // skippedRows server trả về (BE re-validate) hợp nhất với các dòng FE đã tự lọc bỏ trước khi gửi.
+    // Merge BE re-validation skips with rows FE already dropped before sending.
     const allSkippedRows: LocalSkippedRow[] = result
         ? [...localSkippedRows, ...result.skippedRows]
         : localSkippedRows;

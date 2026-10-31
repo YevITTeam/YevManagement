@@ -18,9 +18,7 @@ interface EmployeeOtHourLimitImportDialogProps {
     exportFilter: EmployeeExportFilter;
 }
 
-// Mục 5 (2026-08-27) — KHÔNG có bước Preview/Confirm như EmployeeImportDialog (chỉ update 2 field số
-// trên nhân viên đã tồn tại, không tạo mới/không có Department-Group phụ thuộc cần rà trước) — chọn
-// file rồi áp dụng thẳng, xem lại kết quả từng dòng ngay trong dialog này.
+// No preview step: it only updates two numeric fields on existing employees, results shown per row.
 export default function EmployeeOtHourLimitImportDialog({ isOpen, onClose, onImported, exportFilter }: EmployeeOtHourLimitImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const [file, setFile] = useState<File | null>(null);

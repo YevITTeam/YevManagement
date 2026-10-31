@@ -15,48 +15,24 @@ interface OtNavItem {
     key: string;
     href: string;
     icon: typeof FilePlus2;
-    // Có 1 TRONG các permission này là thấy mục — mảng 1 phần tử cho hầu hết mục, nhiều phần tử khi
-    // có thêm diện phụ trách riêng (xem "otCategories").
+    // Visible if the user has ANY of these.
     permissions?: string[];
     // Shown only to Admin / Manager-and-above (see useOverviewAccess).
     requiresOverviewAccess?: boolean;
 }
 
-// Permission theo từng mục — bảng Vai trò → Menu (docs/attendance-module.md §API).
 const navItems: OtNavItem[] = [
     { key: "otOverview", href: "/ot/overview", icon: LayoutDashboard, permissions: ["Attendance.OTForm.Approve"], requiresOverviewAccess: true },
-    // Create/CreateProduction tách rời — Line Leader chỉ có CreateProduction vẫn cần thấy mục này
-    // (2026-09-28, đồng bộ với otRoutePermissions.ts).
+    // Line Leaders have only CreateProduction but still need this item.
     { key: "otCreate", href: "/ot/create", icon: FilePlus2, permissions: ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"] },
-    // Cách khác để tạo đơn — qua hội thoại AI thay vì form tay, kết quả vẫn là 1 đơn Draft y hệt
-    // (xem docs/docs-be/attendance-module.md §AttendanceAiChat). Permission riêng vì đây là tool ghi dữ
-    // liệu đầu tiên của tính năng AI Chat, cố tình tách khỏi Attendance.OTForm.Create để kiểm soát
-    // rollout độc lập.
+    // Separate permission so the AI chat (first AI tool that writes data) can be rolled out independently.
     { key: "otAiChat", href: "/ot/ai-chat", icon: Bot, permissions: ["Attendance.AiChat.Use"] },
-    // Gộp 2026-07-17: "Đơn của tôi"/"Chờ tôi ký duyệt"/"Chờ tôi duyệt"/"Đơn đã xử lý"/"Đơn tôi tham
-    // gia" giờ là 5 tab trong CÙNG 1 màn — permission gate ở đây chỉ cần OTForm.View (điều kiện chung
-    // nhỏ nhất, đủ cho mọi Role nghiệp vụ); từng tab bên trong tự ẩn/hiện theo permission chi tiết hơn
-    // (xem OtFormTabsPage.tsx). Route /ot/list (không phải /ot/forms) — /ot/forms đã đổi thành màn
-    // "Chi tiết đơn" qua query string ?id= (static export, xem ot/forms/page.tsx).
+    // One screen with tabs; each tab gates itself on finer permissions (OtFormTabsPage.tsx).
     { key: "otForms", href: "/ot/list", icon: ClipboardList, permissions: ["Attendance.OTForm.View"] },
-    // "Đơn tổng" — gom đơn đang đúng bước Trưởng phòng (TerminalLevel=DepartmentManager) của cùng 1
-    // Phòng ban để duyệt 1 lần. Đã redesign theo Cây chức vụ ở Giai đoạn 3.2 (2026-08-07, xem
-    // docs/attendance-module.md §Đơn tổng).
     { key: "otBatches", href: "/ot/batches", icon: Layers, permissions: ["Attendance.OTForm.Approve"] },
     { key: "otDelegations", href: "/ot/delegations", icon: UserCheck, permissions: ["Attendance.OTForm.Delegate"] },
-    // "Lũy kế nhân viên" (/ot/accumulation, AccumulationLookupPage.tsx) — đã bỏ khỏi sidebar
-    // (2026-08-28, theo yêu cầu người dùng), route vẫn còn, chỉ không còn link trực tiếp.
-    // Chỉ Admin có quyền quản trị danh mục (Department/Group/Reason/OtCase/Employee) mới thấy mục này —
-    // dùng .Create (không phải .View) vì đợt 2026-07-17 đã cấp thêm Department.View/Group.View/... cho
-    // Role Trưởng Nhóm/Nhân viên (chỉ để load dropdown lúc tạo đơn), gate bằng .View sẽ lộ nhầm mục
-    // quản trị cho 2 role này dù họ không có quyền CRUD gì trong đó. Thêm 2 quyền
-    // *ApprovalStep.Update (2026-08-11) — Người phụ trách Cây duyệt (được gán tay qua
-    // DepartmentApprovalStepCoordinator/GroupApprovalStepCoordinator, xem
-    // docs/docs-be/attendance-module.md §Cây chức vụ) không phải Admin nhưng vẫn cần thấy mục này để
-    // vào tab "Cây duyệt" tự cấu hình đơn vị mình phụ trách. Thêm ProductionOtReport.View (2026-08-28b)
-    // — Group Leader (qua JobTitlePermission, xem docs/attendance-module.md §Cây chức vụ) chỉ có
-    // permission này, không có 3 permission admin trên, vẫn cần thấy mục "Danh mục" để vào ĐÚNG tab
-    // "Báo cáo" — CategoryManagement.tsx tự ẩn 8 tab quản trị còn lại với người chỉ có permission này.
+    // Gated on .Create, not .View: staff roles get .View just to load dropdowns. Approval-tree coordinators
+    // (*ApprovalStep.Update) and Group Leaders (ProductionOtReport.View only) need it for their own tab.
     {
         key: "otCategories",
         href: "/ot/categories",
@@ -77,8 +53,6 @@ export default function OtManagerSidebar() {
     const pathname = usePathname() || "";
     const { user } = useAuth();
     const { collapsed, toggle } = useSidebarCollapse();
-    // Badge số đơn "Chờ tôi duyệt" trên mục "Đơn tăng ca" (otForms) — chỉ gọi API khi user có quyền
-    // duyệt, tự poll mỗi 60s (usePendingApprovalsCount).
     const pendingApprovalsCount = usePendingApprovalsCount(hasPermission(user, "Attendance.OTForm.Approve"));
     const canViewOverview = useOverviewAccess(hasPermission(user, "Attendance.OTForm.Approve"));
 
@@ -120,10 +94,7 @@ export default function OtManagerSidebar() {
                 )}
             </div>
 
-            {/* overflow-x-clip (KHÔNG phải overflow-x-hidden): hidden vẫn tạo scroll container nên khi
-                trình duyệt tự scrollIntoView() 1 link đang focus/active, nav bị cuộn ngang và kẹt luôn
-                ở đó (không thanh cuộn để kéo lại) — icon + đầu chữ label bị cắt mất. clip không tạo
-                scroll container nên không thể bị cuộn ngang nữa. */}
+            {/* overflow-x-clip, not hidden: hidden creates a scroll container that scrollIntoView() can shift sideways and get stuck. */}
             <nav className="mt-5 flex-1 space-y-1 overflow-y-auto overflow-x-clip">
                 {navItems
                     .filter((item) => (!item.permissions || hasAnyPermission(user, item.permissions)) && (!item.requiresOverviewAccess || canViewOverview))
@@ -134,9 +105,7 @@ export default function OtManagerSidebar() {
                             <Link
                                 key={item.key}
                                 href={item.href}
-                                // KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11):
-                                // output "export" + routing [locale] làm URL RSC payload prefetch
-                                // luôn 404, chỉ tổ tốn connection pool trình duyệt.
+                                // Prefetch off: with static export + [locale] routing the RSC prefetch URL always 404s.
                                 prefetch={false}
                                 title={badgeCount > 0 ? `${t(item.key)} (${badgeCount})` : t(item.key)}
                                 className={`flex min-w-0 items-center gap-3 border-l-4 py-3.5 text-[15px] font-medium transition ${collapsed ? "justify-center px-0" : "px-5"
@@ -162,8 +131,6 @@ export default function OtManagerSidebar() {
                     })}
             </nav>
 
-            {/* Chân sidebar: thẻ người dùng đang đăng nhập — lấp phần trống phía dưới khi menu ngắn (vai trò ít
-                mục), thay vì để menu dồn cụm ở trên và cả cột trống bên dưới. */}
             {user && (
                 <div className={`mt-2 border-t border-[#e0e3e5] pt-3 ${collapsed ? "px-2" : "px-4"}`}>
                     <div className={`flex items-center gap-2.5 ${collapsed ? "justify-center" : ""}`} title={user.fullName ?? user.userName}>

@@ -1,8 +1,6 @@
 namespace Workflow.Domain.Entities;
 
-// Điểm neo định danh duy nhất của Workflow DB — mọi cột "ai đó" trong toàn bộ DB đều là
-// FK -> Employees (workflow-module.md §3.1). UserId là điểm chạm cross-DB sang
-// YevIdentityManagement.Users, KHÔNG có FK thật (EF không tạo được FK xuyên DB).
+// Every "who" column in the Workflow DB is an FK to Employees. UserId points to Identity Users in another DB, so no real FK.
 public partial class Employee
 {
     public int Id { get; set; }

@@ -1,9 +1,6 @@
 namespace Attendance.Application.Dtos.ProductionEmployees
 {
-    // 1 dòng cho màn "Nhân viên dưới chuyền" (view riêng, đọc thẳng bảng ProductionEmployees thay vì
-    // Employees) — xem ProductionEmployeeController.GetPaged / docs §Import nhân sự dưới chuyền. Nguồn
-    // chính vẫn là Import Excel; ProductionLineId/TeamId/ShiftTeamId (2026-09-04) thêm để FE tự chọn
-    // sẵn đúng giá trị hiện tại khi mở form sửa nhanh (UpdateProductionEmployeeDto).
+    // Reads ProductionEmployees directly; the FK ids let the quick-edit form preselect current values.
     public class ProductionEmployeeListItemDto
     {
         public int Id { get; set; }

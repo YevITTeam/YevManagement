@@ -27,10 +27,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Trưởng nhóm dùng liệt kê/chọn hàng loạt nhân viên nhóm mình khi lập OtForm. date = ngày trên
-        // đơn đang tạo (FE gửi kèm để lũy kế Dự kiến scope đúng tháng/năm của đơn đó, không phải hôm
-        // nay thực tế — xem docs/docs-be/attendance-module.md §Lũy kế Dự kiến); bỏ trống = mặc định
-        // hôm nay thực tế.
+        // date = the form's date so projected accumulation uses that month/year; defaults to today.
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("by-group/{groupId}")]
         public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByGroup(int groupId, [FromQuery] DateOnly? date = null)
@@ -39,7 +36,6 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Dùng cho màn "Cây duyệt Phòng ban" — xem ai đang giữ Chức vụ nào trong Phòng ban để gán nhanh.
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("by-department/{departmentId}")]
         public async Task<ActionResult<ApiResponse<List<EmployeeDto>>>> GetByDepartment(
@@ -49,8 +45,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Cho FE thu hẹp dropdown lọc Phòng ban/Nhóm ở màn "Nhân viên" khớp đúng phạm vi GetPaged thật
-        // sự trả về — route literal đứng cùng cấp "all"/"in-my-scope", không đụng {id} (2026-09-03).
+        // Lets the FE narrow Department/Group filter dropdowns to what GetPaged actually returns.
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("my-scope")]
         public async Task<ActionResult<ApiResponse<EmployeeScopeDto>>> GetMyScope()
@@ -67,11 +62,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Gate bằng OTForm.Approve (KHÔNG phải Employee.View) — người chỉ giữ quyền duyệt không có
-        // Employee.View sẽ bị 403 ở mọi action khác trên controller này; đây là cách DUY NHẤT để họ tự
-        // liệt kê được nhân viên trong phạm vi mình (Cây chức vụ), phục vụ màn "Lũy kế nhân viên"
-        // (2026-08-11d). Route literal "in-my-scope" đứng trước {id} — ASP.NET Core tự ưu tiên segment
-        // tường minh hơn param nên không đụng route GetById (đã có tiền lệ tương tự với "all").
+        // Gated by OTForm.Approve so approvers without Employee.View can list employees in their scope.
         [RequirePermission("Attendance.OTForm.Approve")]
         [HttpGet("in-my-scope")]
         public async Task<ActionResult<ApiResponse<PagedResponse<EmployeeDto>>>> GetInMyScope(
@@ -89,7 +80,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Xem/sửa tay lũy kế — Admin hoặc Người phụ trách Bộ phận/Nhóm (scope kiểm ở service).
+        // Admin or Department/Group coordinators; scope is checked in the service.
         [RequirePermission("Attendance.EmployeeAccumulation.Update")]
         [HttpGet("{id}/accumulation-history/manage")]
         public async Task<ActionResult<ApiResponse<EmployeeAccumulationHistoryYearDto>>> GetAccumulationHistoryForManage(int id, [FromQuery] int year)
@@ -122,10 +113,7 @@ namespace Attendance.Api.Controllers
             return Success(result, "Cập nhật lũy kế thành công.");
         }
 
-        // Admin dùng ở màn "Phân quyền duyệt" (UserApprovalScope) để tra userName bất kỳ đang thuộc
-        // Group/Department nào trước khi gán scope — gợi ý, không bắt buộc (404 nếu userName đó chưa
-        // được gán Employee.UserName, thường gặp với Trưởng phòng/Trưởng xưởng/TGĐ vì họ không nhất
-        // thiết có hồ sơ Employee).
+        // Optional lookup; 404 is common for managers who have no Employee profile.
         [RequirePermission("Attendance.Employee.View")]
         [HttpGet("by-username/{userName}")]
         public async Task<ActionResult<ApiResponse<EmployeeDto>>> GetByUserName(string userName)
@@ -160,11 +148,8 @@ namespace Attendance.Api.Controllers
             return Success(true, "Xóa nhân viên thành công.");
         }
 
-        // Gán/gỡ Chức vụ CÓ PHẠM VI (2026-08-11c) — dùng chung permission với chính cây duyệt của đơn
-        // vị đó (Người phụ trách Cây duyệt đã tự động có quyền này, xem
-        // EmployeeService.SyncAutoGrantedPermissionsCoreAsync), KHÔNG cần Attendance.Employee.Update
-        // (quyền đó chỉ dành cho sửa hồ sơ đầy đủ qua PUT /{id}, vẫn giữ nguyên chỉ Admin). Service tự
-        // kiểm tra non-Admin chỉ thao tác được đúng Bộ phận mình phụ trách.
+        // Scoped assignment reuses the approval-tree permission so coordinators don't need Employee.Update (Admin-only);
+        // the service limits non-Admins to their own Department.
         [RequirePermission("Attendance.DepartmentApprovalStep.Update")]
         [HttpPut("{id}/department-job-title")]
         public async Task<ActionResult<ApiResponse<EmployeeDto>>> AssignDepartmentJobTitle(
@@ -183,9 +168,7 @@ namespace Attendance.Api.Controllers
             return Success(result, "Cập nhật chức vụ thành công.");
         }
 
-        // Permission RIÊNG, hẹp hơn Attendance.Employee.Update (2026-08-29) — Người phụ trách Bộ phận
-        // được tự động cấp quyền này (xem ApprovalStepCoordinatorPermissions.EmployeeUpdateOtLimitCode),
-        // nhưng KHÔNG có quyền sửa nhân viên nói chung.
+        // Narrower than Employee.Update: auto-granted to Department coordinators without general edit rights.
         [RequirePermission("Attendance.Employee.UpdateOtLimit")]
         [HttpPut("{id}/ot-limit")]
         public async Task<ActionResult<ApiResponse<EmployeeDto>>> UpdateOtLimit(int id, [FromBody] UpdateEmployeeOtLimitDto request)
@@ -194,10 +177,7 @@ namespace Attendance.Api.Controllers
             return Success(result, "Cập nhật giới hạn OT thành công.");
         }
 
-        // Chạy tay 1 lần mỗi khi ĐỔI LUẬT cấp tự động trong code (SyncAutoGrantedPermissionsCoreAsync) —
-        // cơ chế sync chỉ chạy theo sự kiện (gán/gỡ Coordinator...), không tự áp lại cho Coordinator đã
-        // gán từ trước khi luật đổi (2026-09-28). Admin-only, cùng permission "quản trị" dùng cho các
-        // hành động cấu hình toàn hệ thống khác trong module này.
+        // Auto-grant sync is event-driven, so run this once after changing the grant rules to reapply them to existing coordinators.
         [RequirePermission("Attendance.Department.Create")]
         [HttpPost("resync-coordinator-permissions")]
         public async Task<ActionResult<ApiResponse<int>>> ResyncCoordinatorPermissions()

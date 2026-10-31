@@ -7,17 +7,13 @@ using Shared.Application.Services;
 
 namespace Attendance.Application.Services
 {
-    // Cấu hình dùng chung của module Attendance — bảng LUÔN chỉ có đúng 1 dòng (seed sẵn ở migration).
-    // Mirror Asset.Application.Services.AssetSettingService.
+    // The table always holds exactly one row, seeded by migration.
     public class AttendanceSettingService : BaseService<IAttendanceUnitOfWork>, IAttendanceSettingService
     {
         private readonly IEmailService _emailService;
         private readonly IEmailTemplateRenderer _emailTemplateRenderer;
 
-        // Giá trị mặc định phải KHỚP với seed trong migration AddAttendanceSetting/tương ứng — dùng lại
-        // ở đây làm fallback khi dòng cấu hình bị xoá tay trực tiếp dưới DB.
-        // Đổi 2 -> 3.5 (2026-08-26, redesign 3 bậc phiếu ăn theo yêu cầu người dùng) — giờ so trên
-        // THỰC TÍCH (sau khi trừ MealBreakDeductionHours), không còn trên giờ thô như trước.
+        // Must match the migration seed; used as fallback if the row is deleted. Compared against actual (post-deduction) hours.
         public const decimal DefaultMainMealTicketMinHours = 3.5m;
         public const decimal DefaultNoMealTicketMaxHours = 2m;
         public const decimal DefaultMealBreakDeductionHours = 0.5m;
@@ -101,8 +97,7 @@ namespace Attendance.Application.Services
             BackdateDays = setting.BackdateDays,
         };
 
-        // Bảng luôn chỉ có đúng 1 dòng (seed ở migration). Tự tạo lại dòng mặc định nếu vì lý do nào đó
-        // nó biến mất (vd sửa tay dưới DB) — tránh làm chết cả API lẫn màn tạo đơn chỉ vì thiếu cấu hình.
+        // Recreates the default row if it was deleted by hand, so missing config can't break the API.
         private async Task<AttendanceSetting> GetOrCreateSettingEntityAsync()
         {
             var settings = await _unitOfWork.AttendanceSettings.GetAllAsync();

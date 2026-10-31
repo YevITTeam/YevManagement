@@ -1,11 +1,7 @@
 namespace Asset.Domain.Entities;
 
-// Which Branch (xưởng) a user is responsible for inventory-scanning (asset-module.md §1.22). 1 user =
-// exactly 1 Branch (UserId unique) — same shape as ServerCheckAssignment, but a SEPARATE table: kiểm kê
-// và kiểm tra server hằng ngày là 2 tính năng độc lập dù cùng shape "user ↔ xưởng". Unlike ServerCheck,
-// nhiều user khác nhau vẫn được gán CHUNG 1 Branch (không unique theo BranchId) — 1 xưởng có nhiều máy
-// ở nhiều nơi, cần nhiều người cùng quét chung 1 phiên. UserId là Identity.Users.Id (khác DB, không
-// FK); UserName/FullName là snapshot để hiển thị.
+// 1 user = 1 Branch, separate from ServerCheckAssignment; unlike it, many users may share a Branch so they
+// scan one session together. UserId is Identity.Users.Id (other DB, no FK); names are display snapshots.
 public partial class InventoryAssignment
 {
     public int Id { get; set; }

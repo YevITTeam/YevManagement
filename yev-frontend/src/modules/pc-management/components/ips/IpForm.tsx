@@ -7,9 +7,7 @@ import { ipStatusDotClasses, ipStatusLabels } from "./ip-status";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 
-// docs/asset-module.md §4 (2026-07-11) — PUT /api/IpAddress/{id} chỉ đổi được
-// status + note. IP đang gắn thiết bị (deviceId != null) chỉ đổi được note;
-// IP chưa gắn chỉ được đặt status 0 (Chưa gán) hoặc 1 (Đã gán khác).
+// IPs attached to a device can only change the note; unattached IPs can only be set to status 0 or 1.
 export interface IpFormValues {
     status: string;
     note: string;

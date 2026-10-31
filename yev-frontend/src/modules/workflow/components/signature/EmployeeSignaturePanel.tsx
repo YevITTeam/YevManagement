@@ -12,9 +12,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
-// Mỗi nhân sự tự đăng ký 1 chữ ký, dùng để tự điền lúc duyệt đơn thay vì phải tải ảnh lên mỗi lần
-// (workflow-module.md §3.4, §10). ⚠️ PUT /me KHÔNG áp dụng ngay — chỉ gửi email xác nhận, chữ ký cũ
-// vẫn có hiệu lực cho tới khi tự bấm xác nhận qua link email (trang public /xac-nhan-chu-ky-quy-trinh).
+// PUT /me does not apply immediately: it emails a confirmation link and the old signature stays active until confirmed.
 export default function EmployeeSignaturePanel() {
     const t = useTranslations("Workflow.EmployeeSignature");
     const [signature, setSignature] = useState<EmployeeSignatureDto | null>(null);
@@ -73,7 +71,7 @@ export default function EmployeeSignaturePanel() {
                             </div>
                             {signature ? (
                                 <>
-                                    {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây */}
+                                    {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI; next/image needs fixed width/height */}
                                     <img
                                         src={`data:image/png;base64,${signature.signatureImage}`}
                                         alt={t("currentSignatureAlt")}

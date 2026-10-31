@@ -11,14 +11,14 @@ const ENDPOINTS = {
 } as const;
 
 export const WorkCalendarApi = {
-    // GET mở cho mọi tài khoản đăng nhập — màn Tạo đơn cần lịch để tự chọn TH1/TH2.
+    // Open to every signed-in user: the create-form screen needs it to pick TH1/TH2.
     getByYear: async (year: number) => {
         const response = await api.get<ApiResponse<WorkCalendarDayDto[]>>(`${ENDPOINTS.WORK_CALENDAR.list}?year=${year}`);
         return response.data;
     },
-    // File mẫu của 1 năm: đủ các Chủ nhật + các ngày đã lưu của năm đó.
+    // Template contains every Sunday plus the saved days of that year.
     downloadTemplate: (year: number) => getForBlob(`${ENDPOINTS.WORK_CALENDAR.template}?year=${year}`),
-    // multipart/form-data — field "file". Thay thế TOÀN BỘ lịch của năm; cần quyền Attendance.Setting.Update.
+    // Replaces the WHOLE year's calendar; requires Attendance.Setting.Update.
     importYear: async (year: number, file: File) => {
         const formData = new FormData();
         formData.append("file", file);

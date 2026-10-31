@@ -30,7 +30,7 @@ namespace Asset.Application.Services
 
         public async Task<InventorySessionDto> StartSessionAsync()
         {
-            // Xưởng lấy từ phân công (asset-module.md §1.22), KHÔNG nhận từ client.
+            // Branch comes from the assignment, never from the client.
             var branchId = await RequireAssignedBranchIdAsync();
 
             var existing = await _unitOfWork.InventorySessions.FirstOrDefaultAsync(
@@ -38,13 +38,11 @@ namespace Asset.Application.Services
 
             if (existing != null)
             {
-                // Nhiều user cùng được gán 1 xưởng (khác ServerCheckAssignment) — người thứ 2 bấm "Bắt đầu"
-                // chỉ tham gia phiên đang chạy của xưởng đó, không tạo phiên mới.
+                // Several users share one branch, so a second "Start" joins the running session.
                 return await BuildSessionDtoAsync(existing);
             }
 
-            // Phạm vi 1 đợt kiểm kê = Device !IsDeleted, Status = InUse("Đang sử dụng") của xưởng, và loại
-            // thiết bị đang bật DeviceType.IncludedInInventory (quyết định người dùng, AGENTS.md §2 luật 2).
+            // Scope: non-deleted InUse devices of the branch whose DeviceType.IncludedInInventory is on.
             var deviceIds = await _unitOfWork.Devices.SelectAsync(
                 predicate: d => !d.IsDeleted && d.Status == (int)DeviceStatus.InUse && d.BranchId == branchId
                     && d.DeviceType.IncludedInInventory,
@@ -94,13 +92,11 @@ namespace Asset.Application.Services
             var device = await _unitOfWork.Devices.FirstOrDefaultAsync(d => d.DeviceCode == deviceCode && !d.IsDeleted);
             if (device == null) throw new DomainException($"Không tìm thấy thiết bị có mã '{deviceCode}'.");
 
-            // Không có bản ghi item nghĩa là thiết bị này không thuộc phạm vi kiểm kê của xưởng đang chạy
-            // phiên — bất kể lý do (thiết bị xưởng khác, hoặc chuyển vào xưởng này SAU khi đã snapshot).
-            // Quyết định người dùng: không ghi nhận gì trong trường hợp này (AGENTS.md §2 luật 2).
+            // No item means the device is outside this session's snapshot (other branch or moved in later); record nothing.
             var item = await _unitOfWork.InventorySessionItems.FirstOrDefaultAsync(x => x.SessionId == sessionId && x.DeviceId == device.Id);
             if (item == null) throw new DomainException($"Thiết bị '{deviceCode}' không thuộc phạm vi kiểm kê của xưởng này.");
 
-            // Quét lại 1 máy đã tìm thấy vẫn hợp lệ (idempotent) — chỉ cập nhật giờ quét mới nhất.
+            // Rescanning a found device is idempotent; only the scan time is refreshed.
             item.ScannedAt = TimeHelper.GetCurrentUtcTime();
             item.ScannedBy = GetCurrentUser();
             item.Status = (int)InventoryItemStatus.Found;
@@ -183,9 +179,7 @@ namespace Asset.Application.Services
             );
         }
 
-        // Không có file mẫu công ty cho kiểm kê (khác ServerCheck) — tự dựng workbook mới bằng ClosedXML,
-        // layout riêng (frontend-conventions.md §5 chỉ bắt buộc PDF phải vẽ ở FE, Excel do BE dựng vẫn hợp lệ).
-        // 1 dòng = 1 thiết bị của phiên, cùng dữ liệu với màn báo cáo.
+        // No company template for inventory (unlike ServerCheck), so the workbook is built from scratch.
         public async Task<(byte[] Content, string FileName)> ExportSessionAsync(int sessionId)
         {
             var session = await GetSessionByIdAsync(sessionId);
@@ -283,7 +277,7 @@ namespace Asset.Application.Services
             };
         }
 
-        // Xưởng user hiện tại được phân công (asset-module.md §1.22); null = chưa được phân công.
+        // Null = not assigned.
         private async Task<int?> GetAssignedBranchIdAsync()
         {
             var userId = ServerCheckUserContext.GetUserId(_httpContextAccessor);
@@ -303,7 +297,7 @@ namespace Asset.Application.Services
                 "Tài khoản của bạn chưa được phân công xưởng kiểm kê thiết bị. Vui lòng liên hệ Admin để được phân công.");
         }
 
-        // Quét/kết thúc phiên chỉ được làm trên phiên của ĐÚNG xưởng mình được phân công — kể cả Admin.
+        // Only the caller's own assigned branch session, even for Admin.
         private async Task EnsureOwnBranchSessionAsync(InventorySession session)
         {
             var branchId = await RequireAssignedBranchIdAsync();
@@ -311,9 +305,8 @@ namespace Asset.Application.Services
                 throw new DomainException("Phiên kiểm kê này thuộc xưởng khác, bạn không được thao tác.");
         }
 
-        // Which branch a READ endpoint is limited to. Users holding Asset.Inventory.View see every
-        // branch (optionally narrowed by `requested`); scan-only users are forced to their assigned
-        // branch. `enforceOnly`: return only the forced branch (null for viewers) - used by GetById.
+        // Viewers see every branch (optionally narrowed by `requested`); scan-only users are forced to their branch.
+        // `enforceOnly`: return only the forced branch (null for viewers), for GetById.
         private async Task<int?> ResolveViewBranchIdAsync(int? requested, bool enforceOnly = false)
         {
             if (ServerCheckUserContext.HasPermission(_httpContextAccessor, "Asset.Inventory.View"))

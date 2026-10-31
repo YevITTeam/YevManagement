@@ -115,8 +115,7 @@ namespace Workflow.Application.Services
         {
             var entity = (await _unitOfWork.FormCategories.GetByIdAsync(id)).OrThrowNotFound("Danh mục form", id);
 
-            // FormDefinitions chưa scaffold ở Pha 2A (workflow-module.md §8 Pha 2B) — chưa có gì để
-            // check "còn form đang dùng danh mục này" ở đây. Bổ sung guard này khi FormDefinitions có.
+            // TODO: block deleting a category still used by FormDefinitions.
             entity.IsDeleted = true;
 
             _unitOfWork.FormCategories.Update(entity);

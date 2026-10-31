@@ -23,8 +23,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Danh sách permission code được phép chọn (nhóm "tham gia quy trình") — FE dùng để lọc UI,
-        // không hardcode song song ở cả 2 phía.
+        // Served to the FE so the whitelist isn't hardcoded on both sides.
         [RequirePermission("Attendance.JobTitlePermission.View")]
         [HttpGet("allowed-codes")]
         public ActionResult<ApiResponse<List<string>>> GetAllowedCodes()

@@ -8,10 +8,7 @@ using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
 {
-    // Import Excel hàng loạt liên kết Employee (Attendance) ↔ User (Identity), tự tạo tài khoản Identity
-    // nếu chưa có + gán chữ ký thẳng không qua email-confirm — hành động nhạy cảm nhất trong hệ thống,
-    // permission riêng CHỈ gán mặc định cho Admin (2026-09-03, xem
-    // docs/docs-be/attendance-module.md §Import liên kết Identity + chữ ký).
+    // Creates Identity accounts and assigns signatures without email confirmation, so its permission is Admin-only.
     public class EmployeeIdentityLinkImportController : BaseController
     {
         private readonly IEmployeeIdentityLinkImportService _employeeIdentityLinkImportService;
@@ -33,8 +30,7 @@ namespace Attendance.Api.Controllers
             return Success(result, "Đọc file thành công, vui lòng xem lại bản xem trước bên dưới.");
         }
 
-        // Nhận lại NGUYÊN file (không phải Rows đã Preview) — Confirm tự đọc + re-validate lại từ đầu,
-        // vì mỗi dòng có thể kèm 1 ảnh chữ ký nhúng (không tiện round-trip qua JSON như các import khác).
+        // Takes the whole file again (not previewed rows) because rows may embed signature images.
         [RequirePermission("Identity.User.BulkImport")]
         [HttpPost("confirm")]
         public async Task<ActionResult<ApiResponse<EmployeeIdentityLinkImportConfirmResultDto>>> Confirm(IFormFile file)

@@ -9,13 +9,8 @@ using Shared.Core.Exceptions;
 
 namespace Asset.Application.Services
 {
-    // Import an Excel/CSV of device codes to mark them as liquidated (Status -> Liquidated) in bulk
-    // (2026-07-23). Two steps like the other imports (preview -> confirm). Business rules (user decision):
-    //   - a device can only be liquidated FROM the "Chờ thanh lý" (PendingLiquidation) state; any other
-    //     state is rejected on that row (skip-and-report, does not block the batch);
-    //   - liquidating a device also frees its IPs (back to Available), soft-deletes its emails, and
-    //     uninstalls any Software still attached — it is treated as no longer in use, exactly like
-    //     DeviceService.DeleteAsync / DeviceService.UpdateAsync entering PendingLiquidation.
+    // Bulk liquidation (preview -> confirm). Only PendingLiquidation devices qualify (others are skipped and reported);
+    // liquidating frees IPs, soft-deletes emails and uninstalls software, like DeviceService does.
     public class DeviceLiquidationImportService : BaseService<IAssetUnitOfWork>, IDeviceLiquidationImportService
     {
         public DeviceLiquidationImportService(IAssetUnitOfWork unitOfWork) : base(unitOfWork) { }
@@ -49,8 +44,7 @@ namespace Asset.Application.Services
             await _unitOfWork.BeginTransactionAsync();
             try
             {
-                // Batch-fetch device/IP/email theo danh sách deviceId thay vì 3 query/dòng trong vòng
-                // lặp (2026-08-11) — cùng lý do các import khác, số dòng liquidation có thể khá lớn.
+                // Batch-fetch by deviceId instead of 3 queries per row.
                 var deviceIds = validRows.Select(r => r.ResolvedDeviceId!.Value).ToHashSet();
                 var devicesById = (await _unitOfWork.Devices.FindAsync(x => deviceIds.Contains(x.Id)))
                     .ToDictionary(x => x.Id);
@@ -105,11 +99,7 @@ namespace Asset.Application.Services
                         _unitOfWork.DeviceEmails.Update(email);
                     }
 
-                    // A liquidated device no longer holds any installed Software either — same as
-                    // DeviceService.UpdateAsync releasing Software when a Device enters PendingLiquidation
-                    // (2026-08-25). Most devices will already be empty here (released earlier when they
-                    // first moved into PendingLiquidation), this is just the safety net for rows that
-                    // never went through that path.
+                    // Safety net: software is normally already released when the device entered PendingLiquidation.
                     var softwares = softwaresByDeviceId.GetValueOrDefault(deviceId) ?? new List<Asset.Domain.Entities.DeviceSoftware>();
                     if (softwares.Count > 0)
                     {
@@ -143,8 +133,7 @@ namespace Asset.Application.Services
                 .Select(g => g.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            // Batch-fetch device theo mã thay vì query từng dòng (2026-08-11, cùng lý do với
-            // DeviceImportService/DeviceConfigurationImportService — file import có thể nhiều dòng).
+            // Batch-fetch by code instead of one query per row.
             var candidateCodes = rawRows
                 .Select(r => r.DeviceCode?.Trim())
                 .Where(c => !string.IsNullOrWhiteSpace(c))
@@ -215,7 +204,7 @@ namespace Asset.Application.Services
             InvalidRows = rows.Count(r => !r.IsValid)
         };
 
-        // Single column A = Mã máy (MQL). Row 1 is the header.
+        // Single column A = device code (MQL). Row 1 is the header.
         private static List<DeviceLiquidationImportRowDto> ParseXlsx(Stream stream)
         {
             XLWorkbook workbook;

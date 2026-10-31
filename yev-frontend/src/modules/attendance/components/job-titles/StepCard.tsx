@@ -3,23 +3,14 @@
 import { Check, GripVertical, PenLine, RotateCcw, Star, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-// Thẻ 1 bước duyệt — tách dùng chung cho cả 3 khối (Nhóm/Bộ phận/Chuyền) của ApprovalStepManager.tsx
-// (2026-09-05, đợt polish giao diện). Trước đó 3 khối copy gần y hệt ~110 dòng JSX mỗi nơi — khác nhau
-// đúng 2 điểm: (1) khối Bộ phận không có pill "Người chịu trách nhiệm" (bỏ qua `onToggleResponsible`),
-// (2) phần "đang giữ chức vụ" bên dưới khác hẳn giữa 3 khối (Nhóm/Bộ phận: luôn là danh sách holder;
-// Chuyền: tuỳ `isLineScoped`/`terminalLevel` mà đổi hẳn nội dung) — nên phần đó vẫn để nguyên ở component
-// cha, truyền vào đây qua prop `footer`.
-//
-// Đợt polish (2026-09-16, "pipeline dọc"): số thứ tự + tay cầm kéo chuyển ra 1 cột riêng bên trái
-// ("rail") nối bằng 1 đường kẻ dọc xuyên suốt danh sách — trực quan hoá đây là 1 CHUỖI bước nối tiếp
-// nhau thay vì các thẻ rời rạc. Props/hành vi (drag, toggle, remove) giữ nguyên 100%, chỉ đổi bố cục.
+// Shared by the group/department/production blocks; the "current holders" part differs per block, so it comes in via `footer`.
 export interface StepCardLabels {
     dragHandleLabel: string;
     toggleSignatureHint: string;
     requiresSignatureYes: string;
     requiresSignatureNo: string;
     removeStep: string;
-    // Chỉ cần khi có `onToggleResponsible` (khối Bộ phận không dùng 3 key này).
+    // Only needed with `onToggleResponsible` (the department block omits these keys).
     toggleResponsibleHint?: string;
     isResponsibleYes?: string;
     isResponsibleNo?: string;
@@ -40,7 +31,7 @@ interface StepCardProps {
     rankOrder: number;
     requiresSignature: boolean;
     onToggleSignature: () => void;
-    // undefined = khối này không có khái niệm "Người chịu trách nhiệm" (khối Bộ phận).
+    // undefined = the block has no "responsible person" concept (department block).
     isResponsible?: boolean;
     onToggleResponsible?: () => void;
     // undefined = the block has no re-submit flag (only the Group block does).

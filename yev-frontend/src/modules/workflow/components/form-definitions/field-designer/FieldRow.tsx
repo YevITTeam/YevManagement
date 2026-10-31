@@ -15,9 +15,7 @@ interface FieldRowProps {
     onDelete: () => void;
 }
 
-// Preview control TĨNH (disabled, không có value/onChange thật) — mirror đúng từng nhánh dataType của
-// DynamicFormRenderer.tsx (màn điền đơn thật) để người thiết kế thấy ngay ô sẽ trông ra sao, KHÔNG
-// phải chỉ đọc metadata dạng danh sách như trước (workflow-module.md — yêu cầu người dùng 2026-08-26).
+// Static disabled preview mirroring each dataType branch of DynamicFormRenderer.tsx; keep them in sync.
 function FieldPreviewControl({ field, t }: { field: EditableField; t: ReturnType<typeof useTranslations> }) {
     switch (field.dataType) {
         case FieldDataType.Text:

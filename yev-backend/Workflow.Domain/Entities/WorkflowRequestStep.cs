@@ -2,12 +2,8 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Snapshot luồng duyệt của riêng 1 đơn (workflow-module.md §3.3). StepOrder ở đây lệch +1 so với
-// FormApprovalSteps.StepOrder cấu hình gốc (đánh số từ 0) — dành riêng giá trị 0 cho ý nghĩa "trả về
-// người nộp" / "chưa vào luồng duyệt" (§5.1, §5.6), tránh đụng StepOrder=0 của bước duyệt đầu tiên.
-// AllowAddApproverSnapshot KHÔNG có trong bảng liệt kê cột ở §3.3 (chỉ AllowSendBackSnapshot) — bổ
-// sung ở Pha 3B-1 vì §5.6 cần cột này để biết bước có cho thêm người duyệt hay không SAU khi đã submit;
-// WorkflowRequestStep không giữ FK ngược về FormApprovalStep gốc nên không còn cách nào tra lại.
+// StepOrder is FormApprovalSteps.StepOrder + 1, reserving 0 for "back to requester / not in flow".
+// AllowAddApproverSnapshot is copied because there is no FK back to the source FormApprovalStep.
 public partial class WorkflowRequestStep
 {
     public int Id { get; set; }

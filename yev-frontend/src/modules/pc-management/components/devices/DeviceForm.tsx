@@ -134,9 +134,8 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
         DeviceDepartmentApi.getAllDeviceDepartments().then((data) => setDeviceDepartments(data)).catch((err) => console.error(err));
     }, []);
 
-    // Nhóm cascading theo Bộ phận đã chọn (docs/asset-module.md §4) — chưa chọn Bộ phận thì
-    // danh sách Nhóm rỗng và dropdown Nhóm bị disable. Reset "về rỗng" tính ngay trong render
-    // (so sánh snapshot) — effect chỉ còn lo phần fetch thật (đã là .then()/.catch() thuần).
+    // Groups cascade from the department (empty and disabled until one is picked); the reset happens
+    // during render via snapshot, the effect only fetches.
     const departmentKey = `${isOpen}|${values.departmentId}`;
     const [prevDepartmentKey, setPrevDepartmentKey] = useState(departmentKey);
     if (prevDepartmentKey !== departmentKey) {
@@ -151,7 +150,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
             .catch((err) => console.error(err));
     }, [isOpen, values.departmentId]);
 
-    // Tải danh sách IP còn trống (không phân trang) theo từ khoá tìm kiếm, có debounce.
+    // Debounced, unpaged search over free IPs.
     useEffect(() => {
         if (!isOpen) return;
         const handle = setTimeout(() => {
@@ -182,7 +181,6 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
         return () => clearTimeout(handle);
     }, [isOpen, canSyncIdentity, hasValidDomainAccount, domainAccount]);
 
-    // Đóng dropdown IP khi click ra ngoài.
     useEffect(() => {
         if (!ipDropdownOpen) return;
         const handleClickOutside = (event: MouseEvent) => {
@@ -235,8 +233,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
     const handleStatusChange = (nextStatus: number) => {
         handleChange("status", nextStatus);
         if (nextStatus === 2 || nextStatus === 3) {
-            // BE tự gỡ hết IP khi máy chuyển Chờ thanh lý/Đã thanh lý (docs/asset-module.md §1.15) —
-            // đồng bộ luôn ở FE để không hiển thị IP đã chọn nhưng thực ra sẽ không được lưu.
+            // BE releases all IPs when a device enters liquidation, so clear them here too to avoid showing unsaved IPs.
             setSelectedIps([]);
             handleChange("ipAddressIds", []);
         }
@@ -275,7 +272,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
         }));
     };
 
-    // Adds the address typed in the list's last row (Enter or the "Thêm" button).
+    // Adds the address typed in the list's last row (Enter or the Add button).
     const handleAddEmail = () => {
         const email = newEmail.trim();
         if (!email) return;
@@ -613,7 +610,7 @@ export default function DeviceForm({ isOpen, mode, initial, loading = false, onC
                                                         if (alreadyAddedToThisDevice) {
                                                             return `IP ${trimmedSearch} đã được thêm vào thiết bị này rồi.`;
                                                         }
-                                                        // `/available` only returns unused IPs (docs/asset-module.md §4): a full address with no
+                                                        // `/available` only returns unused IPs: a full address with no
                                                         // match is taken by another device or unknown, not a search failure.
                                                         if (isFullIpFormat) {
                                                             return `IP ${trimmedSearch} không còn trống — đang dùng cho thiết bị khác hoặc không tồn tại.`;

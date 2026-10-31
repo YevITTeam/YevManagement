@@ -7,7 +7,7 @@ const ENDPOINTS = {
         getGroupPageNation: "/Group/grid-list",
         getAllGroups: "/Group/all",
         getGroupById: (id: number) => `/Group/${id}`,
-        // Route riêng, KHÁC cách DeviceGroup dùng query-param ?departmentId= trên /all (docs/attendance-module.md §API).
+        // Dedicated route, unlike DeviceGroup's ?departmentId= query on /all.
         getGroupsByDepartment: (departmentId: number, workshopId?: number) =>
             `/Group/by-department/${departmentId}${workshopId ? `?workshopId=${workshopId}` : ""}`,
         createGroup: "/Group",
@@ -52,7 +52,6 @@ export const GroupApi = {
         const response = await api.get<ApiResponse<GroupDto>>(ENDPOINTS.GROUP.getGroupById(id));
         return response.data;
     },
-    // Cascading dropdown Bộ phận theo Phòng ban đã chọn (docs/attendance-module.md §API).
     getGroupsByDepartment: async (departmentId: number, workshopId?: number) => {
         const response = await api.get<ApiResponse<GroupDto[]>>(ENDPOINTS.GROUP.getGroupsByDepartment(departmentId, workshopId));
         return response.data;

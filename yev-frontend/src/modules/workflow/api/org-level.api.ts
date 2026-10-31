@@ -7,8 +7,7 @@ import type {
 } from "@/modules/workflow/types/org-level.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Tiền tố "/Workflow" bắt buộc: BE dùng api/Workflow/[controller] để tránh trùng route với
-// Attendance.EmployeeController/JobTitleController (workflow-module.md §1.7).
+// "/Workflow" prefix avoids route clashes with Attendance's EmployeeController/JobTitleController.
 const ENDPOINTS = {
     ORG_LEVEL: {
         getOrgLevelPageNation: "/Workflow/OrgLevel/grid-list",

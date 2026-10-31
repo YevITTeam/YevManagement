@@ -14,9 +14,7 @@ import { useHeaderCollapse } from "@/modules/common/hooks/useHeaderCollapse";
 export default function Header() {
   const t = useTranslations("Header");
   const pathname = usePathname() || "";
-  // /pc/server-check/scan và /pc/inventory/scan cố tình KHÔNG có Sidebar (layout "kiosk" riêng,
-  // mobile-friendly cho trang quét — xem (pc-scan)/layout.tsx) nên phải loại trừ khỏi đây, không thì
-  // Header vẫn chừa khoảng trống 13.75rem bên trái tưởng có Sidebar trong khi thực tế không có.
+  // Scan pages use a kiosk layout without Sidebar ((pc-scan)/layout.tsx); excluding them avoids a phantom left gap.
   const hasSidebar =
     (pathname.startsWith("/pc") &&
       !pathname.startsWith("/pc/server-check/scan") &&
@@ -35,8 +33,7 @@ export default function Header() {
     router.push("/login");
   };
 
-  // Nạp lại hồ sơ + quyền từ BE — dùng khi Admin vừa cấp quyền mới cho Role của mình và cần thấy hiệu
-  // lực ngay trên UI (nút bấm/menu ẩn hiện theo permissions), thay vì phải tự đóng tab/mở lại.
+  // Lets an admin see newly granted role permissions immediately without reopening the tab.
   const handleRefreshPermissions = async () => {
     setIsRefreshing(true);
     try {
@@ -51,7 +48,7 @@ export default function Header() {
 
   return (
     <>
-      {/* Header thu gọn: chỉ còn 1 "tab" nhỏ ở mép trên bên phải để mở lại — nhường trọn chiều dọc cho nội dung. */}
+      {/* Collapsed: only a small top-right tab remains so content gets the full height. */}
       {collapsed && (
         <button
           type="button"
@@ -69,7 +66,7 @@ export default function Header() {
       aria-hidden={collapsed}
     >
       <div className="mx-auto flex h-12 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11). */}
+        {/* No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404. */}
         <Link href="/" prefetch={false} className="flex items-center gap-3">
           <BrandLogo className="h-8 w-10" />
           <div className="leading-tight">
@@ -101,7 +98,7 @@ export default function Header() {
               {canSeeAdmin && (
                 <Link
                   href="/admin"
-                  // KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11).
+                  // No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404.
                   prefetch={false}
                   className="hidden items-center gap-2 rounded-lg border border-[#e3000f]/15 bg-[#fff5f5] px-2.5 py-1.5 text-xs font-semibold text-[#e3000f] transition hover:border-[#e3000f]/30 hover:bg-[#ffe8e8] sm:flex"
                 >

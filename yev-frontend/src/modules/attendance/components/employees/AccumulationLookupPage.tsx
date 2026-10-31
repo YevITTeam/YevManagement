@@ -14,11 +14,8 @@ import AccumulationHistoryModal from "./AccumulationHistoryModal";
 
 const PAGE_SIZE = 10;
 
-// Màn "Lũy kế nhân viên" (2026-08-11d, route /ot/accumulation) — cho người GIỮ QUYỀN DUYỆT
-// (Attendance.OTForm.Approve) tra cứu lịch sử lũy kế mà KHÔNG cần mở sẵn 1 đơn tăng ca như ở
-// OtFormDetail.tsx. Danh sách nhân viên gọi GET /Employee/in-my-scope — tự giới hạn theo phạm vi Cây
-// chức vụ của người gọi ở BE, không có ô chọn Bộ phận/Nhóm tay như màn Nhân viên (Admin) vì phạm vi đã
-// cố định theo đúng cấp bậc người đó đang giữ.
+// For approvers to look up accumulation without opening a form; the list is scoped by BE from the caller's
+// job-title tree, so there is no department/group picker.
 export default function AccumulationLookupPage() {
     const t = useTranslations("Attendance.AccumulationHistory");
     const tCommon = useTranslations("Common");
@@ -34,8 +31,7 @@ export default function AccumulationLookupPage() {
     const [hasPreviousPage, setHasPreviousPage] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState<EmployeeDto | null>(null);
 
-    // Đổi từ khoá tìm thì về lại trang 1 — so sánh snapshot ngay trong render thay vì dùng effect
-    // (xem AGENTS.md "Reset state khi 1 giá trị đổi").
+    // Reset to page 1 on keyword change by comparing a snapshot during render instead of an effect.
     const [prevAppliedKeyword, setPrevAppliedKeyword] = useState(appliedKeyword);
     if (prevAppliedKeyword !== appliedKeyword) {
         setPrevAppliedKeyword(appliedKeyword);

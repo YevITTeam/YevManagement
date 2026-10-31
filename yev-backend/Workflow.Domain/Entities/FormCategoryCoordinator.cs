@@ -1,7 +1,6 @@
 namespace Workflow.Domain.Entities;
 
-// Ai được THIẾT KẾ form của thư mục này — chỉ định tay, không suy theo chức danh
-// (workflow-module.md §3.2). Quản lý kiểu "thay nguyên danh sách", không Create/Update/Delete từng dòng.
+// Who may design forms in this category; assigned by hand, never inferred from job titles.
 public partial class FormCategoryCoordinator
 {
     public int Id { get; set; }

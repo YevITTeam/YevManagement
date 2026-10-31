@@ -6,7 +6,6 @@ import type {
 } from "@/modules/attendance/types/ot-form-batch.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Route /OtFormBatch — docs/attendance-module.md §API §Đơn tổng.
 const ENDPOINTS = {
     OT_FORM_BATCH: {
         gridList: "/OtFormBatch/grid-list",
@@ -41,7 +40,7 @@ export const OtFormBatchApi = {
         const response = await api.post<ApiResponse<OtFormBatchDto>>(ENDPOINTS.OT_FORM_BATCH.approve(id), data);
         return response.data;
     },
-    // Kênh public qua email — [AllowAnonymous], token là thông tin xác thực duy nhất.
+    // Public [AllowAnonymous]: the token is the only credential.
     getByEmailToken: async (token: string) => {
         const response = await api.get<ApiResponse<OtFormBatchDto>>(ENDPOINTS.OT_FORM_BATCH.emailConfirmGet(token));
         return response.data;
@@ -50,8 +49,7 @@ export const OtFormBatchApi = {
         const response = await api.post<ApiResponse<OtFormBatchDto>>(ENDPOINTS.OT_FORM_BATCH.emailConfirmApprove(token), data);
         return response.data;
     },
-    // Chạy ngay đợt gom "Đơn tổng" (bình thường tự chạy theo giờ cấu hình) — dùng khi test/cấp bách.
-    // Cần permission `Attendance.Setting.Update`, FE chỉ hiện nút này trong tab Cấu hình.
+    // Runs the scheduled batch immediately; requires Attendance.Setting.Update.
     runNow: async () => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM_BATCH.runNow);
         return response.data;

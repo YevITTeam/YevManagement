@@ -1,8 +1,6 @@
 namespace Workflow.Domain.Enums;
 
-// workflow-module.md §4 — nguồn dữ liệu cho FormFields.FormDataSourceId. SqlQuery giữ trong enum để
-// khớp thiết kế §4 nhưng bị Service chặn tạo/sửa cho tới khi chốt được cơ chế bảo mật (tài khoản chỉ
-// đọc, chặn từ khoá ghi, timeout) — xem workflow-module.md §3.2 FormDataSources.
+// SqlQuery is blocked by the Service until a read-only account, write-keyword filter and timeout exist.
 public enum DataSourceKind
 {
     Employees = 1,

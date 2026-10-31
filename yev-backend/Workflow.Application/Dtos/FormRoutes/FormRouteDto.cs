@@ -44,8 +44,7 @@ namespace Workflow.Application.Dtos.FormRoutes
         public int SortOrder { get; set; }
     }
 
-    // Warning: cảnh báo không chặn lưu (vd khoảng số NumericRange chồng nhau/để hở, workflow-module.md
-    // §5.2) — Controller nối vào message của response thành công, KHÔNG phải lỗi.
+    // Warning never blocks saving (e.g. overlapping/gapped NumericRange); it is appended to the success message.
     public class ReplaceFormRoutesResultDto
     {
         public List<FormRouteDto> Routes { get; set; } = new();

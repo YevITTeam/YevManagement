@@ -11,11 +11,7 @@ import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 
 type OtFormTabKey = "my-forms" | "pending-approvals" | "my-actions" | "my-participations" | "all-forms";
 
-// docs/attendance-module.md §API/§1.3.B (gộp 2026-07-17) — gộp các màn danh sách cũ ("Đơn của tôi"/
-// "Chờ tôi duyệt"/"Đơn đã xử lý") + 1 tab "Đơn tôi tham gia" thành 1 màn "Đơn tăng ca" duy nhất. Chỉ
-// gộp ở tầng UI — BE vẫn giữ nguyên các API riêng biệt, mỗi tab gọi đúng 1 API (OtFormListPage đã tự
-// làm việc này qua prop `mode`). Tab "Chờ tôi ký duyệt" (Draft/Submitter cũ) đã dọn hẳn ở Giai đoạn
-// 3.2 (2026-08-08) — khái niệm này không còn tồn tại từ khi Cây chức vụ thay thế Submitter (3.1).
+// UI-only merge of the OT list screens; each tab still calls its own BE API via OtFormListPage `mode`.
 export default function OtFormTabsPage() {
     const t = useTranslations("Attendance.OtFormTabs");
     const ALL_TABS: { key: OtFormTabKey; label: string }[] = [
@@ -26,20 +22,18 @@ export default function OtFormTabsPage() {
         { key: "all-forms", label: t("tabAllForms") },
     ];
     const { user } = useAuth();
-    // Create/CreateProduction tách rời — Line Leader chỉ có CreateProduction vẫn cần thấy tab "Đơn của
-    // tôi" (đơn theo chuyền họ tạo cũng nằm ở đây, 2026-09-28, đồng bộ với otRoutePermissions.ts).
+    // Create and CreateProduction are separate: Line Leaders with only CreateProduction still need "my forms".
     const canCreate = hasAnyPermission(user, ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"]);
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
-    // Tab "Tất cả đơn" — chỉ Admin (permission riêng Attendance.OTForm.ViewAll, 2026-09-04).
     const canViewAll = hasPermission(user, "Attendance.OTForm.ViewAll");
-    // Badge số đơn "Chờ tôi duyệt" ngay trên tab — dùng chung hook với badge sidebar (2026-08-19).
+    // Shares the hook with the sidebar badge.
     const pendingApprovalsCount = usePendingApprovalsCount(canApprove);
 
     const visibleTabs = ALL_TABS.filter((tab) => {
         if (tab.key === "my-forms") return canCreate;
         if (tab.key === "pending-approvals") return canApprove;
         if (tab.key === "all-forms") return canViewAll;
-        return true; // "my-actions"/"my-participations" luôn hiện — chỉ cần OTForm.View để vào được cả màn
+        return true; // only OTForm.View is needed for these tabs
     });
 
     const [activeTab, setActiveTab] = usePersistedTab<OtFormTabKey>(
@@ -89,11 +83,7 @@ export default function OtFormTabsPage() {
                 })}
             </div>
 
-            {/*
-                Lazy-mount rồi giữ luôn (giống CategoryManagement) — tab nào chưa từng bấm vào thì chưa
-                mount (chưa gọi API), tab đã ghé qua giữ mounted (ẩn bằng "hidden") để chuyển qua lại
-                tức thì trong phiên này, không tải lại.
-            */}
+            {/* Lazy-mount and keep mounted so switching tabs doesn't refetch. */}
             {visibleTabs.map((tab) =>
                 visitedTabs.has(tab.key) || activeTab === tab.key ? (
                     <div key={tab.key} className={activeTab === tab.key ? "" : "hidden"}>

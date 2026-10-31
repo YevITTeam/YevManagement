@@ -23,19 +23,15 @@ interface PrintDeviceQrLabelsDialogProps {
     isOpen: boolean;
     deviceIds: number[];
     onClose: () => void;
-    // Gọi riêng khi lệnh in đã được kích hoạt thành công (khác onClose — cũng chạy khi người dùng
-    // bấm Huỷ/backdrop). Dùng để bên gọi dọn danh sách đã tick chọn sau khi in xong.
+    // Fires only once printing actually starts (onClose also runs on cancel), so callers can clear the selection.
     onPrinted?: () => void;
 }
 
-// Mã thiết bị + số serial LUÔN hiển thị dạng chữ trên tem (không phải field để chọn) — các field còn
-// lại chỉ được NHÉT VÀO nội dung mã QR (hiện ra khi quét bằng điện thoại), không in chữ ra tem.
-// "deviceId" KHÔNG phải field để tick (yêu cầu người dùng 2026-08-10) — luôn nhét vào QR sẵn, cùng
-// nhóm "luôn có" với deviceCode/serialNumber, xem buildQrPayload. "deviceName" NGƯỢC LẠI vẫn là field
-// để tick bình thường (đợt trước lỡ bỏ ra rồi thêm lại đúng ý người dùng).
+// deviceCode and serial are always printed as text and deviceId is always encoded in the QR;
+// the remaining fields are optional and only encoded in the QR, never printed.
 type QrEncodedFieldKey = "deviceName" | "deviceTypeName" | "branchName" | "supplierName" | "manager" | "statusText" | "purchaseDate";
 
-// Thứ tự đúng như hợp đồng BE mô tả (docs/asset-module.md §4): tên/loại/xưởng/NCC/người dùng/trạng thái/ngày mua.
+// Order follows the BE contract: name/type/branch/supplier/user/status/purchase date.
 const FIELD_DEFS: { key: QrEncodedFieldKey; label: string }[] = [
     { key: "deviceName", label: "Tên thiết bị" },
     { key: "deviceTypeName", label: "Loại thiết bị" },
@@ -46,8 +42,7 @@ const FIELD_DEFS: { key: QrEncodedFieldKey; label: string }[] = [
     { key: "purchaseDate", label: "Ngày mua" },
 ];
 
-// Mặc định chỉ tích "Tên thiết bị" — deviceCode/serialNumber/deviceId LUÔN có sẵn trong QR (xem
-// buildQrPayload), user tự bật thêm field nào cần.
+// deviceCode/serialNumber/deviceId are always encoded (buildQrPayload); only deviceName is ticked by default.
 const DEFAULT_ENCODED_FIELDS: QrEncodedFieldKey[] = ["deviceName"];
 
 function formatDate(value: string | null) {
@@ -55,7 +50,7 @@ function formatDate(value: string | null) {
     return new Date(value).toLocaleDateString("vi-VN");
 }
 
-// Dòng nội dung mã hoá cho 1 field — chỉ dùng để dựng qrPayload (không hiển thị chữ ra tem).
+// QR payload line only; never printed as text.
 function encodedFieldLine(item: DeviceQrLabelDto, key: QrEncodedFieldKey): string {
     switch (key) {
         case "deviceName":
@@ -75,10 +70,8 @@ function encodedFieldLine(item: DeviceQrLabelDto, key: QrEncodedFieldKey): strin
     }
 }
 
-// FE tự dựng qrPayload: dòng 1 LUÔN là deviceCode (app nội bộ tách dòng 1 để tra cứu), dòng 2 luôn là
-// serial (đã in sẵn trên tem nhưng vẫn nhét vào QR để quét đối chiếu), dòng 3 luôn là deviceId (không
-// còn field để tick, yêu cầu người dùng 2026-08-10) — các dòng sau là field user chọn thêm (deviceName
-// mặc định đã tích sẵn, xem DEFAULT_ENCODED_FIELDS).
+// Line 1 must be deviceCode (the internal app splits it out for lookup), then serial and deviceId,
+// followed by the user-selected fields.
 function buildQrPayload(item: DeviceQrLabelDto, encodedFields: QrEncodedFieldKey[]) {
     const lines = [
         item.deviceCode,
@@ -104,8 +97,7 @@ function buildA4LabelHtml(item: DeviceQrLabelDto, qrDataUrls: Map<number, string
       </div>`;
 }
 
-// Tem Zebra 5.2 x 3.1cm (bề ngang), đủ chỗ xếp ngang QR trái + chữ phải như người dùng đã chọn ban
-// đầu (giả định "gần vuông 2x2in" trước đó là SAI vì đo nhầm khổ tổng — xem hằng số ở trên).
+// Zebra label is 5.2 x 3.1cm landscape: QR on the left, text on the right.
 function buildZebraLabelHtml(item: DeviceQrLabelDto, qrDataUrls: Map<number, string> | null) {
     const qrDataUrl = qrDataUrls?.get(item.deviceId);
     const qrHtml = qrDataUrl ? `<img class="qr" src="${qrDataUrl}" alt="QR" />` : "";
@@ -119,10 +111,8 @@ function buildZebraLabelHtml(item: DeviceQrLabelDto, qrDataUrls: Map<number, str
       </div>`;
 }
 
-// Zebra in TỪNG LẦN FEED = 1 hàng gồm 2 tem cạnh nhau trên khổ decal cắt sẵn — không có khái niệm
-// "nhiều tem/trang" kiểu giấy A4. @page phải khớp CHÍNH XÁC kích thước 1 lần feed (margin 0, mỗi
-// hàng 2 tem = 1 page riêng), nếu không driver/trình duyệt sẽ tự co kéo nội dung → lệch, tràn, xoay
-// ngang (xem tem in lỗi khi setup ban đầu). Chế độ A4 giữ nguyên layout lưới nhiều cột cũ.
+// Each Zebra feed is one row of two die-cut labels, so @page must match one feed exactly (margin 0);
+// otherwise the driver rescales and labels shift, overflow or rotate. A4 mode keeps the grid layout.
 function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, string> | null, printMode: PrintMode) {
     if (printMode === "zebra") {
         const rows: string[] = [];
@@ -143,10 +133,7 @@ function buildQrPrintHtml(items: DeviceQrLabelDto[], qrDataUrls: Map<number, str
     .row {
       display: flex;
       align-items: center;
-      /* flex-start (không phải center): hàng đủ 2 tem thì content vừa khít bề rộng trang nên 2 cách
-         cho cùng kết quả, nhưng hàng lẻ (chỉ còn 1 tem cuối) phải nằm ở vị trí tem 1 (bên trái) để
-         khớp đúng vị trí vật lý của decal trên máy in Zebra — center sẽ đẩy nó ra giữa trang, lệch
-         khỏi decal đã cắt sẵn. */
+      /* flex-start so a lone last label lands on the left die-cut slot, matching the physical decal. */
       justify-content: flex-start;
       width: ${ZEBRA_PAGE_WIDTH_CM}cm;
       height: ${ZEBRA_PAGE_HEIGHT_CM}cm;

@@ -4,7 +4,7 @@ namespace Attendance.Application.Dtos.OtForms
     {
         public int Id { get; set; }
 
-        // Null khi IsProductionForm = true (đơn "theo chuyền") — xem OtForm.GroupId.
+        // Null for production-line forms.
         public int? GroupId { get; set; }
         public string? GroupNameVn { get; set; }
         public string? GroupNameJp { get; set; }
@@ -31,14 +31,10 @@ namespace Attendance.Application.Dtos.OtForms
         // Snapshot of the creator's full name — FE always prefers displaying this field, falling back to CreatedByUserName if null.
         public string? CreatedByFullName { get; set; }
 
-        // Thời điểm tạo đơn (UTC) — FE dùng làm "thời gian ký" cho trường hợp tự ký (creatorSignatureImage
-        // không có OtFormApprovalHistory riêng để lấy actionAt). Xem OtForm.CreatedAt.
+        // UTC; the FE uses it as the self-sign time since there is no approval history row for it.
         public DateTime CreatedAt { get; set; }
 
-        // Ảnh chữ ký của chính người tạo đơn — chỉ có giá trị khi người tạo đã ở cấp cao hơn/bằng mọi
-        // Chức vụ trung gian "Bắt buộc ký" của Phòng ban (tự ký ô "Người đề nghị" thay vì chờ ai khác).
-        // Serialize tự động thành base64 string (System.Text.Json mặc định cho byte[]) — xem OtForm.
-        // CreatorSignatureImage, OtFormPrintView.tsx.
+        // Set only when the creator self-signs the requester box; serialized as base64.
         public byte[]? CreatorSignatureImage { get; set; }
 
         // Enum Attendance.Domain.Enums.OtFormStatus.
@@ -55,17 +51,17 @@ namespace Attendance.Application.Dtos.OtForms
 
         public DateTime? ResubmitDeadline { get; set; }
 
-        // Cảnh báo suy luận chuỗi lúc tạo đơn (null nếu chuỗi đầy đủ) — xem OtForm.ApprovalChainWarning.
+        // Null when the chain is complete.
         public string? ApprovalChainWarning { get; set; }
 
         public List<OtFormEmployeeDto> Employees { get; set; } = new();
         public ProcessPartDto? ProcessPart { get; set; }
         public List<OtFormApprovalHistoryDto> ApprovalHistories { get; set; } = new();
 
-        // Lịch sử chỉnh sửa (sửa giờ/ghi chú, thêm/loại nhân viên) — mới nhất trước, xem OtFormEditLog.
+        // Newest first.
         public List<OtFormEditLogDto> EditLogs { get; set; } = new();
 
-        // Chuỗi bước duyệt đã snapshot lúc tạo đơn, sắp theo StepOrder — xem OtFormApprovalStepDto.
+        // Ordered by StepOrder.
         public List<OtFormApprovalStepDto> ApprovalSteps { get; set; } = new();
     }
 }

@@ -7,17 +7,13 @@ using Shared.Application.Services;
 
 namespace Attendance.Application.Services
 {
-    // 2 báo cáo theo ngày cho đơn "dưới chuyền" đã Hoàn tất (docs/docs-be/attendance-module.md §Báo cáo & export dưới chuyền theo ngày). Chỉ tính đơn IsProductionForm=true, Status=Completed
-    // (đã qua đủ mọi cấp duyệt, không chỉ riêng Trưởng phòng — người dùng xác nhận "đơn phải trạng
-    // thái hoàn tất thì mới được tính vào").
+    // Daily reports for production forms; only Completed forms count (fully approved, not just by the Manager).
     public class ProductionOtReportService : BaseService<IAttendanceUnitOfWork>, IProductionOtReportService
     {
         private const string UnknownLabel = "Chưa xác định";
         private const string OtherShiftLabel = "Khac";
 
-        // Khung giờ CA cố định (2026-08-28, theo người dùng) — 1 đơn khớp CA nào khi StartTime/EndTime
-        // nằm TRỌN trong khung đó (không phải trùng khớp tuyệt đối, vì người về sớm/vào trễ vẫn thuộc
-        // đúng CA gốc — vd 19:30-22:00 vẫn là CA C dù không bắt đầu đúng 18:00).
+        // A form belongs to a shift when its Start/End fall within the window, not only on exact match (early leave/late start).
         private static readonly (string Code, TimeOnly Start, TimeOnly End)[] ShiftWindows =
         {
             ("H", new TimeOnly(6, 0), new TimeOnly(8, 0)),
@@ -54,9 +50,7 @@ namespace Attendance.Application.Services
                     ShiftTeam = x.OtFormEmployees.Where(e => !e.IsRemoved).Select(e => e.ShiftTeamCodeSnapshot).FirstOrDefault(),
                 });
 
-            // Nhóm theo đúng tổ hợp (Công đoạn, Team, Line-Nhóm màu, khung giờ CHÍNH XÁC) — KHÔNG chỉ
-            // theo (Công đoạn, CA, Team, Line_ca) vì 1 Line/CA có thể có nhiều dòng khác nhau do người
-            // về sớm/vào trễ khác giờ nhau (khớp đúng cách hệ cũ tách dòng trong file mẫu 22-08.xlsx).
+            // Group by exact time range too: one line/shift can have several rows when people start or leave at different times.
             var rows = forms
                 .GroupBy(x => new { x.CongDoan, x.Team, x.Block, x.ShiftTeam, x.StartTime, x.EndTime })
                 .Select(g => new ProductionTicketReportRowDto
@@ -132,8 +126,7 @@ namespace Attendance.Application.Services
                     .ToList();
             var ledgerByEmployee = ledgerRows.GroupBy(x => x.EmployeeId).ToDictionary(g => g.Key, g => g.ToList());
 
-            // MNV_SC (2026-08-29, theo yêu cầu bổ sung) — người sửa gần nhất của ĐÚNG dòng nhân viên đó
-            // trong ĐÚNG đơn đó, tra qua OtFormEditLog (bảng nhật ký sửa đơn, xem OtFormEditLog.cs).
+            // MNV_SC: last editor of that employee row in that form, from OtFormEditLog.
             var editLogs = otFormIds.Count == 0
                 ? new List<(int OtFormId, int? EmployeeId, string ActionByUserName, DateTime ActionAt)>()
                 : (await _unitOfWork.OtFormEditLogs.SelectAsync(
@@ -142,9 +135,7 @@ namespace Attendance.Application.Services
                     .Select(l => (l.OtFormId, l.EmployeeId, l.ActionByUserName, l.ActionAt))
                     .ToList();
 
-            // MNV_LC/MNV_SC cần mã nhân viên (Employee.Code), nhưng OtForm/OtFormEditLog chỉ lưu
-            // UserName người thao tác (không lưu numeric UserId, xem OtForm.CreatedByUserName) — tra
-            // 1 lượt duy nhất UserName -> Code cho cả người lập lẫn người sửa.
+            // Forms and edit logs store UserName only, so resolve UserName -> Employee.Code once for creators and editors.
             var userNamesToResolve = entries.Select(e => e.CreatedByUserName)
                 .Concat(editLogs.Select(l => l.ActionByUserName))
                 .Where(u => !string.IsNullOrWhiteSpace(u))
@@ -158,10 +149,7 @@ namespace Attendance.Application.Services
                     .Where(e => e.UserName != null)
                     .ToDictionary(e => e.UserName!, e => e.Code);
 
-            // Gộp 1 dòng/người/ngày (2026-08-28, theo người dùng — báo cáo "số LƯỢT tăng ca" là báo
-            // cáo khác, riêng biệt, chưa làm ở đây). Giờ bắt đầu/kết thúc lấy khung sớm nhất/muộn nhất
-            // trong ngày; các field theo ĐƠN (Lý do/Công việc/Block/Nhóm/Line mượn/Người lập/Bộ phận)
-            // gộp distinct nếu người đó có nhiều lượt khác đơn trong ngày.
+            // One row per person per day: earliest start / latest end; form-level fields are joined distinct across forms.
             var reportRows = entries
                 .GroupBy(x => x.EmployeeId)
                 .Select(g =>
@@ -216,9 +204,7 @@ namespace Attendance.Application.Services
             using var workbook = new XLWorkbook();
             var sheet = workbook.Worksheets.Add("TongGioOT");
 
-            // Đặt tên cột + đủ 23 cột khớp đúng file mẫu người dùng gửi lại 2026-08-29 (ảnh chụp export
-            // gốc, đầy đủ hơn bản 13 cột đợt trước). Không đổi Ý NGHĨA cột đã chốt (vẫn gộp 1 dòng/
-            // người/ngày), chỉ bổ sung các cột còn thiếu.
+            // 23 columns matching the user-supplied template.
             string[] headers =
             {
                 "MNV", "BOPHAN", "HO", "TEN", "Ngay_TC", "Gio_BD", "Gio_KT", "Lydo", "LYDO_JP", "Lydo_phu",
@@ -293,9 +279,7 @@ namespace Attendance.Application.Services
             var employeeIds = entries.Select(e => e.EmployeeId).Distinct().ToList();
             var otFormIds = entries.Select(e => e.OtFormId).Distinct().ToList();
 
-            // MNV_TP — mã Trưởng phòng đã DUYỆT (Approved) đúng đơn đó, tra qua bước duyệt cấp
-            // DepartmentManager (JobTitleTerminalLevel.DepartmentManager) của từng OtForm — 2026-08-29,
-            // theo yêu cầu người dùng, cùng cách tra MNV_LC/MNV_SC ở ExportHoursReportAsync.
+            // MNV_TP: code of the DepartmentManager who approved that form.
             var managerApprovals = otFormIds.Count == 0
                 ? new Dictionary<int, string>()
                 : (await _unitOfWork.OtFormApprovalHistories.SelectAsync(
@@ -314,8 +298,7 @@ namespace Attendance.Application.Services
                     .Where(e => e.UserName != null)
                     .ToDictionary(e => e.UserName!, e => e.Code);
 
-            // Tổng hợp CẢ NGÀY theo từng người (số lượt + tổng giờ) — lặp lại giống nhau trên mọi dòng
-            // của người đó (KHÔNG gộp dòng, khác ExportHoursReportAsync — xem docs §Số lượt tăng ca).
+            // Per-person daily totals repeated on every row of that person (rows are not merged here).
             var dailyTotalsByEmployee = entries
                 .GroupBy(x => x.EmployeeId)
                 .ToDictionary(
@@ -354,8 +337,7 @@ namespace Attendance.Application.Services
             using var workbook = new XLWorkbook();
             var sheet = workbook.Worksheets.Add("SoLuotTangCa");
 
-            // Đủ 9 cột khớp file mẫu người dùng gửi (Qry_So_lan_tang_Ca_trong_ngay_sx...xlsx) — chỉ có
-            // dòng tiêu đề, không có dữ liệu mẫu, nên thứ tự/tên cột lấy nguyên văn từ đó.
+            // 9 columns named exactly as in the user-supplied template.
             string[] headers = { "MNV", "BLOCK", "NHOM", "NOTE", "Ngay_TC", "LAN_TANG_CA_TRONG_NGAY", "Gio_Hientai", "BP", "MNV_TP" };
             for (var col = 0; col < headers.Length; col++)
                 sheet.Cell(1, col + 1).Value = headers[col];
@@ -385,22 +367,15 @@ namespace Attendance.Application.Services
             return (stream.ToArray(), fileName);
         }
 
-        // "Qry_EXPORT_EXCEL" (2026-09-03c) — 17 cột, gộp 1 dòng/người/ngày, ĐỘC LẬP với
-        // ExportHoursReportAsync (23 cột, người dùng xác nhận giữ nguyên cả 2, không gộp/thay thế nhau
-        // dù cùng kiểu gộp/người/ngày). Thứ tự cột đúng nguyên văn file thật:
-        // MNV/BOPHAN/HO/TEN/Ngay_TC/Gio_BD/Gio_KT/Lydo/Lydo_phu/An/BLOCK/NHOM/NOTE/Gio_Thuc_Te/BP/
-        // QUAN_LY_TC_SX/MNV_TP.
+        // 17 columns, one row per person per day; kept separate from ExportHoursReportAsync by user decision. Column order:
+        // MNV/BOPHAN/HO/TEN/Ngay_TC/Gio_BD/Gio_KT/Lydo/Lydo_phu/An/BLOCK/NHOM/NOTE/Gio_Thuc_Te/BP/QUAN_LY_TC_SX/MNV_TP.
         public async Task<(byte[] Content, string FileName)> ExportQryExportExcelAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var settings = await _attendanceSettingService.GetAsync();
             var grouped = await BuildGroupedDailyRowsAsync(date, departmentId, workshopId, settings);
             var otFormIds = grouped.SelectMany(x => x.OtFormIds).Distinct().ToList();
 
-            // QUAN_LY_TC_SX — mã nhân viên đã DUYỆT (Approved) ở bước Chức vụ "TL" (Team Leader,
-            // JobTitles.Code="TL") — người dùng xác nhận 2026-09-03c ("MNV team leader"). MNV_TP — cùng
-            // cơ chế đã có ở ExportTimesReportAsync (bước TerminalLevel=DepartmentManager), tách hàm
-            // dùng chung ResolveApprovalCodesByJobTitleCodeAsync/ResolveApprovalCodesByTerminalLevelAsync
-            // ở dưới để không lặp code.
+            // QUAN_LY_TC_SX: code of the approver at the "TL" (Team Leader) step; MNV_TP: the DepartmentManager step approver.
             var teamLeaderCodeByForm = await ResolveApprovalCodesByJobTitleCodeAsync(otFormIds, "TL");
             var managerCodeByForm = await ResolveApprovalCodesByTerminalLevelAsync(otFormIds, (int)JobTitleTerminalLevel.DepartmentManager);
 
@@ -451,8 +426,7 @@ namespace Attendance.Application.Services
             return (stream.ToArray(), fileName);
         }
 
-        // "SUM_EXPORT_DATA" (2026-09-03c) — 7 cột, bản tóm tắt riêng biệt (KHÔNG phải rút gọn của
-        // Qry_EXPORT_EXCEL — người dùng xác nhận 2 báo cáo phục vụ 2 mục đích khác nhau).
+        // 7-column summary; a separate report, not a reduced Qry_EXPORT_EXCEL.
         public async Task<(byte[] Content, string FileName)> ExportSumExportDataAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var settings = await _attendanceSettingService.GetAsync();
@@ -507,10 +481,8 @@ namespace Attendance.Application.Services
             public string DepartmentCode { get; set; } = null!;
         }
 
-        // Nền chung cho 3 báo cáo "gộp 1 dòng/người/ngày" (ExportQryExportExcelAsync/
-        // ExportSumExportDataAsync) — KHÔNG dùng lại cho ExportHoursReportAsync (23 cột, đã chốt trước
-        // đó, có thêm lũy kế Tháng/Năm + MNV_LC/MNV_SC không cần ở đây) để tránh đụng logic đang chạy
-        // ổn định — chấp nhận trùng 1 phần logic gộp giữa 2 nơi.
+        // Shared base for the per-person-per-day reports; ExportHoursReportAsync keeps its own grouping on purpose to avoid
+        // touching stable logic, accepting some duplication.
         private async Task<List<GroupedDailyRow>> BuildGroupedDailyRowsAsync(DateOnly date, int? departmentId, int? workshopId, Dtos.AttendanceSettings.AttendanceSettingDto settings)
         {
             var entries = await _unitOfWork.OtFormEmployees.SelectAsync(
@@ -565,8 +537,7 @@ namespace Attendance.Application.Services
                 .ToList();
         }
 
-        // Mã nhân viên đã DUYỆT (Approved) đúng OtForm đó ở bước có JobTitleCodeSnapshot khớp — dùng
-        // cho QUAN_LY_TC_SX (lọc "TL"). Trả về theo OtFormId để chỗ gọi tự resolve theo nhóm/người.
+        // Approver codes per OtFormId for the step whose JobTitleCodeSnapshot matches.
         private async Task<Dictionary<int, string>> ResolveApprovalCodesByJobTitleCodeAsync(List<int> otFormIds, string jobTitleCode)
         {
             if (otFormIds.Count == 0) return new Dictionary<int, string>();
@@ -581,8 +552,7 @@ namespace Attendance.Application.Services
             return await ResolveUserNamesToEmployeeCodesAsync(approvals);
         }
 
-        // Cùng cơ chế nhưng lọc theo TerminalLevelSnapshot (dùng cho MNV_TP — bước Trưởng phòng, mirror
-        // ExportTimesReportAsync).
+        // Same, filtered by TerminalLevelSnapshot.
         private async Task<Dictionary<int, string>> ResolveApprovalCodesByTerminalLevelAsync(List<int> otFormIds, int terminalLevel)
         {
             if (otFormIds.Count == 0) return new Dictionary<int, string>();
@@ -613,17 +583,15 @@ namespace Attendance.Application.Services
                 .ToDictionary(kv => kv.Key, kv => employeeCodeByUserName[kv.Value]);
         }
 
-        // 1 người có thể có nhiều OtForm/ngày — nếu mã người duyệt khác nhau giữa các đơn thì gộp
-        // distinct bằng "; " (hiếm, cùng nguyên tắc join các field cấp-đơn khác trong module).
+        // A person may have several forms per day; differing approver codes are joined with "; ".
         private static string? ResolveDistinctCode(List<int> otFormIds, Dictionary<int, string> codeByOtFormId)
         {
             var codes = otFormIds.Where(codeByOtFormId.ContainsKey).Select(id => codeByOtFormId[id]).Distinct().ToList();
             return codes.Count == 0 ? null : string.Join("; ", codes);
         }
 
-        // Tên file ĐÚNG quy tắc thật (2026-09-03c, xem docs/Data/Reports/): "{TenQuery}_{yyyy-MM-d}_
-        // {MaPhongBan}.xlsx" — ngày KHÔNG có số 0 đầu ở phần ngày (dùng đặc tả "d", KHÁC "dd"). Không
-        // lọc theo Phòng ban (departmentId=null) thì bỏ hẳn phần hậu tố mã Phòng ban.
+        // File name format "{QueryName}_{yyyy-MM-d}_{DeptCode}.xlsx" (day without leading zero); suffix omitted when not
+        // filtered by department.
         private async Task<string> BuildRealFileNameAsync(string queryName, DateOnly date, int? departmentId)
         {
             var datePart = date.ToString("yyyy-MM-d");
@@ -638,6 +606,7 @@ namespace Attendance.Application.Services
 
         public async Task<List<ProductionTicketBatchGroupDto>> GetTicketBatchAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
+            var settings = await _attendanceSettingService.GetAsync();
             var entries = await _unitOfWork.OtFormEmployees.SelectAsync(
                 x => x.OtForm.IsProductionForm && !x.OtForm.IsDeleted
                      && x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date == date && !x.IsRemoved
@@ -652,13 +621,11 @@ namespace Attendance.Application.Services
                     x.StartTime,
                     x.EndTime,
                     x.NoteVn,
-                    // MonthToDate/YearToDate: LẤY ĐÚNG snapshot đã đóng băng trên OtFormEmployee (y hệt
-                    // OtFormService.GetOtFormByIdAsync đang trả cho bản in đơn lẻ) — KHÔNG tự tính lại từ
-                    // EmployeeAccumulationHistory (bản trước làm vậy, ra số khác hẳn con số đã ký trên đơn
-                    // thật vì ledger là số SỐNG tại thời điểm xuất báo cáo, còn cột này mới là số ĐÚNG lúc
-                    // lập đơn — lỗi người dùng báo 2026-09-03: bản xuất zip ra lũy kế khác bản in đơn).
+                    // Use the snapshot frozen on OtFormEmployee, as the single-form print does; the live ledger would differ from
+                    // the figures signed on the form.
                     x.MonthToDate,
                     x.YearToDate,
+                    x.DidEat,
                     x.CongDoanSnapshot,
                     x.TaskNameSnapshot,
                     x.TeamCodeSnapshot,
@@ -668,9 +635,7 @@ namespace Attendance.Application.Services
                     FormEndTime = x.OtForm.EndTime,
                 });
 
-            // Cùng tổ hợp gộp với GetTicketReportAsync (Công đoạn/Team/Line-Nhóm màu/khung giờ CHÍNH
-            // XÁC của đơn) — chỉ khác là gộp ở cấp OtFormEmployee để lấy được danh sách TỪNG người thay
-            // vì chỉ đếm số lượng như báo cáo pivot.
+            // Same grouping as GetTicketReportAsync, but at OtFormEmployee level to list each person.
             var groups = entries
                 .GroupBy(x => new { x.CongDoanSnapshot, x.TeamCodeSnapshot, x.BlockCodeSnapshot, x.ShiftTeamCodeSnapshot, x.FormStartTime, x.FormEndTime })
                 .Select(g => new ProductionTicketBatchGroupDto
@@ -679,10 +644,7 @@ namespace Attendance.Application.Services
                     Block = string.IsNullOrWhiteSpace(g.Key.BlockCodeSnapshot) ? UnknownLabel : g.Key.BlockCodeSnapshot!,
                     ShiftTeam = string.IsNullOrWhiteSpace(g.Key.ShiftTeamCodeSnapshot) ? UnknownLabel : g.Key.ShiftTeamCodeSnapshot!,
                     EmployeeCount = g.Select(x => x.EmployeeId).Distinct().Count(),
-                    // Giữ nguyên thứ tự EmployeeId (khớp thứ tự tự nhiên OtFormEmployees.FindWithIncludesAsync
-                    // đang trả cho bản in đơn lẻ — không có OrderBy) thay vì sắp lại theo EmployeeCode như
-                    // bản trước (khiến thứ tự danh sách nhân viên khác hẳn bản in đơn — cùng lỗi báo cáo
-                    // 2026-09-03).
+                    // Keep EmployeeId order to match the single-form print (no OrderBy there).
                     Employees = g
                         .GroupBy(x => x.EmployeeId)
                         .OrderBy(eg => eg.Key)
@@ -696,8 +658,9 @@ namespace Attendance.Application.Services
                                 FullName = first.FullName,
                                 StartTime = first.StartTime,
                                 EndTime = eg.Max(x => x.EndTime),
-                                MonthToDate = first.MonthToDate,
-                                YearToDate = first.YearToDate,
+                                // Same as the single-form print: the stored total excludes this day's hours, the paper includes them.
+                                MonthToDate = first.MonthToDate + eg.Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, settings)),
+                                YearToDate = first.YearToDate + eg.Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, settings)),
                                 NoteVn = eg.Select(x => x.NoteVn).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
                                 CongDoanSnapshot = first.CongDoanSnapshot,
                                 TaskNameSnapshot = first.TaskNameSnapshot,

@@ -9,11 +9,7 @@ using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
 {
-    // Bulk import Employees (upsert by Code — create new if not existing, update if already
-    // exists) with automatic creation of Department/Group if the code doesn't exist yet, from an
-    // HR Excel file. Reuses the permission of the main resource (Attendance.Employee.Create)
-    // instead of creating a separate "import" permission — same pattern as DeviceImportController
-    // in the Asset module (2026-07-16, permission attached per requirement).
+    // Upsert by Code, auto-creating missing Department/Group; reuses Employee.Create instead of a separate import permission.
     public class EmployeeImportController : BaseController
     {
         private const string AdminRole = "Admin";
@@ -47,11 +43,7 @@ namespace Attendance.Api.Controllers
             return Success(result, message);
         }
 
-        // Mục 5 (2026-08-27) — import hàng loạt giới hạn OT tháng/năm riêng từng nhân viên. Permission
-        // RIÊNG hẹp hơn Attendance.Employee.Update (2026-08-29 — đổi từ Employee.Update sang
-        // Employee.UpdateOtLimit, tự cấp cho Người phụ trách Bộ phận, scope theo dòng qua
-        // EmployeeImportService.ImportOtHourLimitsAsync) — xem docs/docs-be/attendance-module.md §Phân
-        // quyền theo Phòng ban.
+        // Narrower than Employee.Update; auto-granted to Department coordinators, with per-row scope checks in the service.
         [RequirePermission("Attendance.Employee.UpdateOtLimit")]
         [HttpPost("ot-hour-limits")]
         public async Task<ActionResult<ApiResponse<EmployeeOtHourLimitImportResultDto>>> ImportOtHourLimits(IFormFile file)
@@ -66,10 +58,7 @@ namespace Attendance.Api.Controllers
             return Success(result, message);
         }
 
-        // Import lũy kế OT theo THÁNG cho MỌI Phòng ban (2026-09-03) — dùng lại NGUYÊN permission
-        // Attendance.EmployeeAccumulation.Import đã có sẵn (đã tự động cấp cho Người phụ trách BẤT KỲ
-        // Phòng ban nào từ trước, không cần migration/permission mới) — xem
-        // docs/docs-be/attendance-module.md §Phân quyền theo Phòng ban.
+        // Reuses EmployeeAccumulation.Import, already auto-granted to every Department coordinator.
         [RequirePermission("Attendance.EmployeeAccumulation.Import")]
         [HttpPost("monthly-accumulation")]
         public async Task<ActionResult<ApiResponse<ProductionEmployeeAccumulationResultDto>>> ImportMonthlyAccumulation(
@@ -91,8 +80,7 @@ namespace Attendance.Api.Controllers
             return Success(result, message);
         }
 
-        // File mẫu tải xuống (2026-08-27) — trả file .xlsx trực tiếp, KHÔNG bọc ApiResponse<T>, cùng
-        // pattern ProductionEmployeeExportController.Export.
+        // Returns the .xlsx directly, not ApiResponse<T>.
         [RequirePermission("Attendance.Employee.Create")]
         [HttpGet("export")]
         public async Task<IActionResult> Export([FromQuery] EmployeeExportFilterDto filter)

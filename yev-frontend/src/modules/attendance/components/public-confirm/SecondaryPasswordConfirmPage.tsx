@@ -9,10 +9,8 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { createBilingualTranslator } from "@/modules/attendance/lib/bilingual";
 
-// Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — mirror SignatureConfirmPage.tsx.
-// Mở qua link email "Xác nhận thiết lập mật khẩu cấp 2". Bilingual (VN / JP) cố định bất kể route
-// đang là /vi hay /ja, đồng bộ với SignatureConfirmPage.tsx/OtFormEmailConfirmPage.tsx. Mật khẩu
-// KHÔNG được BE trả về nên trang này chỉ hiện tài khoản + hạn xác nhận, không có preview nội dung.
+// Public route secured by the URL token; always bilingual (VN/JP) regardless of the /vi or /ja segment.
+// BE never returns the password, so only account + expiry are shown.
 export default function SecondaryPasswordConfirmPage() {
     const t = createBilingualTranslator("Attendance.SecondaryPasswordConfirm");
     const searchParams = useSearchParams();
@@ -23,8 +21,7 @@ export default function SecondaryPasswordConfirmPage() {
     const [confirmed, setConfirmed] = useState(false);
     const [confirmError, setConfirmError] = useState<string | null>(null);
 
-    // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
-    // đúng câu thông báo riêng này thay vì rơi về fallback chung.
+    // Throw a JSON {message} so getApiErrorMessage surfaces this specific text instead of the generic fallback.
     const { isLoading, error: loadError } = useFetchEffect(
         () =>
             token

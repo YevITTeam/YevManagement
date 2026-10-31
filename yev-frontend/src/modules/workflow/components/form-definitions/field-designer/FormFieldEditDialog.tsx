@@ -22,8 +22,7 @@ interface FormFieldEditDialogProps {
     existingFieldKeys: string[];
     onClose: () => void;
     onSave: (updated: EditableField) => void;
-    // true ở chế độ tài liệu (workflow-module.md §1.5) — ColumnSpan không có tác dụng khi vị trí field
-    // đã nằm sẵn trong layoutHtml, ẩn đi để khỏi gây hiểu lầm.
+    // Document mode: ColumnSpan has no effect since position comes from layoutHtml, so it is hidden.
     hideColumnSpan?: boolean;
 }
 
@@ -39,14 +38,12 @@ function parseOptions(json: string | null): OptionRow[] {
             return parsed.map((x) => ({ value: String(x.value ?? ""), label: String(x.label ?? "") }));
         }
     } catch {
-        // JSON hỏng (vd sửa tay từ ngoài) — coi như rỗng, không chặn mở dialog.
+        // Malformed JSON (e.g. hand-edited): treat as empty instead of blocking the dialog.
     }
     return [];
 }
 
-// Sửa chi tiết 1 field trong bộ nhớ cục bộ — KHÔNG gọi API, chỉ trả field đã sửa về cho FieldCanvas.
-// Trường hiện thêm tuỳ DataType: Dropdown/Radio/MultiSelect có bảng Options + chọn FormDataSource
-// thay thế; Number/Decimal có Min/Max; Text/TextArea có MaxLength.
+// Edits local state only, no API call; the result goes back to FieldCanvas.
 export default function FormFieldEditDialog({ field, existingFieldKeys, onClose, onSave, hideColumnSpan }: FormFieldEditDialogProps) {
     const t = useTranslations("Workflow.FormDefinition");
     const tCommon = useTranslations("Common");

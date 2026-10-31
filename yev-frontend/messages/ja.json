@@ -1002,6 +1002,8 @@
       "dateLabel": "日付",
       "timeLabel": "時間",
       "createdByLabel": "作成者",
+      "requesterStep": "申請者",
+      "createdAction": "作成",
       "subReasonLabel": "詳細理由",
       "processPartTitle": "その他のご要望",
       "eatFieldLabel": "食事",

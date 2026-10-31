@@ -11,23 +11,16 @@ export interface EmployeeDto {
     code: string;
     firstName: string;
     lastName: string;
-    // Tài khoản AD của chính nhân viên (nullable) — dùng để liên kết người tạo đơn OT với đúng Employee
-    // (docs §3.5).
+    // Employee's own AD account (nullable), links OT form creators to the right Employee.
     userName: string | null;
-    // Giờ OT lũy kế THẬT (docs/attendance-module.md §API) — BE tính trực tiếp từ ledger theo đúng
-    // tháng/năm THỰC TẾ hôm nay mỗi lần đọc, không lưu cache nữa (2026-08-19). Dùng cảnh báo vượt
-    // 25h/tháng hoặc 300h/năm.
+    // Computed live from the ledger for the current month/year on every read (not cached).
     monthToDate: number;
     yearToDate: number;
-    // Lũy kế DỰ KIẾN = thực tế + các đơn khác đang chờ duyệt (chưa Completed/Rejected) của người này
-    // (2026-08-06) — dùng cảnh báo hạn mức lúc TẠO đơn mới thay cho monthToDate/yearToDate. CHỈ có ý
-    // nghĩa khi lấy từ getEmployeesByGroup (scope theo ngày trên đơn đang tạo) — nơi khác trả về 0.
+    // Actual + other pending forms; only meaningful from getEmployeesByGroup (scoped to the new form's date), 0 elsewhere.
     projectedDayToDate: number;
     projectedMonthToDate: number;
     projectedYearToDate: number;
-    // Nullable (2026-08-08): Trưởng phòng dùng departmentId thay vì groupId (không thuộc Bộ phận cụ
-    // thể nào); Trưởng Xưởng/Giám đốc cả 2 đều null (dùng chung toàn công ty) — xem
-    // docs/attendance-module.md §API §Cây chức vụ.
+    // Nullable: Department Managers use departmentId instead; Workshop Manager/Director have neither (company-wide).
     groupId: number | null;
     groupNameVn: string | null;
     departmentId: number | null;
@@ -37,13 +30,11 @@ export interface EmployeeDto {
     workshopNameVn: string | null;
     approvalScopes: EmployeeApprovalScopeDto[];
 
-    // Chức vụ hiện tại (cây Chức vụ) — null nếu chưa được gán (xem docs/attendance-module.md §API §Cây chức vụ).
+    // null when no job title is assigned.
     jobTitleId: number | null;
     jobTitleName: string | null;
 
-    // Giới hạn giờ OT/tháng/năm RIÊNG cho người này — null = dùng mặc định chung
-    // (AttendanceSettingDto.monthlyOtHourLimit/yearlyOtHourLimit). Không có Ngày riêng — Ngày luôn dùng
-    // chung 1 mốc cho mọi người (2026-08-26).
+    // Per-employee monthly/yearly limits; null = global default. No per-employee daily limit.
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
 }

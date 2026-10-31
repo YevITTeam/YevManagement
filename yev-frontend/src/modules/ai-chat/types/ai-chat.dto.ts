@@ -1,5 +1,4 @@
-// Hợp đồng với BE: docs/docs-be/asset-module.md §4 (POST /api/AiChat/stream).
-// BE KHÔNG lưu hội thoại — FE tự giữ `history` và gửi lại toàn bộ mỗi lượt.
+// BE does not store conversations — FE keeps `history` and resends it every turn.
 
 export type AiChatRole = "user" | "assistant";
 
@@ -11,16 +10,15 @@ export interface AiChatMessageDto {
 export interface AiChatRequestDto {
     message: string;
     history: AiChatMessageDto[];
-    /** Bỏ trống/null thì BE dùng system prompt mặc định. */
+    /** Null uses the BE default system prompt. */
     systemPrompt?: string | null;
-    /** Bỏ trống/null = false (mặc định nhanh hơn). true = bật suy luận sâu (chậm hơn nhiều). */
+    /** true enables deep reasoning (much slower). */
     think?: boolean;
-    /** UI locale hiện tại ("vi" | "ja") — BE dùng để trả lời đúng ngôn ngữ đang xem (bỏ qua nếu có systemPrompt tuỳ chỉnh). */
+    /** UI locale ("vi" | "ja") for the reply language; ignored when a custom systemPrompt is set. */
     locale?: string;
 }
 
-// 5 dạng dòng NDJSON BE trả về. Field không áp dụng cho `type` đó bị LƯỢC khỏi JSON (không phải
-// null) nên phải phân biệt bằng `type`, đừng giả định field luôn có mặt.
+// Fields not applicable to a `type` are omitted from JSON (not null), so discriminate on `type`.
 export type AiChatStreamEvent =
     | { type: "content"; text: string }
     | { type: "tool"; name: string }

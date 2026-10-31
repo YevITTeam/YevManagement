@@ -37,8 +37,7 @@ namespace Attendance.Api.Controllers
             return Success(result, "Import nhân sự dưới chuyền thành công.");
         }
 
-        // Tách quyền riêng (2026-08-27, theo yêu cầu người dùng) — đụng lũy kế OT ảnh hưởng lương, chỉ
-        // người có trách nhiệm mới được bấm, khác quyền import cấu trúc Block/Team/CongDoan thường.
+        // Separate permission: accumulated OT affects payroll.
         [RequirePermission("Attendance.EmployeeAccumulation.Import")]
         [HttpPost("apply-accumulation")]
         public async Task<ActionResult<ApiResponse<ProductionEmployeeAccumulationResultDto>>> ApplyAccumulation([FromBody] ApplyProductionEmployeeAccumulationDto request)
@@ -47,7 +46,7 @@ namespace Attendance.Api.Controllers
             return Success(result, $"Đã điều chỉnh lũy kế cho {result.AdjustedCount} nhân viên.");
         }
 
-        // File mẫu tải xuống (2026-08-27) — trả file .xlsx trực tiếp, KHÔNG bọc ApiResponse<T>.
+        // Returns the .xlsx directly, not ApiResponse<T>.
         [RequirePermission("Attendance.ProductionEmployee.Import")]
         [HttpGet("template")]
         public IActionResult DownloadTemplate()

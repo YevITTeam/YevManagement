@@ -16,9 +16,7 @@ interface RowActionsMenuProps {
     actions: RowAction[];
 }
 
-// Menu "3 chấm" gom các thao tác của 1 hàng. Dropdown render qua portal thẳng
-// vào document.body (không lồng trong bảng) để không bị các ô sticky của
-// dòng khác đè lên, dù đã dùng position: fixed + z-50.
+// Dropdown is portaled to document.body so sticky cells of other rows can't overlap it, even with fixed + z-50.
 export default function RowActionsMenu({ actions }: RowActionsMenuProps) {
     const [open, setOpen] = useState(false);
     const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);

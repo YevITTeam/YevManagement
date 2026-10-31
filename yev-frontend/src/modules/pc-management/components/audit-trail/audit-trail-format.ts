@@ -1,5 +1,4 @@
-// Nhãn hiển thị + parse diff dùng chung cho AuditTrailList (grid-list toàn hệ thống) và
-// DeviceAuditHistoryPanel (lịch sử theo 1 bản ghi) — docs/asset-module.md §4
+// Shared by AuditTrailList and DeviceAuditHistoryPanel.
 export const auditActionLabels: Record<string, string> = {
     Create: "Tạo mới",
     Update: "Cập nhật",
@@ -23,8 +22,7 @@ export function parseAuditValues(json: string | null): Record<string, unknown> |
     }
 }
 
-// Shape gộp hàng loạt (docs §7b.1). BE có thể serialize key theo PascalCase (RecordNames,
-// AffectedCount...) hoặc camelCase → đọc gần đúng theo cả 2 kiểu, chỉ nhận khi có mảng recordNames.
+// Bulk shape; BE may serialize keys PascalCase or camelCase, so read both and require a recordNames array.
 export interface NormalizedBulkValues {
     affectedCount: number;
     recordNames: string[];

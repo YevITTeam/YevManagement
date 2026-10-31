@@ -28,9 +28,7 @@ namespace Asset.Application.Services
                     || (x.Description != null && x.Description.Contains(keyword)));
             }
 
-            // Materialize the projection then sort by numeric IP value + page in memory: ordering
-            // by the Prefix string in SQL is lexicographic ("10.45.10" before "10.45.2"). The
-            // IpPrefix table is small (a few tens of rows) so in-memory paging here is cheap.
+            // Sort numerically in memory: SQL string order puts "10.45.10" before "10.45.2"; the table is small.
             var all = await _unitOfWork.IpPrefixes.ToListAsync(query, x => new IpPrefixDto
             {
                 Id = x.Id,
@@ -104,9 +102,7 @@ namespace Asset.Application.Services
 
         public async Task<IpPrefixDto> CreateAsync(CreateIpPrefixDto request)
         {
-            // IX_TienToIPs_TienTo is a global unique index on the DB (not filtered by IsDeleted).
-            // (This is also exactly the "don't allow 2 network ranges with the same 3-octet network"
-            //  rule from the ChangeIP tool — GetNetworkClass duplicate check — already handled by the unique index.)
+            // IX_TienToIPs_TienTo is a global unique index (not filtered by IsDeleted), so it also blocks duplicate ranges.
             var exists = await _unitOfWork.IpPrefixes.FirstOrDefaultAsync(x => x.Prefix == request.Prefix);
             if (exists != null) throw new DomainException($"Prefix '{request.Prefix}' đã tồn tại.");
 
@@ -129,7 +125,7 @@ namespace Asset.Application.Services
             await _unitOfWork.IpPrefixes.AddAsync(newPrefix);
             await _unitOfWork.SaveChangesAsync();
 
-            // .255 là broadcast address (không được dùng cho thiết bị nào) nên không sinh — dải chỉ còn .1..254.
+            // Skip .0 (network) and .255 (broadcast), leaving .1..254.
             var childAddresses = Enumerable.Range(1, 254)
                 .Select(n => new IpAddress
                 {
@@ -166,13 +162,8 @@ namespace Asset.Application.Services
             return branch!;
         }
 
-        // Validate the network configuration when creating a range (2026-07-11) — applies the
-        // logic from the internal ChangeIP tool (SetIP.cs), using NetworkHelper: every IP field
-        // entered (SubnetMask/Gateway/PreferredDns/AlternateDns), if provided, must be a valid IPv4;
-        // Gateway must be in the same subnet as the IP range that will be generated (prefix.1..prefix.254)
-        // and must not match the network/broadcast address. Shared by Create/Update — takes the raw
-        // values directly since Update has no separate Prefix field (the immutable prefix is taken
-        // from the existing entity, see UpdateAsync below).
+        // Every IP field, if provided, must be a valid IPv4; Gateway must be inside prefix.1..254 and not the
+        // network/broadcast address. Takes raw values because Update has no Prefix field.
         private static void ValidateNetworkSettings(string prefix, string? subnetMask, string? gateway, string? preferredDns, string? alternateDns)
         {
             if (!string.IsNullOrWhiteSpace(subnetMask) && !NetworkHelper.IsValidIpv4(subnetMask))
@@ -204,10 +195,7 @@ namespace Asset.Application.Services
             }
         }
 
-        // Update: only allows editing Branch + network configuration (SubnetMask/Gateway/DNS/Description)
-        // when there is an actual change (e.g. changing DNS/Gateway), instead of having to delete the old
-        // range and recreate it. Prefix (the 3-octet identifier, with 254 child IpAddress rows already
-        // generated) remains immutable — it is not part of UpdateIpPrefixDto.
+        // Prefix is immutable (254 child IPs already generated); only Branch and network settings can change.
         public async Task UpdateAsync(UpdateIpPrefixDto request)
         {
             var prefix = (await _unitOfWork.IpPrefixes.GetByIdAsync(request.Id)).OrThrowNotFound("Prefix", request.Id);
@@ -233,11 +221,7 @@ namespace Asset.Application.Services
 
             var childAddresses = await _unitOfWork.IpAddresses.FindAsync(x => x.IpPrefixId == id && !x.IsDeleted);
 
-            // 2026-07-11 (user decision): there is no longer an API to manually delete individual
-            // IpAddresses, so Prefix deletion is only blocked if there are child IPs CURRENTLY ASSIGNED
-            // to a Device (different from the old rule — blocking whenever any child IP was not yet
-            // deleted, which is now always true since IPs can no longer be deleted on their own).
-            // Unused child IPs (DeviceId null) are automatically cascade soft-deleted along with the Prefix.
+            // Block deletion only when a child IP is assigned to a Device; unused child IPs are soft-deleted with the Prefix.
             var inUseAddresses = childAddresses.Where(x => x.DeviceId.HasValue).ToList();
             if (inUseAddresses.Count > 0)
                 throw new DomainException($"Còn {inUseAddresses.Count} địa chỉ IP thuộc prefix này đang được gán cho thiết bị, vui lòng gỡ gán trước khi xoá.");

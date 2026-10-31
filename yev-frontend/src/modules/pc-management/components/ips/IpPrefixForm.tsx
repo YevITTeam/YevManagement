@@ -42,14 +42,14 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// Đúng 4 octet, mỗi octet 0-255 (dùng cho subnetMask/gateway/preferredDns/alternateDns).
+// Four octets, each 0-255.
 const isValidIPv4 = (value: string): boolean => {
     const parts = value.split(".");
     if (parts.length !== 4) return false;
     return parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
 };
 
-// Đúng 3 octet, không có octet thứ 4 — docs/asset-module.md §4
+// Exactly three octets.
 const isValidPrefix = (value: string): boolean => {
     const parts = value.split(".");
     if (parts.length !== 3) return false;
@@ -63,8 +63,7 @@ const isSameSubnet = (baseIp: string, otherIp: string, subnetMask: string): bool
     return base.every((octet, index) => (octet & mask[index]) === (other[index] & mask[index]));
 };
 
-// Đối chiếu docs/asset-module.md §4: field nào có nhập phải là IPv4 hợp lệ; gateway phải
-// cùng dải 3-octet với prefix, cùng subnet theo subnetMask, và không trùng .0/.255.
+// Filled fields must be valid IPv4; gateway must be in the prefix's subnet per subnetMask and not .0/.255.
 function validateIpPrefixForm(values: IpPrefixFormValues): string | null {
     const prefix = values.prefix.trim();
     const subnetMask = values.subnetMask.trim();
@@ -116,8 +115,7 @@ function validateIpPrefixForm(values: IpPrefixFormValues): string | null {
     return null;
 }
 
-// docs/asset-module.md §4 (2026-07-13) — cho sửa Chi nhánh + cấu hình mạng qua PUT, riêng
-// `prefix` bất biến (đổi prefix vẫn phải xoá + tạo lại dải mới) nên bị disable ở chế độ sửa.
+// `prefix` is immutable (changing it means delete + recreate), so it's disabled in edit mode.
 export default function IpPrefixForm({ isOpen, mode, initial, loading = false, onClose, onSubmit }: IpPrefixFormProps) {
     const [values, setValues] = useState<IpPrefixFormValues>(emptyValues);
     const [formError, setFormError] = useState<string | null>(null);

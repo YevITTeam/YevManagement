@@ -6,15 +6,11 @@ import { ChevronDown } from "lucide-react";
 const triggerBaseClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc] disabled:opacity-60";
 
-// Dropdown có style riêng (không phải <option> gốc của trình duyệt — không chỉnh được font/hover/màu,
-// xem StatusFilterSelect cũ trong InventoryReportPage.tsx) dùng cho enum cố định ít lựa chọn (trạng
-// thái, có/không, mức ưu tiên…). Khác SearchableSelect (ô gõ tìm, value number) — component này KHÔNG
-// có ô tìm vì danh sách quá ngắn, gõ tìm chỉ gây thêm thao tác thừa, và value có thể là string hoặc
-// number tuỳ enum — xem docs/docs-fe/DESIGN_SYSTEM.md §4.3.
+// Custom dropdown for short fixed enums: native <option> can't be styled, and a search box would only add clicks.
 export interface StyledSelectOption<T extends string | number> {
     value: T;
     label: string;
-    /** Tailwind bg class của chấm màu trạng thái (vd "bg-[#16a34a]"); bỏ trống = không có chấm. */
+    /** Tailwind bg class for the status dot (e.g. "bg-[#16a34a]"); omit for no dot. */
     dotClassName?: string;
 }
 

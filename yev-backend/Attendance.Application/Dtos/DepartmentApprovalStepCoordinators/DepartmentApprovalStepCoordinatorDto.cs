@@ -8,10 +8,7 @@ namespace Attendance.Application.Dtos.DepartmentApprovalStepCoordinators
         public string EmployeeCode { get; set; } = null!;
         public string FullName { get; set; } = null!;
 
-        // null = Employee này CHƯA liên kết tài khoản đăng nhập (Employee.UserName) — vẫn hợp lệ để
-        // gán làm người phụ trách, nhưng quyền thao tác thật chỉ có hiệu lực SAU khi Admin liên kết
-        // UserName cho họ (tự động cấp lúc đó, không cần thao tác gì thêm — xem
-        // EmployeeService.SyncAutoGrantedPermissionsCoreAsync). FE hiển thị nhãn "chưa liên kết" khi null.
+        // Null = no linked login yet; still assignable, permissions are auto-granted once Admin links the UserName.
         public string? UserName { get; set; }
     }
 }

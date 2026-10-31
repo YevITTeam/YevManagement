@@ -3,21 +3,14 @@ using Attendance.Domain.Enums;
 
 namespace Attendance.Application.Services
 {
-    // Nguồn chân lý DUY NHẤT cho "giờ OT thực tính" và loại phiếu ăn 1 người nhận cho 1 lần OT — tách
-    // ra khỏi OtFormService (2026-08-28) để ProductionOtReportService (báo cáo phiếu/giờ theo ngày)
-    // dùng lại đúng công thức, tránh 2 nơi tính lệch nhau. OtFormService giữ nguyên hành vi qua
-    // "using static" ở đầu file, không đổi bất kỳ call site nào.
+    // Single source of truth for actual OT hours and meal tickets, shared with ProductionOtReportService so they can't diverge.
     public static class MealTicketCalculator
     {
-        // Redesign 3 bậc phiếu ăn (2026-08-26, chốt với người dùng qua nhiều vòng — xem
-        // AttendanceSetting.cs và docs/attendance-module.md §Phiếu ăn). Ca OT khớp ĐÚNG khung sớm
-        // (StartTime/EndTime bằng đúng EarlyMealWindowStartTime/EndTime, không phải chỉ overlap) là
-        // ngoại lệ: không trừ giờ dù DidEat thế nào, và luôn nhận phiếu Phụ bất kể độ dài ca.
+        // Exact match of the early meal window (not mere overlap) never deducts and always gets the secondary ticket.
         public static bool IsEarlyMealWindowOt(TimeOnly startTime, TimeOnly endTime, AttendanceSettingDto settings) =>
             startTime == settings.EarlyMealWindowStartTime && endTime == settings.EarlyMealWindowEndTime;
 
-        // Giờ OT thực tính — DUY NHẤT nên hiển thị/cộng làm "giờ OT của người này" (hiển thị lẫn lũy
-        // kế). Ngoài khung sớm: có ăn thì trừ MealBreakDeductionHours, không ăn giữ nguyên giờ thô.
+        // The only value to display or accumulate as a person's OT hours; deducts the meal break only when DidEat.
         public static decimal CalculateOtHours(TimeOnly startTime, TimeOnly endTime, bool didEat, AttendanceSettingDto settings)
         {
             var hours = Math.Round((decimal)(endTime - startTime).TotalHours, 2);

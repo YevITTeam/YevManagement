@@ -2,8 +2,7 @@ import { api } from "@/lib/client";
 import type { WorkflowRequestDto, EmailApproveRequestDto, EmailRejectRequestDto } from "@/modules/workflow/types/workflow-request.dto";
 import { ApiResponse } from "@/types/api";
 
-// Duyệt qua email, [AllowAnonymous] (Pha 4C) — trang "Xác nhận duyệt đơn" mở qua link email, token
-// trong URL là credential duy nhất.
+// Anonymous email approval: the URL token is the only credential.
 const ENDPOINTS = {
     WORKFLOW_APPROVAL: {
         getByToken: (token: string) => `/Workflow/WorkflowApproval/by-token/${encodeURIComponent(token)}`,

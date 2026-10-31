@@ -6,12 +6,10 @@ namespace Workflow.Application.Interfaces.Service
     {
         Task<EmployeeSignatureDto> GetMineAsync(int? currentUserId);
 
-        // Không upsert ngay — tạo 1 PendingEmployeeSignatureConfirmation rồi gửi email xác nhận cho
-        // chính người gọi (mirror Attendance.UserSignatureService — chống chiếm phiên đăng nhập).
+        // Does not upsert: creates a pending confirmation and emails the caller, guarding against hijacked sessions.
         Task RequestUpdateAsync(int? currentUserId, UpsertEmployeeSignatureDto request);
 
-        // 2 hàm dưới phục vụ trang xác nhận công khai (Controller [AllowAnonymous]) mà FE mở khi người
-        // dùng bấm link trong email — token tự nó là thông tin xác thực duy nhất.
+        // Used by the anonymous email-link confirmation page; the token is the only credential.
         Task<SignatureConfirmationPreviewDto> GetPendingConfirmationAsync(string token);
         Task<EmployeeSignatureDto> ConfirmAsync(string token);
     }

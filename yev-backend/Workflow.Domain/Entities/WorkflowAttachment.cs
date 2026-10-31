@@ -1,8 +1,6 @@
 namespace Workflow.Domain.Entities;
 
-// Metadata file đính kèm — file vật lý nằm trên đĩa (workflow-module.md §3.3), KHÔNG lưu byte[] trong
-// DB. Chủ đơn được thêm/xoá xuyên suốt tới khi đơn kết thúc (Approved/Rejected/Cancelled), không giới
-// hạn ở Draft (Pha 4B quyết định 2026-08-26 §10).
+// Files live on disk, not as byte[] in DB. The owner may add/remove until the request is finished, not only in Draft.
 public partial class WorkflowAttachment
 {
     public int Id { get; set; }

@@ -1,6 +1,5 @@
-// workflow-module.md §4 — khớp enum DataSourceKind ở BE (Workflow.Domain.Enums.DataSourceKind).
-// SqlQuery=4 tồn tại trong enum nhưng bị BE chặn tạo/sửa (chưa chốt cơ chế bảo mật) — FE không đưa
-// vào danh sách lựa chọn được ở dropdown, chỉ giữ trong type để khớp giá trị BE trả về nếu có.
+// Must match BE enum DataSourceKind. SqlQuery is blocked by BE and not offered in the dropdown;
+// it stays in the type only to decode existing values.
 export const DataSourceKind = {
     Employees: 1,
     OrgUnits: 2,

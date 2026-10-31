@@ -16,11 +16,8 @@ const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracki
 const fieldClassName =
     "h-9 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-// GET/PUT /api/AssetSetting — cấu hình chung module Asset: số tháng giữa 2 lần chạy job tự động
-// xóa mềm thiết bị "Đã thanh lý" (DeviceLiquidationBackgroundService, kiểm tra hàng ngày lúc 00:30
-// nhưng chỉ thật sự chạy khi đủ số tháng cấu hình kể từ lần chạy trước, 2026-08-22), và chi nhánh giới
-// hạn phạm vi ping của nút "Kiểm tra network" (asset-module.md §1.20). Danh sách thiết bị phải quét QR
-// KHÔNG lấy theo chi nhánh mà theo cờ Device.RequiresDailyCheck (§1.19).
+// Liquidation soft-delete job checks daily at 00:30 but only runs after the configured month interval.
+// The branch only scopes the network ping; daily QR scans follow Device.RequiresDailyCheck instead.
 export default function AssetSettingPanel() {
     const [isSaving, setIsSaving] = useState(false);
     const [liquidationAfterMonths, setLiquidationAfterMonths] = useState<number>(1);

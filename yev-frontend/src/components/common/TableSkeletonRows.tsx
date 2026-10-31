@@ -5,8 +5,6 @@ interface TableSkeletonRowsProps {
     columns: number;
 }
 
-// Replaces the plain "Đang tải..." text row inside a <tbody> while a list is loading
-// (DESIGN_SYSTEM.md §4.4).
 export function TableSkeletonRows({ rows, columns }: TableSkeletonRowsProps) {
     return (
         <>

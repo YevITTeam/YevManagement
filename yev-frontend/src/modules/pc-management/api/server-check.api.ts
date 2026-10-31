@@ -33,7 +33,7 @@ export interface GetServerCheckPageNationParams {
 }
 
 export const ServerCheckApi = {
-    // branchId chỉ có tác dụng với user có quyền View; người quét luôn bị BE ép về xưởng được phân công.
+    // branchId only applies to View-permission users; scanners are forced to their assigned branch.
     getToday: async (branchId?: number) => {
         const url = branchId !== undefined ? `${ENDPOINTS.SERVER_CHECK.today}?branchId=${branchId}` : ENDPOINTS.SERVER_CHECK.today;
         const response = await api.get<ApiResponse<ServerCheckSessionDto | null>>(url);
@@ -77,8 +77,7 @@ export const ServerCheckApi = {
         const response = await api.get<ApiResponse<ServerCheckReportRowDto[]>>(`${ENDPOINTS.SERVER_CHECK.report}?${query.toString()}`);
         return response.data;
     },
-    // Trả file .xlsx điền sẵn vào ĐÚNG file mẫu giấy gốc (YEV–22–CV–IT-QD-810-FR-Check Sheet KT) —
-    // không phải JSON, đọc bằng getForBlob() (asset-module.md §1.19).
+    // .xlsx filled into the original paper template (YEV–22–CV–IT-QD-810-FR-Check Sheet KT); read via getForBlob().
     exportReport: async (fromDate: string, toDate: string, branchId?: number): Promise<BlobDownloadResult> => {
         const query = new URLSearchParams({ fromDate, toDate });
         if (branchId !== undefined) query.set("branchId", String(branchId));

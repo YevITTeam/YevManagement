@@ -1,4 +1,4 @@
-// Nguồn của 1 email (khớp enum UserEmailSource ở BE).
+// Mirrors BE enum UserEmailSource.
 export const USER_EMAIL_SOURCE = {
   Ad: 0,
   AdAlias: 1,
@@ -22,11 +22,11 @@ export interface UserEmailDto {
   createdAt: string;
 }
 
-// userEmailId null = module gửi về email chính.
+// userEmailId null = module uses the primary email.
 export interface UserEmailModuleAssignmentDto {
   moduleCode: string;
   moduleName: string;
-  // false = module chưa đọc email theo cấu hình này (cấu hình được lưu sẵn, chưa có tác dụng).
+  // false = module doesn't read this setting yet (saved but not in effect).
   isApplied: boolean;
   userEmailId: number | null;
 }
@@ -50,7 +50,7 @@ export interface UpdateUserEmailModulesDto {
   items: { moduleCode: string; userEmailId: number | null }[];
 }
 
-// GET /UserEmail/domain-account — Identity đang có gì cho 1 tài khoản domain (DOMAIN\user).
+// What Identity has for a domain account (DOMAIN\user).
 export interface DomainAccountEmailStatusDto {
   domainAccount: string;
   userExists: boolean;
@@ -61,7 +61,7 @@ export interface DomainAccountEmailStatusDto {
 
 export interface LinkDomainAccountEmailsDto {
   domainAccount: string;
-  // Họ tên cho User được tạo mới; bỏ qua nếu User đã tồn tại.
+  // Used only when creating a new User; ignored if the user exists.
   fullName: string | null;
   emails: { email: string; note: string | null }[];
 }
@@ -71,7 +71,7 @@ export interface LinkDomainAccountEmailsResultDto {
   userName: string;
   userCreated: boolean;
   addedEmails: string[];
-  // Email User đã có sẵn trên Identity.
+  // Emails the User already had in Identity.
   skippedEmails: string[];
 }
 

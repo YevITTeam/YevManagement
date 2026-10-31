@@ -51,20 +51,8 @@ const toJobTitleOptions = (jobTitles: JobTitleDto[], codeWithRank: (code: string
         searchText: `${jt.name} ${jt.code}`.toLowerCase(),
     }));
 
-// Tab "Cây duyệt" (2026-08-10) — hợp nhất 2 tab trước đó ("Cây duyệt Bộ phận" + "Cây duyệt Nhóm")
-// vào cùng 1 màn cho dễ cấu hình liền mạch: chọn 1 Bộ phận, rồi cấu hình lần lượt (1) cấp trung
-// gian theo từng Nhóm con (Staff/Group Leader/Team Leader) và (2) cấp cuối của chính Bộ phận đó
-// (Manager/Factory Manager/Director) — đúng thứ tự đơn sẽ đi qua thật (xem
-// JobTitleApprovalChainService.ResolveChainCoreAsync: Nhóm trước, Bộ phận sau). Tab "Thử chuỗi
-// duyệt" (ApprovalChainPreviewPanel) đã bị bỏ hẳn khỏi màn Danh mục — endpoint BE
-// GET /api/JobTitle/resolve-chain vẫn còn, chỉ không còn UI xem trước ở FE.
-// Không phải màn CRUD chuẩn nên implement ListHandle tối giản (openCreate no-op).
-//
-// Đợt polish giao diện (2026-09-05): 3 khối "danh sách bước" (Nhóm/Bộ phận/Chuyền) và 2 khối "Người
-// phụ trách" (Nhóm/Bộ phận) trước đây copy gần y hệt JSX cho nhau (~110 dòng/khối bước, ~60 dòng/khối
-// phụ trách) — tách ra dùng chung `StepCard`/`StepHolders`/`CoordinatorsBox` (cùng thư mục job-titles/),
-// chỉ còn phần KHÁC BIỆT thật giữa 3 khối (khối Bộ phận không có "Người chịu trách nhiệm"; khối Chuyền
-// có 3 nhánh nội dung "đang giữ" khác hẳn) nằm lại ở đây.
+// Group steps then department steps in one screen, matching the real chain order (ResolveChainCoreAsync:
+// group first, department after). Not a standard CRUD list, so ListHandle is minimal (openCreate no-op).
 const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function ApprovalStepManager(
     { onLoadingChange },
     ref
@@ -75,10 +63,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const tJobTitle = useTranslations("Attendance.JobTitle");
     const codeWithRank = (code: string, rank: number) => tJobTitle("codeWithRank", { code, rank });
     const { user } = useAuth();
-    // Chỉ Admin (hoặc người được cấp riêng — không xảy ra trong thực tế) mới quản lý ĐƯỢC danh sách
-    // Người phụ trách — bản thân 1 Người phụ trách khi mở màn này (được cho vào từ 2026-08-11 qua
-    // sidebar, xem OtManagerSidebar.tsx) không có 2 permission *Coordinator.View nên PHẢI ẩn hẳn khối
-    // này đi, nếu không sẽ gọi API và bị 403.
+    // Coordinators can open this screen but lack *Coordinator.View, so hide these blocks or they'd hit 403.
     const canManageDeptCoordinators = hasPermission(user, "Attendance.DepartmentApprovalStepCoordinator.View");
     const canManageGroupCoordinators = hasPermission(user, "Attendance.GroupApprovalStepCoordinator.View");
 
@@ -86,8 +71,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [deptJobTitles, setDeptJobTitles] = useState<JobTitleDto[]>([]);
     const [groupJobTitles, setGroupJobTitles] = useState<JobTitleDto[]>([]);
-    // Cây duyệt Chuyền nhận CẢ 2 loại Chức vụ (trung gian lẫn cấp cuối) trong 1 danh sách duy nhất —
-    // không lọc theo terminalLevel như 2 khối trên (xem ProductionApprovalStepService.ReplaceAsync).
+    // The production chain accepts both intermediate and terminal job titles in one list (ProductionApprovalStepService.ReplaceAsync).
     const [allJobTitles, setAllJobTitles] = useState<JobTitleDto[]>([]);
     const [departmentId, setDepartmentId] = useState<number | "">("");
     // Workshop scoping Manager holders and groups; defaults to the first workshop until one is picked.
@@ -95,22 +79,18 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [pickedWorkshopId, setPickedWorkshopId] = useState<number | "">("");
     const workshopId: number | "" = pickedWorkshopId === "" ? (workshops.length > 0 ? workshops[0].id : "") : pickedWorkshopId;
     const [isLoadingOptions, setIsLoadingOptions] = useState(true);
-    // 2 tab (2026-08-25): "Theo Nhóm" = 2 khối cũ (Nhóm + Bộ phận, dùng cho đơn OT thường) gộp
-    // chung 1 tab vì đơn đi xuyên qua CẢ 2 liền mạch (Nhóm trước, Bộ phận sau); "Theo chuyền" = khối
-    // Chuyền (1 danh sách duy nhất, dùng cho đơn OT "theo chuyền" Chế tạo) tách tab riêng vì đây là
-    // 1 luồng độc lập, không liên quan gì tới cấu hình Nhóm/Bộ phận — khớp đúng 2 chế độ tạo đơn ở
-    // CreateOtFormPage.tsx (formMode "group"/"production"). Đổi tab CHỈ đổi phần hiển thị — state của
-    // cả 2 tab đều nằm ở component này (không mất gì khi đổi qua lại), nên KHÔNG cần xác nhận huỷ.
+    // "group" and "production" mirror the two create-form modes. All state lives here, so switching tabs
+    // loses nothing and needs no discard confirmation.
     const [activeTab, setActiveTab] = usePersistedTab<"group" | "production">("ot-approval-steps-tab", ["group", "production"], "group");
 
-    // ── Khối Chuyền (Bộ phận, 1 danh sách duy nhất — 2026-08-24) ─────────────
+    // ── Production block ──
     const [productionSteps, setProductionSteps] = useState<ProductionApprovalStepDto[]>([]);
     const [addingProductionJobTitleId, setAddingProductionJobTitleId] = useState<number | "">("");
     const [isLoadingProductionSteps, setIsLoadingProductionSteps] = useState(false);
     const [isSavingProduction, setIsSavingProduction] = useState(false);
     const [isProductionDirty, setIsProductionDirty] = useState(false);
 
-    // ── Khối cấp cuối (Bộ phận) ─────────────────────────────────────────────
+    // ── Department (terminal) block ──
     const [deptSteps, setDeptSteps] = useState<DepartmentApprovalStepDto[]>([]);
     const [addingDeptJobTitleId, setAddingDeptJobTitleId] = useState<number | "">("");
     const [isLoadingDeptSteps, setIsLoadingDeptSteps] = useState(false);
@@ -131,7 +111,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [isSavingDeptCoordinators, setIsSavingDeptCoordinators] = useState(false);
     const [addingDeptCoordinatorEmployeeId, setAddingDeptCoordinatorEmployeeId] = useState<number | "">("");
 
-    // ── Khối cấp trung gian (Nhóm) ───────────────────────────────────────────
+    // ── Group (intermediate) block ──
     const [groupId, setGroupId] = useState<number | "">("");
     const [groupSteps, setGroupSteps] = useState<GroupApprovalStepDto[]>([]);
     const [addingGroupJobTitleId, setAddingGroupJobTitleId] = useState<number | "">("");
@@ -148,9 +128,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [isSavingGroupCoordinators, setIsSavingGroupCoordinators] = useState(false);
     const [addingGroupCoordinatorEmployeeId, setAddingGroupCoordinatorEmployeeId] = useState<number | "">("");
 
-    // Xác nhận huỷ thay đổi chưa lưu (2026-09-05) — đổi Bộ phận/Nhóm trước đây xoá thẳng state của
-    // khối đang xem dù đang dirty, không cảnh báo gì. `pendingAction` giữ đúng thao tác đổi (đã biết
-    // giá trị mới) để chạy khi người dùng xác nhận "Huỷ thay đổi" ở ConfirmDialog bên dưới.
+    // Holds the pending department/group change, run only after the user confirms discarding unsaved edits.
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
     const applyOrConfirmDiscard = (isDirty: boolean, action: () => void) => {
         if (isDirty) {
@@ -162,9 +140,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
     useEffect(() => {
         setIsLoadingOptions(true);
-        // getMyDepartments (không phải DepartmentApi.getAllDepartments()) — Admin thấy toàn bộ, người
-        // được gán phụ trách (Coordinator, không phải Admin) chỉ thấy đúng Bộ phận mình quản, tránh
-        // chọn nhầm Bộ phận không thuộc quyền rồi bị 403 khi gọi các API bên dưới (2026-08-25).
+        // getMyDepartments limits coordinators to their own departments, avoiding 403s from the APIs below.
         Promise.all([
             DepartmentApprovalStepApi.getMyDepartments(),
             GroupApi.getAllGroups(),
@@ -175,8 +151,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 setWorkshops(workshopData);
                 setDepartments(departmentData);
                 setGroups(groupData);
-                // Cấp cuối (Manager/Factory Manager/Director) cho khối Bộ phận; cấp trung gian
-                // (Staff/Group Leader/Team Leader) cho khối Nhóm.
+                // Terminal levels for the department block, intermediate levels for the group block.
                 setDeptJobTitles(jobTitleData.filter((jt) => jt.terminalLevel !== 0));
                 setGroupJobTitles(jobTitleData.filter((jt) => jt.terminalLevel === 0));
                 setAllJobTitles(jobTitleData);
@@ -333,7 +308,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setProductionSteps([]);
         setAddingProductionJobTitleId("");
         setIsProductionDirty(false);
-        // Đổi Bộ phận thì Nhóm đang chọn (nếu có) không còn thuộc Bộ phận này nữa — reset luôn.
+        // The selected group no longer belongs to the new department.
         setGroupId("");
         setGroupSteps([]);
         setGroupEmployees([]);
@@ -374,12 +349,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         applyOrConfirmDiscard(isGroupDirty, () => selectGroupNow(value));
     };
 
-    // Gán nhanh Chức vụ CẤP CUỐI ngay tại khối Bộ phận — dùng endpoint riêng
-    // `PUT /api/Employee/{id}/department-job-title` (2026-08-11c, KHÔNG còn dùng
-    // `EmployeeApi.updateEmployee` nữa) để Người phụ trách Cây duyệt (không chỉ Admin) cũng gán được,
-    // chỉ trong phạm vi Bộ phận họ phụ trách — BE tự tính lại groupId/departmentId theo TerminalLevel
-    // của Chức vụ mới và tự chặn sai phạm vi, FE chỉ gửi jobTitleId. Vẫn giữ pre-check
-    // "assignNeedsGroupError" ở FE để tránh 1 vòng gọi API cho lỗi đã biết trước.
+    // Dedicated endpoint so tree coordinators (not just Admin) can assign within their department; BE recomputes
+    // groupId/departmentId. The FE pre-check for assignNeedsGroupError saves a round trip for a known error.
     const handleAssignDeptJobTitle = async (employee: EmployeeDto, jobTitleId: number | "") => {
         if (typeof departmentId !== "number") return;
         const nextJobTitleId = jobTitleId === "" ? null : jobTitleId;
@@ -387,8 +358,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         const nextTerminalLevel = nextJobTitle?.terminalLevel ?? 0;
 
         if (nextTerminalLevel === 0 && employee.groupId === null) {
-            // Đang là Trưởng phòng/Trưởng Xưởng/Giám đốc (không có Nhóm thật), muốn bỏ hẳn Chức vụ cấp
-            // cuối — màn này không đủ thông tin để tự chọn đúng Nhóm, phải nhờ Admin sửa qua form Nhân viên.
+            // Removing a terminal title from someone with no real group needs a group pick, which only the Employee form can do.
             toast.error(tDept("assignNeedsGroupError"));
             return;
         }
@@ -407,9 +377,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
-    // Gán nhanh Chức vụ TRUNG GIAN ngay tại khối Nhóm — `PUT /api/Employee/{id}/group-job-title`
-    // (2026-08-11c). Chức vụ ở đây luôn TerminalLevel=None nên BE giữ nguyên groupId/departmentId,
-    // chỉ đổi jobTitleId.
+    // Intermediate titles are TerminalLevel=None, so BE keeps groupId/departmentId and changes only jobTitleId.
     const handleAssignGroupJobTitle = async (employee: EmployeeDto, jobTitleId: number | "") => {
         if (typeof groupId !== "number") return;
         const nextJobTitleId = jobTitleId === "" ? null : jobTitleId;
@@ -472,13 +440,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setAddingGroupHolderByJobTitle((current) => ({ ...current, [jobTitleId]: "" }));
     };
 
-    // ── Người phụ trách Cây duyệt — gán tay, KHÔNG suy luận theo Chức vụ (2026-08-11, sửa 2026-08-11b:
-    // CHỈ chọn được trong số nhân viên đang thuộc ĐÚNG Bộ phận/Nhóm đang xem — xem
-    // docs/docs-be/attendance-module.md §Cây chức vụ, mục "Người phụ trách Cây duyệt"). Tái dùng
-    // deptEmployees/groupEmployees (đã tải sẵn cho khối "holdersLabel" ở dưới) làm nguồn cho picker —
-    // không gọi thêm API nào khác. Employee CHƯA liên kết tài khoản đăng nhập (userName=null) vẫn
-    // chọn được — quyền tương ứng chỉ có hiệu lực sau khi Admin liên kết tài khoản cho họ (tự động,
-    // xem EmployeeService.SyncAutoGrantedPermissionsCoreAsync ở BE).
+    // Coordinators are picked manually from the unit's own employees, not inferred from job titles. Employees without
+    // a linked account are allowed; their permissions take effect once Admin links the account.
     const handleAddDeptCoordinator = async (employeeId: number | "") => {
         setAddingDeptCoordinatorEmployeeId(employeeId);
         if (employeeId === "" || typeof departmentId !== "number") return;
@@ -557,9 +520,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
-    // Options cho picker "Người phụ trách" — nguồn từ pool nhân viên (đã lọc theo đúng Bộ phận/Nhóm ở
-    // BE khi tải), bớt người đã có mặt trong danh sách phụ trách hiện tại. Đánh dấu rõ nhân viên CHƯA
-    // liên kết tài khoản đăng nhập để Admin biết quyền sẽ chưa có hiệu lực ngay.
+    // Excludes current coordinators and flags employees without a linked account, whose rights won't apply yet.
     const buildCoordinatorOptions = (pool: EmployeeDto[], excludeEmployeeIds: Set<number>): SelectOption[] =>
         pool
             .filter((e) => !excludeEmployeeIds.has(e.id))
@@ -601,9 +562,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             searchText: [c.lastName, c.firstName, `${c.firstName} ${c.lastName}`, c.employeeCode, c.groupNameVn ?? ""].join(" ").toLowerCase(),
         }));
 
-    // ── Options cho 2 combobox cấp trên: Bộ phận (toàn công ty) + Nhóm (lọc theo Bộ phận đã chọn) —
-    // cả 2 đều dùng SearchableSelect vì số lượng Bộ phận/Nhóm thực tế có thể khá nhiều, cuộn <select>
-    // thường sẽ khó dùng hơn gõ tìm (quy tắc chung — xem docs/docs-fe/DESIGN_SYSTEM.md §4.3).
     const departmentOptions: SelectOption[] = departments.map((d) => ({
         value: d.id,
         label: d.departmentNameVn,
@@ -620,7 +578,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             searchText: `${g.groupNameVn} ${g.groupCode}`.toLowerCase(),
         }));
 
-    // ── Khối Bộ phận: thêm/xoá/sắp xếp/lưu bước ──────────────────────────────
+    // ── Department block: add/remove/reorder/save ──
     const usedDeptJobTitleIds = new Set(deptSteps.map((s) => s.jobTitleId));
     const availableDeptJobTitles = deptJobTitles.filter((jt) => !usedDeptJobTitleIds.has(jt.id));
 
@@ -683,19 +641,17 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
-    // One save for the whole "Theo Nhóm" tab: persists whichever of the two blocks has pending changes.
+    // One save for the whole group tab: persists whichever of the two blocks has pending changes.
     const handleSaveAll = async () => {
         if (isGroupDirty && !groupSigningMinNotMet) await handleSaveGroup();
         if (isDeptDirty) await handleSaveDept();
     };
 
-    // ── Khối Chuyền: thêm/xoá/sắp xếp/lưu bước ────────────────────────────────
+    // ── Production block: add/remove/reorder/save ──
     const usedProductionJobTitleIds = new Set(productionSteps.map((s) => s.jobTitleId));
     const availableProductionJobTitles = allJobTitles.filter((jt) => !usedProductionJobTitleIds.has(jt.id));
 
-    // Đúng 2 ô "Người đề nghị" cố định trên giấy in — CHỈ tính cấp trung gian (terminalLevel===0:
-    // Line Leader/Group Leader/Team Leader), 3 cấp cuối có 3 ô chữ ký riêng, không tính vào đây —
-    // mirror groupSigningCount nhưng lọc thêm theo terminalLevel (xem ProductionApprovalStepService.ReplaceAsync).
+    // The printout has exactly 2 fixed "requester" boxes, counted from intermediate levels only; terminal levels have their own boxes.
     const productionIntermediateSteps = productionSteps.filter((s) => s.terminalLevel === 0);
     const productionSigningCount = productionIntermediateSteps.filter((s) => s.requiresSignature).length;
     const productionSigningLimitReached = productionSigningCount >= 2;
@@ -774,11 +730,11 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
-    // ── Khối Nhóm: thêm/xoá/sắp xếp/lưu bước ─────────────────────────────────
+    // ── Group block: add/remove/reorder/save ──
     const usedGroupJobTitleIds = new Set(groupSteps.map((s) => s.jobTitleId));
     const availableGroupJobTitles = groupJobTitles.filter((jt) => !usedGroupJobTitleIds.has(jt.id));
 
-    // Đúng 2 ô "Người đề nghị" cố định trên giấy in YEV-22-024 — xem GroupApprovalStepService.ReplaceAsync.
+    // The YEV-22-024 printout has exactly 2 fixed "requester" boxes.
     const groupSigningCount = groupSteps.filter((s) => s.requiresSignature).length;
     const groupSigningLimitReached = groupSigningCount >= 2;
     const groupSigningMinNotMet = groupSteps.length > 0 && groupSigningCount === 0;
@@ -861,8 +817,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
-    // ── Nhãn dùng chung cho StepCard/StepHolders/CoordinatorsBox — gom 1 lần ở đây thay vì gọi t(...)
-    // rải rác trong vòng lặp render bên dưới. ──
     const groupStepLabels: StepCardLabels = {
         dragHandleLabel: tGroup("dragHandleLabel"),
         toggleSignatureHint: tGroup("toggleSignatureHint"),
@@ -930,9 +884,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         addPlaceholder: tDept("addCoordinatorPlaceholder"),
     };
 
-    // Số thứ tự HIỂN THỊ của khối Bộ phận nối tiếp ngay sau khối Nhóm — đơn đi qua Nhóm TRƯỚC, Bộ phận
-    // SAU (comment đầu file) nên đây là 1 chuỗi duyệt liền mạch, không phải 2 chuỗi độc lập đánh số
-    // riêng (2026-09-05, trước đây cả 2 khối cùng đánh lại từ 1, dễ hiểu lầm là 2 chuỗi tách biệt).
+    // Department steps continue the group numbering: it is one continuous chain, not two.
     const deptStepNumberOffset = groupSteps.length;
 
     const loadingStepsSkeleton = (
@@ -1027,16 +979,10 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                     </div>
 
                     {activeTab === "group" && (
-                        // Layout 2 cột "canvas + inspector" (2026-09-16): pipeline hợp nhất Nhóm → Bộ
-                        // phận bên trái là trọng tâm (đọc liền mạch thành 1 hành trình duyệt, đánh số
-                        // xuyên suốt qua deptStepNumberOffset — không đổi gì ở phần state/logic, chỉ gộp
-                        // lại chỗ hiển thị); cột phải cố định (sticky) gom mọi thứ THUỘC VỀ CẤU HÌNH —
-                        // chọn Nhóm, người phụ trách 2 cấp — để pipeline không bị ngắt mạch bởi các khối
-                        // chọn lựa xen giữa như bố cục cũ (2 card xếp chồng, mỗi card tự chứa selector
-                        // + người phụ trách + danh sách bước).
+                        // Left: the merged group → department pipeline; right: sticky config panel so selectors don't break the pipeline.
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
                             <div className="order-2 space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm lg:order-1">
-                                {/* Cấp trung gian — theo Nhóm con của Bộ phận đang chọn (đơn đi qua khối này TRƯỚC) */}
+                                {/* Intermediate levels — the form passes these first */}
                                 <div>
                                     <div className="mb-2 flex items-center gap-1.5">
                                         <FolderOpen className="h-4 w-4 text-[#e3000f]" />
@@ -1120,7 +1066,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                     )}
                                 </div>
 
-                                {/* Cấp cuối — theo chính Bộ phận đang chọn (đơn đi qua khối này SAU khối Nhóm) */}
+                                {/* Terminal levels — after the group block */}
                                 <div>
                                     <div className="mb-2 flex items-center gap-1.5">
                                         <FolderOpen className="h-4 w-4 text-[#e3000f]" />
@@ -1197,7 +1143,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                 </div>
                             </div>
 
-                            {/* Sidebar cấu hình — người phụ trách 2 cấp gộp 1 thẻ, cố định khi cuộn */}
                             <aside className="order-1 space-y-4 lg:sticky lg:top-6 lg:order-2 lg:self-start">
                                 <div className="divide-y divide-[#e0e3e5] rounded-lg border border-[#e0e3e5] bg-white shadow-sm">
                                 {typeof groupId === "number" && canManageGroupCoordinators && (
@@ -1234,10 +1179,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                     )}
 
                     {activeTab === "production" && (
-                    /* Khối Chuyền — 1 danh sách duy nhất (Line Leader -> ... -> Director) theo chính
-                        Bộ phận đang chọn, dùng cho đơn OT "theo chuyền" (2026-08-24). Khác 2 khối trên:
-                        không tách Group/Department, không hiển thị "ai đang giữ Chức vụ" (dữ liệu
-                        chuyền đổi hàng ngày, danh sách người giữ ở đây không có ý nghĩa lâu dài). */
+                    /* No current holders shown: production staffing changes daily, so the list wouldn't mean much. */
                     <section className="space-y-3 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
                         <div className="flex items-center gap-1.5">
                             <h3 className={sectionTitleClassName}>{tProd("sectionTitle")}</h3>

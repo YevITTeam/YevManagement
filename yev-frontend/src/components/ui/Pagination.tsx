@@ -9,7 +9,7 @@ interface PaginationProps {
     totalPages: number;
     onPageChange: (pageIndex: number) => void;
     disabled?: boolean;
-    /** Left-hand count text, e.g. "1 tới 10 trong 42 đơn". Hidden below `sm` in favour of `compactSummary`. */
+    /** Left-hand count text, e.g. "1-10 of 42". Hidden below `sm` in favour of `compactSummary`. */
     summary: ReactNode;
     /** Short count shown below `sm` (defaults to nothing). */
     compactSummary?: ReactNode;

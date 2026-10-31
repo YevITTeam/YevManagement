@@ -6,7 +6,6 @@ using Shared.Application.Wrapper;
 
 namespace Asset.Api.Controllers
 {
-    // Kiểm kê thiết bị bằng quét mã theo xưởng (asset-module.md §1.22).
     public class InventoryController : BaseController
     {
         private readonly IInventoryService _inventoryService;
@@ -16,7 +15,7 @@ namespace Asset.Api.Controllers
             _inventoryService = inventoryService;
         }
 
-        // Chỉ dùng cho màn quét kiosk (xưởng của chính người gọi) — khác GetById/grid-list vốn cần View.
+        // Kiosk scan screen only (caller's own branch); GetById/list require View.
         [RequirePermission("Asset.Inventory.Scan")]
         [HttpGet("current")]
         public async Task<ActionResult<ApiResponse<InventorySessionDto?>>> GetCurrent()
@@ -67,7 +66,7 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
-        // Trả file .xlsx — KHÔNG phải ApiResponse<T> (cùng lý do ServerCheckController.ExportReport).
+        // Returns an .xlsx file, not ApiResponse<T>.
         [RequirePermission("Asset.Inventory.View")]
         [HttpGet("{id}/export")]
         public async Task<IActionResult> ExportSession(int id)

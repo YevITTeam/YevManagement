@@ -2,8 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Attendance.Application.Dtos.OtForms
 {
-    // Từ chối hàng loạt — mirror BulkApproveOtFormDto. Comment (lý do từ chối) dùng CHUNG cho cả loạt
-    // (đã chốt với người dùng 2026-08-27) — không nhập riêng từng đơn.
+    // Shared rejection reason for the whole batch.
     public class BulkRejectOtFormDto : RejectOtFormDto
     {
         [Required(ErrorMessage = "Danh sách đơn không được để trống")]

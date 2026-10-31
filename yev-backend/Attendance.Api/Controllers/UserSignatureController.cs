@@ -16,7 +16,6 @@ namespace Attendance.Api.Controllers
             _userSignatureService = userSignatureService;
         }
 
-        // Mỗi user (Trưởng nhóm/Trưởng phòng/Trưởng xưởng...) xem chữ ký đã đăng ký của CHÍNH mình.
         [RequirePermission("Attendance.UserSignature.Update")]
         [HttpGet("me")]
         public async Task<ActionResult<ApiResponse<UserSignatureDto>>> GetMine()
@@ -25,9 +24,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Đăng ký/cập nhật chữ ký của CHÍNH mình — KHÔNG còn áp dụng ngay (2026-07-16): gửi email
-        // xác nhận cho chính người gọi, chữ ký chỉ có hiệu lực sau khi bấm xác nhận (xem 2 action
-        // "confirm" bên dưới) — chống trường hợp ai đó chiếm phiên đăng nhập rồi đổi chữ ký.
+        // Not applied immediately: takes effect only after email confirmation, so a hijacked session can't change it.
         [RequirePermission("Attendance.UserSignature.Update")]
         [HttpPut("me")]
         public async Task<ActionResult<ApiResponse<bool>>> RequestUpsertMine([FromBody] UpsertUserSignatureDto request)
@@ -54,9 +51,7 @@ namespace Attendance.Api.Controllers
             return Success(result, "Đã cập nhật chữ ký.");
         }
 
-        // 2 action công khai bên dưới phục vụ trang xác nhận nhỏ mà FE mở khi người dùng bấm link
-        // trong email (KHÔNG cần đăng nhập SPA) — token tự nó là thông tin xác thực duy nhất, xem
-        // docs/attendance-module.md. Đây là bề mặt [AllowAnonymous] đầu tiên của toàn hệ thống.
+        // Public endpoints for the email confirmation link; the token is the only credential.
         [AllowAnonymous]
         [HttpGet("confirm/{token}")]
         public async Task<ActionResult<ApiResponse<SignatureConfirmationPreviewDto>>> GetPendingConfirmation(string token)

@@ -66,7 +66,7 @@ namespace Attendance.Application.Services
                 row++;
             }
 
-            // Restrict the Loại column to the three allowed labels so typos cannot reach the import.
+            // Restrict the type column to the three allowed labels so typos cannot reach the import.
             sheet.Range(2, 2, 1000, 2).CreateDataValidation()
                 .List($"\"{LabelSunday},{LabelPublicHoliday},{LabelSpecialHoliday}\"");
 

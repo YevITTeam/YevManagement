@@ -22,8 +22,7 @@ function formatDateTime(value: string) {
     return new Date(value).toLocaleString("vi-VN");
 }
 
-// docs/asset-module.md §4 — màn quản trị đọc lịch sử Create/Update/Delete/Restore ghi tự động ở BE
-// cho toàn bộ entity Asset. Chỉ Admin (hoặc role được cấp Asset.AuditTrail.View) thấy màn này.
+// BE-recorded Create/Update/Delete/Restore history for all Asset entities; needs Asset.AuditTrail.View.
 export default function AuditTrailList() {
     const [rows, setRows] = useState<AuditTrailDto[]>([]);
     const [expandedId, setExpandedId] = useState<number | null>(null);

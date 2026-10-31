@@ -3,9 +3,8 @@ using System.Collections.Generic;
 
 namespace Asset.Application.Dtos.ServerChecks
 {
-    // 1 dòng = 1 ngày, khớp layout "Sheet1" của file mẫu (mỗi loại thiết bị gộp thành 1 cột: OK khi
-    // TOÀN BỘ thiết bị loại đó trong phiên được quét — AGENTS.md §2 luật 2 quyết định). Category nào
-    // không có thiết bị nào trong phạm vi (vd chưa khai báo UPS) → *Status = null (không áp dụng).
+    // 1 row = 1 day, matching "Sheet1" of the paper template; a category is OK only when ALL its devices were scanned.
+    // Categories with no devices in scope get *Status = null (not applicable).
     public class ServerCheckReportRowDto
     {
         public DateTime CheckDate { get; set; }

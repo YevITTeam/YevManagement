@@ -6,12 +6,7 @@ namespace Attendance.Application.Interfaces.Service
 {
     public interface IOtFormService
     {
-        // fromDate/toDate lọc theo OtForm.Date (bao gồm cả 2 đầu mút), status lọc theo đúng giá trị
-        // OtFormStatus — cả 3 đều optional, dùng chung cho mọi tab danh sách (2026-08-06, xem
-        // docs/attendance-module.md §Danh sách đơn).
-        // groupId/departmentId lọc đơn văn phòng; productionLineId/productionTeamId/productionShiftTeamId
-        // lọc đơn dưới chuyền — cả 5 field đều optional, dùng chung cho mọi tab danh sách (2026-09-04,
-        // trước đây chỉ GetPendingApprovalsAsync có 3 field production, riêng office chưa tab nào có).
+        // Date range is inclusive; office filters use group/department, production filters use line/team/shift team.
         Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
@@ -23,32 +18,25 @@ namespace Attendance.Application.Interfaces.Service
             int? groupId = null, int? departmentId = null,
             int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null);
 
-        // Đếm nhanh cho badge sidebar FE — cùng logic lọc "bước hiện tại" với GetPendingApprovalsAsync
-        // nhưng không phân trang/không map DTO (2026-08-19).
+        // Sidebar badge: same "current step" filter as GetPendingApprovalsAsync, without paging.
         Task<int> GetPendingApprovalsCountAsync(string approverUserName);
 
-        // Số đơn chưa duyệt (candidate bước hiện tại) theo TỪNG ngày, trong khoảng fromDate..toDate —
-        // phục vụ lịch mini ở màn Duyệt hàng loạt (2026-09-04, xem docs/attendance-module.md §Danh sách
-        // đơn). Cùng scoping GetMyCurrentPendingFormIdsAsync với GetPendingApprovalsAsync.
+        // Per-day pending counts for the batch-approval mini calendar.
         Task<List<PendingApprovalDateCountDto>> GetPendingApprovalDatesAsync(
             string approverUserName, DateOnly fromDate, DateOnly toDate);
 
-        // Lịch sử đơn CHÍNH mình đã Ký/Duyệt/Từ chối ở bất kỳ cấp nào — dùng chung cho cả 4 vai trò
-        // (Trưởng nhóm/Trưởng phòng/Trưởng xưởng/Tổng Giám Đốc), gate bằng Attendance.OTForm.View.
         Task<PagedResponse<OtFormListItemDto>> GetMyActionsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
             int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null);
 
-        // Đơn tôi CÓ TÊN trong danh sách nhân viên tăng ca (OtFormEmployee) — không nhất thiết là người
-        // tạo/ký/duyệt. Dành cho mọi user (kể cả Role "Nhân viên"), gate bằng Attendance.OTForm.View.
+        // Forms listing the user as an OT employee, regardless of who created or approved them.
         Task<PagedResponse<OtFormListItemDto>> GetMyParticipationsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
             int? productionLineId = null, int? productionTeamId = null, int? productionShiftTeamId = null, int? workshopId = null, bool? isProductionForm = null);
 
-        // "Tất cả đơn" — Admin xem/quản lý toàn bộ đơn, không lọc theo user gọi API. Gate bằng
-        // Attendance.OTForm.ViewAll (Admin-only, 2026-09-04, xem migration AddOtFormViewAllPermission).
+        // Admin-only, gated by Attendance.OTForm.ViewAll.
         Task<PagedResponse<OtFormListItemDto>> GetAllFormsAsync(
             int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
@@ -56,16 +44,13 @@ namespace Attendance.Application.Interfaces.Service
 
         Task<OtFormDto> GetByIdAsync(int id);
 
-        // Scopes / Validations
         Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin);
 
-        // (Những) tổ hợp Team/Line/Nhóm ca mà người gọi đang là Line Leader — dùng để FE khoá cứng 3
-        // dropdown ở chế độ "Theo chuyền" (2026-09-28). Xem OtFormService.GetMyProductionCreateScopesAsync.
+        // Lets FE lock the Team/Line/Shift-team dropdowns for Line Leaders.
         Task<List<MyProductionCreateScopeItemDto>> GetMyProductionCreateScopesAsync(string userName, bool isAdmin);
 
         Task<List<int>> CheckOverlapAsync(CheckOtFormOverlapDto request);
 
-        // Mutations
         Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request);
 
         Task<OtFormDto> UpdateAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request);
@@ -74,38 +59,28 @@ namespace Attendance.Application.Interfaces.Service
 
         Task RejectAsync(int id, string approverUserName, string? approverFullName, RejectOtFormDto request);
 
-        // Ký/Từ chối hàng loạt (Team Leader/Trưởng phòng — nhiều Group Leader/Team Leader bên dưới,
-        // 2026-08-27). Lặp gọi lại ApproveAsync/RejectAsync đơn lẻ cho từng OtFormId, từng đơn độc lập
-        // (1 đơn lỗi không huỷ các đơn còn lại) — xem BulkApproveOtFormDto/BulkRejectOtFormDto.
+        // Each form is processed independently; one failure doesn't abort the rest.
         Task<List<BulkOtFormActionResultItemDto>> BulkApproveAsync(
             string approverUserName, string? approverFullName, BulkApproveOtFormDto request);
 
         Task<List<BulkOtFormActionResultItemDto>> BulkRejectAsync(
             string approverUserName, string? approverFullName, BulkRejectOtFormDto request);
 
-        // Kênh bổ sung qua email ([AllowAnonymous] ở Controller) — token tự nó là thông tin xác thực,
-        // KHÔNG cần mật khẩu cấp 2 (khác Approve/Reject qua email vẫn giữ) — xem docs/attendance-module.md.
+        // Anonymous: the token is the credential, so no second-factor password is required.
         Task<OtFormDto> RemoveEmployeeByEmailTokenAsync(string token, RemoveOtFormEmployeeByEmailTokenDto request);
 
-        // Kênh trong-app (JWT), khôi phục 2026-09-30 ngay trên màn Duyệt — thay cho việc gộp hẳn vào
-        // UpdateAsync (2026-09-04) vốn chỉ cho phép người tạo (đơn theo Nhóm) sửa/loại người, khiến các
-        // cấp đang DUYỆT (không phải người tạo) mất khả năng loại người dù đúng là candidate bước hiện
-        // tại. Gọi thẳng RemoveEmployeeCoreAsync — luật "candidate bước Pending hiện tại" vốn đã đúng cho
-        // CẢ 2 loại đơn — xem docs/attendance-module.md §Loại nhân viên khỏi đơn.
+        // In-app path so current-step approvers (not only the creator) can remove employees.
         Task<OtFormDto> RemoveEmployeeAsync(int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request);
 
-        // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate, không resolve lại được) — soft-delete,
-        // chặn nếu đơn đã Completed (đã cộng lũy kế thật). Xem docs/attendance-module.md §Cây chức vụ.
+        // Soft-delete for permanently stuck forms; blocked once Completed because accumulation was already applied.
         Task DeleteAsync(int id, string deletedByUserName, string? deletedByFullName, DeleteOtFormDto request);
 
-        // Kênh bổ sung qua email (link Duyệt/Từ chối, [AllowAnonymous] ở Controller) — token tự nó
-        // là thông tin xác thực duy nhất, xem docs/attendance-module.md.
+        // Anonymous email links: the token is the only credential.
         Task<OtFormDto> GetByEmailTokenAsync(string token);
         Task ApproveByEmailTokenAsync(string token, ApproveOtFormDto request);
         Task RejectByEmailTokenAsync(string token, RejectOtFormDto request);
 
-        // === "Đơn tổng" — redesign xong theo Cây chức vụ (2026-08-07, Giai đoạn 3.2, xem
-        // docs/attendance-module.md §Đơn tổng). ===
+        // Batch forms ("Don tong").
         Task<PagedResponse<OtFormBatchListItemDto>> GetBatchesAsync(string userName, bool isAdmin, int pageIndex, int pageSize);
         Task<OtFormBatchDto> GetBatchByIdAsync(int id);
         Task<OtFormBatchDto> ProcessBatchAsync(int batchId, string approverUserName, string? approverFullName, ProcessOtFormBatchDto request);
@@ -114,20 +89,5 @@ namespace Attendance.Application.Interfaces.Service
 
         // Called by OtFormBatchBackgroundService (daily sweep, default 15:00).
         Task RunDailyBatchSweepAsync();
-
-        // Gọi bởi QueuedHostedService (chạy nền, ngoài request Create/Approve) — tự tải lại OtForm +
-        // OtFormApprovalStep (kèm Candidates) theo Id vì scope DI của request đã bị dispose lúc hàm
-        // này chạy, không thể tái sử dụng entity đã load trong CreateAsync/ApproveAsync. Xem
-        // docs/attendance-module.md "Gửi email duyệt chạy nền".
-        Task SendStepApprovalNotificationAsync(int otFormId, int otFormApprovalStepId);
-
-        // Mails the delegate of an active delegation for steps already waiting on the delegator.
-        Task SendDelegationBackfillNotificationsAsync(int delegationId);
-
-        // Also called by QueuedHostedService — notify the form's creator that an approver rejected the
-        // form / removed employees from it (the creator gets no other signal in those cases).
-        Task SendApprovedNotificationAsync(int otFormId);
-        Task SendRejectedNotificationAsync(int otFormId);
-        Task SendEmployeesRemovedNotificationAsync(int otFormId, List<int> employeeIds);
     }
 }

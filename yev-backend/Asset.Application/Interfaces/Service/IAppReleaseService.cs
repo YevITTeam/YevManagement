@@ -5,8 +5,7 @@ namespace Asset.Application.Interfaces.Service
 {
     public interface IAppReleaseService
     {
-        // Bản mới nhất (!IsDeleted, VersionCode lớn nhất) — null nếu chưa có bản nào. Dùng cho endpoint
-        // anonymous /latest mà app Flutter gọi trước khi đăng nhập.
+        // Null when no release exists; backs the anonymous /latest endpoint called before login.
         Task<AppReleaseDto?> GetLatestAsync();
 
         Task<PagedResponse<AppReleaseDto>> GetPagedAsync(int pageIndex, int pageSize, string? keyword);

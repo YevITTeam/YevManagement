@@ -4,13 +4,11 @@ import { useTranslations } from "next-intl";
 import { FIELD_TYPE_META, PALETTE_ORDER } from "../field-designer/fieldTypeMeta";
 import { FieldDataType } from "@/modules/workflow/types/form-field.dto";
 
-// Khoá dataTransfer cho việc thả 1 loại field mới vào canvas tài liệu (DocumentFieldCanvas.tsx đọc
-// lại đúng khoá này). Native HTML5 drag-drop thay vì @dnd-kit như FieldPalette.tsx (canvas lưới) vì
-// đích thả là văn bản tự do (contentEditable + caretRangeFromPoint), không phải danh sách sortable.
+// DocumentFieldCanvas reads this key. Native HTML5 drag-drop (not @dnd-kit) because the drop
+// target is free text (contentEditable + caretRangeFromPoint), not a sortable list.
 export const DOCUMENT_FIELD_TYPE_DRAG_KEY = "application/x-workflow-field-type";
 
-// Bỏ Label khỏi bảng chọn ở chế độ tài liệu — nhãn đã là chữ có sẵn trong văn bản Word gốc, không
-// cần thêm 1 field tĩnh nữa (workflow-module.md §1.5).
+// Label is omitted in document mode: labels are already text in the Word source.
 const DOCUMENT_PALETTE_ORDER = PALETTE_ORDER.filter((dataType) => dataType !== FieldDataType.Label);
 
 function PaletteItem({ dataType }: { dataType: number }) {

@@ -1,7 +1,6 @@
 namespace Workflow.Domain.Entities;
 
-// Ủy quyền duyệt thay - 代理承認 (workflow-module.md §3.4). Chỉ chấp nhận 1 cấp — chặn A->B->C ở
-// Service (ApprovalDelegationService.GuardNoDelegationChainAsync).
+// Single-level only; A->B->C chains are blocked in ApprovalDelegationService.
 public partial class ApprovalDelegation
 {
     public int Id { get; set; }

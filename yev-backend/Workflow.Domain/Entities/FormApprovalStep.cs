@@ -2,8 +2,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Bước duyệt của MỘT nhánh (workflow-module.md §3.2). RequireSignature đặt ở BƯỚC, không ở JobTitle —
-// cùng chức danh có thể cần ký ở phòng này nhưng chỉ cần xác nhận ở phòng khác.
+// RequireSignature lives on the step, not the JobTitle: the same title may need to sign in one unit but not another.
 public partial class FormApprovalStep
 {
     public int Id { get; set; }

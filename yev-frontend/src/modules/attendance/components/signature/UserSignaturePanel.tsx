@@ -11,9 +11,8 @@ import SignatureUpload from "./SignatureUpload";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
-// docs/attendance-module.md §API/§6b — mỗi user tự đăng ký 1 chữ ký, BE tự lấy chữ ký này khi tạo/duyệt
-// đơn. ⚠️ 2026-07-16: PUT /me KHÔNG còn áp dụng ngay — chỉ gửi email xác nhận, chữ ký cũ vẫn có hiệu
-// lực cho tới khi user tự bấm xác nhận qua link email (trang public /xac-nhan-chu-ky).
+// BE uses this signature when creating/approving forms. PUT /me only sends a confirmation email;
+// the old signature stays valid until the user confirms via the link.
 export default function UserSignaturePanel() {
     const t = useTranslations("Attendance.UserSignature");
     const tCommon = useTranslations("Common");
@@ -66,7 +65,7 @@ export default function UserSignaturePanel() {
                             </div>
                             {signature ? (
                                 <>
-                                    {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây */}
+                                    {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI; next/image can't optimize it and needs fixed width/height */}
                                     <img
                                         src={`data:image/png;base64,${signature.signatureImage}`}
                                         alt={t("currentSignatureAlt")}

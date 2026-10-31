@@ -15,8 +15,7 @@ export const JobTitlePermissionApi = {
         const response = await api.get<ApiResponse<JobTitlePermissionDto[]>>(ENDPOINTS.JOB_TITLE_PERMISSION.getByJobTitle(jobTitleId));
         return response.data;
     },
-    // Danh sách permission code được phép chọn (nhóm "tham gia quy trình") — BE là nguồn chân lý
-    // duy nhất, FE không tự liệt kê song song để tránh lệch danh sách.
+    // BE is the single source of truth for selectable codes; FE must not keep a parallel list.
     getAllowedCodes: async () => {
         const response = await api.get<ApiResponse<string[]>>(ENDPOINTS.JOB_TITLE_PERMISSION.getAllowedCodes);
         return response.data;

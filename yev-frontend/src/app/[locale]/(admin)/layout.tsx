@@ -6,8 +6,7 @@ export const metadata = {
   title: "Admin | YEV Management",
 };
 
-// KHÔNG tự khai chiều cao / overflow riêng — [locale]/layout.tsx đã giữ vai trò khung + vùng cuộn
-// DUY NHẤT của app (mirror (pc-manager)/layout.tsx, xem DESIGN_SYSTEM.md §3).
+// No own height/overflow: [locale]/layout.tsx owns the app's only scroll container.
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <AdminAccessGuard>

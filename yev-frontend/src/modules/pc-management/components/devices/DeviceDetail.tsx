@@ -85,7 +85,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
     if (error && !detail) {
         return (
             <div className="space-y-4">
-                {/* KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11). */}
+                {/* No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404. */}
                 <Link href="/pc" prefetch={false} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
                     <ArrowLeft className="h-4 w-4" /> Quay lại danh sách
 </Link>
@@ -102,7 +102,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
         <div className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                    {/* KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11). */}
+                    {/* No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404. */}
                     <Link href="/pc" prefetch={false} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
                         <ArrowLeft className="h-4 w-4" /> Quay lại danh sách
                     </Link>

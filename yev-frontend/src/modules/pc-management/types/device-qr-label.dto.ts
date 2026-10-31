@@ -1,5 +1,4 @@
-// docs/asset-module.md §4 — POST /api/Device/qr-labels: in tem QR hàng loạt.
-// BE chỉ trả dữ liệu (đủ field + qrPayload dựng sẵn), FE tự vẽ QR và tự dàn layout in.
+// BE returns data only (fields + prebuilt qrPayload); FE renders the QR and print layout.
 export interface DeviceQrLabelDto {
     deviceId: number;
     deviceCode: string;
@@ -11,7 +10,6 @@ export interface DeviceQrLabelDto {
     serialNumber: string | null;
     statusText: string;
     purchaseDate: string;
-    // Dòng 1 luôn là deviceCode (app nội bộ tách dòng 1 để tra cứu) — giữ nguyên quy tắc
-    // này nếu FE tự dựng lại payload theo field user chọn.
+    // Line 1 must stay deviceCode (the internal app splits it out for lookup), even when FE rebuilds the payload.
     qrPayload: string;
 }

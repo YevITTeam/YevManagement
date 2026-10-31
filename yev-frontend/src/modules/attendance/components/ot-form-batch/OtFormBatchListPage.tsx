@@ -28,10 +28,7 @@ function formatDateTime(value: string) {
     return new Date(value).toLocaleString("vi-VN");
 }
 
-// Màn "Đơn tổng" trong app (dự phòng khi người duyệt mất/quên link email) — docs/attendance-module.md §API
-// §Đơn tổng. Danh sách gồm cả batch đang chờ (Pending) lẫn đã xử lý (Processed), của cả 3 cấp quản lý
-// (DepartmentManager/WorkshopManager/GeneralDirector) — BE tự lọc theo candidate hợp lệ của người gọi
-// (Admin thấy tất cả).
+// In-app fallback when the approver loses the email link; BE filters to batches the caller may act on (Admin sees all).
 export default function OtFormBatchListPage() {
     const t = useTranslations("Attendance.OtFormBatchList");
     const tCommon = useTranslations("Common");

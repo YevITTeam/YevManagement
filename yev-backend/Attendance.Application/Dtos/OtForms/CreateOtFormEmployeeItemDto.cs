@@ -15,7 +15,7 @@ namespace Attendance.Application.Dtos.OtForms
         // person, but it must be <= the form's overall EndTime (validated in the Service).
         public TimeOnly EndTime { get; set; }
 
-        // Có ăn hay không (chỉ có ý nghĩa nếu đủ ngưỡng giờ nhận phiếu ăn) — xem OtFormEmployee.DidEat.
+        // Only matters when the hours reach the meal-ticket threshold.
         public bool DidEat { get; set; }
 
         public string? NoteVn { get; set; }

@@ -2,9 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Workflow.Application.Dtos.OrgLevels
 {
-    // Thay NGUYÊN danh sách chức danh gợi ý của 1 OrgLevel (PUT /OrgLevel/{id}/job-title-suggestions)
-    // — mirror pattern ReplaceFormCategoryCoordinatorsDto. Thứ tự trong mảng = SortOrder (phần tử đầu
-    // = gợi ý mặc định để FE pre-select). Gửi mảng rỗng để bỏ hết gợi ý.
+    // Array order = SortOrder; the first item is the default the FE pre-selects. Empty array clears all.
     public class ReplaceOrgLevelJobTitleSuggestionsDto
     {
         [Required]

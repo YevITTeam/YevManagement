@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Asset.Application.Dtos.ServerChecks
 {
-    // Upsert theo UserId: user đã có phân công thì đổi xưởng, chưa có thì tạo mới (1 user = 1 xưởng).
+    // Upsert by UserId: 1 user = 1 branch.
     public class SaveServerCheckAssignmentDto
     {
         [Range(1, int.MaxValue, ErrorMessage = "Vui lòng chọn người dùng.")]

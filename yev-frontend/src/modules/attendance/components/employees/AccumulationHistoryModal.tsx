@@ -17,17 +17,15 @@ import AccumulationDaysView from "./AccumulationDaysView";
 interface AccumulationHistoryModalProps {
     employeeId: number;
     employeeLabel: string;
-    // Có quyền Attendance.EmployeeAccumulation.Update → xem qua endpoint "manage" và hiện nút "Sửa lũy kế".
+    // With Attendance.EmployeeAccumulation.Update: read via the "manage" endpoint and show the edit button.
     canEdit?: boolean;
     onClose: () => void;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
-// Ledger chỉ ghi dần từ 2026-08-11d (không backfill) — cho chọn lùi vài năm là đủ, xa hơn chắc chắn rỗng.
+// The ledger was never backfilled, so older years are always empty.
 const YEAR_OPTIONS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
 
-// Modal tra lịch sử lũy kế 1 Employee — dùng chung ở EmployeeList.tsx (Admin) và OtFormDetail.tsx
-// (người duyệt), mở qua nút "Xem lịch sử lũy kế" (2026-08-11d).
 export default function AccumulationHistoryModal({ employeeId, employeeLabel, canEdit = false, onClose }: AccumulationHistoryModalProps) {
     const t = useTranslations("Attendance.AccumulationHistory");
     const tCommon = useTranslations("Common");

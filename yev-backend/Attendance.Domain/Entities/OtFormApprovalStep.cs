@@ -2,11 +2,7 @@ using System.Collections.Generic;
 
 namespace Attendance.Domain.Entities;
 
-// 1 bước duyệt đã SNAPSHOT của 1 OtForm cụ thể, chốt 1 LẦN DUY NHẤT ngay lúc tạo đơn (đọc từ
-// DepartmentApprovalStep của đúng Department lúc đó — xem JobTitleApprovalChainService) — đơn đang
-// chạy dở không bị xáo trộn nếu tổ chức/cây duyệt đổi giữa chừng (2026-08-07, Giai đoạn 3.1, xem
-// docs/attendance-module.md §Cây chức vụ). Mọi bước được tạo Status=Pending ngay từ đầu; bước "đang
-// chờ xử lý" thật sự là bước Pending có StepOrder NHỎ NHẤT của đơn đó.
+// Snapshotted once at form creation so later org/approval-tree changes do not affect in-flight forms.
 public partial class OtFormApprovalStep
 {
     public int Id { get; set; }
@@ -25,10 +21,8 @@ public partial class OtFormApprovalStep
 
     public bool IsResponsibleSnapshot { get; set; }
 
-    // Enum Attendance.Domain.Enums.JobTitleTerminalLevel.
     public int TerminalLevelSnapshot { get; set; }
 
-    // Enum Attendance.Domain.Enums.OtFormApprovalStepStatus.
     public int Status { get; set; }
 
     public bool IsDeleted { get; set; }

@@ -11,18 +11,8 @@ const LOCALES = [
 
 const STORAGE_KEY = "yev-locale";
 
-// Đổi locale bằng router.replace giữ nguyên path hiện tại — next-intl tự thêm/bỏ tiền tố,
-// KHÔNG hard-reload nên state form/app hiện có không bị mất.
-// next-intl usePathname() (giống next/navigation) KHÔNG bao giờ chứa query string — nhiều màn của
-// module Attendance dùng query string làm "route" (vd /ot/forms?id=123 — static export, xem
-// docs/docs-fe/frontend-conventions.md), nên phải tự lấy lại query string và truyền kèm qua
-// router.replace, nếu không sẽ mất ?id=... khi đổi ngôn ngữ → màn hiện Not Found.
-//
-// Đọc query từ window.location.search NGAY TRONG handler, KHÔNG dùng hook useSearchParams():
-// component này nằm trong Header của root layout nên có mặt ở MỌI page; useSearchParams() bắt
-// `next build` (output: "export") phải bail-out sang CSR và đòi một <Suspense> bao ngoài, thiếu
-// nó là toàn bộ static export fail ("useSearchParams() should be wrapped in a suspense boundary").
-// Handler chỉ chạy khi người dùng bấm (đã ở client) nên window luôn sẵn sàng.
+// usePathname() drops the query string, which several screens use as the route (?id=), so it is re-appended.
+// Read from window.location in the handler: useSearchParams() here (root Header) would force a Suspense boundary for static export.
 export default function LanguageSwitcher() {
   const t = useTranslations("Header");
   const locale = useLocale();
@@ -44,7 +34,7 @@ export default function LanguageSwitcher() {
     switchTo(nextLocale);
   };
 
-  // A manual VI/JA choice lasts for this tab session only; every new visit follows the machine language: otherwise a Japanese browser/Windows UI language or a Tokyo time zone selects ja.
+  // Manual VI/JA choice lasts for this tab session; new visits follow the machine language/time zone.
   useEffect(() => {
     let saved: string | null = null;
     try {

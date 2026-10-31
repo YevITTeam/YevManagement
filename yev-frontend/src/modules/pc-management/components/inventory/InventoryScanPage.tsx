@@ -12,9 +12,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { getApiErrorMessage } from "@/lib/apiError";
 import InventoryEndSessionDialog from "./InventoryEndSessionDialog";
 
-// Kiosk quét mã kiểm kê thiết bị theo xưởng (asset-module.md §1.22) — cùng khuôn ServerCheckScanPage
-// nhưng KHÔNG chia theo category (kiểm kê quét toàn bộ Device, không riêng Server/Network/UPS/Máy lạnh)
-// và nhiều user cùng được gán 1 xưởng có thể cùng thao tác trên 1 phiên chung.
+// Kiosk like ServerCheckScanPage but scans every Device (no category split), and several users may share one session.
 export default function InventoryScanPage() {
     const t = useTranslations("Asset.Inventory");
 
@@ -28,8 +26,7 @@ export default function InventoryScanPage() {
 
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Xưởng KHÔNG cho người quét tự chọn — lấy từ phân công của Admin (asset-module.md §1.22); chưa
-    // được phân công thì chặn hẳn, không gọi tiếp getCurrent.
+    // Branch comes from the admin assignment (scanners can't pick); unassigned users are blocked before getCurrent.
     const { isLoading, error } = useFetchEffect(
         async () => {
             const mine = await InventoryAssignmentApi.getMine();
@@ -76,8 +73,7 @@ export default function InventoryScanPage() {
         try {
             const result = await InventoryApi.scan(session.id, code);
             setLastResult({ text: `${result.deviceCode} - ${result.deviceName}`, ok: true });
-            // Dùng getCurrent() (quyền Scan) chứ KHÔNG getById() (quyền View) — role "Kiểm kê thiết bị"
-            // chỉ có Scan, dùng getById ở đây sẽ 403 ngay sau lần quét đầu tiên.
+            // getCurrent() needs only Scan permission; getById() needs View and would 403 for scan-only roles.
             const refreshed = await InventoryApi.getCurrent();
             setSession(refreshed);
         } catch (err) {
@@ -123,7 +119,7 @@ export default function InventoryScanPage() {
         </div>
     );
 
-    // Chưa có phiên InProgress của xưởng này.
+    // No InProgress session for this branch yet.
     if (!session) {
         return (
             <div className="mx-auto max-w-md space-y-6 py-12 text-center">
@@ -144,7 +140,7 @@ export default function InventoryScanPage() {
         );
     }
 
-    // Đã hoàn thành — khóa, không quét/kết thúc thêm được.
+    // Completed: locked.
     if (session.status === 1) {
         return (
             <div className="mx-auto max-w-md space-y-4 py-12 text-center">

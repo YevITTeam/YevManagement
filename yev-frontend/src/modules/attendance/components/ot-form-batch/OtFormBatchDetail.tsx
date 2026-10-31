@@ -123,8 +123,7 @@ export default function OtFormBatchDetail(props: OtFormBatchDetailProps) {
 
     const openProcessModal = () => {
         if (!batch) return;
-        // Validate ở FE trước khi mở modal mật khẩu — đơn Duyệt mà bỏ chọn hết nhân viên phải chuyển
-        // sang Từ chối cả đơn thay vì cố duyệt 1 đơn 0 người (docs §Đơn tổng).
+        // An approved form with every employee unticked must be rejected instead of approved with zero people.
         for (const form of batch.otForms) {
             const state = decisions[form.otFormId];
             if (state.decision === 0 && state.excludedEmployeeIds.size >= form.employees.length) {

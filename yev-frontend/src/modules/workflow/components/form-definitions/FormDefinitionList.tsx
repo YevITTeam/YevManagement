@@ -101,8 +101,7 @@ export default function FormDefinitionList() {
                 await FormDefinitionApi.createFormDefinition(values);
                 toast.success(t("createSuccess"));
             } else if (editingItem) {
-                // routeConditionType bất biến sau khi tạo — không nằm trong UpdateFormDefinitionDto
-                // (workflow-module.md §3.2), không gửi field này lên.
+                // routeConditionType is immutable after creation and not part of the update DTO.
                 await FormDefinitionApi.updateFormDefinition(editingItem.id, {
                     code: values.code,
                     nameVn: values.nameVn,

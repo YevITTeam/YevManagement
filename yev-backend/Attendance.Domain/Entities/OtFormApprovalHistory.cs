@@ -9,16 +9,12 @@ public partial class OtFormApprovalHistory
 
     public int OtFormId { get; set; }
 
-    // Bước duyệt (đã snapshot) mà hành động này thuộc về — thay cho ApprovalLevel:int cũ (2026-08-07,
-    // Giai đoạn 3.1). Mọi thông tin "cấp nào" (tên Chức vụ, có bắt ký không...) đọc qua OtFormApprovalStep.
     public int OtFormApprovalStepId { get; set; }
 
     // Creator/approver — stores the UserName, for the same reason as OtForm.CreatedByUserName.
     public string ApproverUserName { get; set; } = null!;
 
-    // Snapshot of the JWT "FullName" claim at signing time — so PDF printing doesn't need the FE to
-    // call across to the Identity API. Null if the account has never had FullName entered by an
-    // Admin at create-user time.
+    // Snapshot of the JWT FullName at signing so PDF printing needs no Identity call.
     public string? ApproverFullName { get; set; }
 
     // Set when the approver acted through a delegation: the candidate (delegator) they covered.
@@ -31,8 +27,7 @@ public partial class OtFormApprovalHistory
 
     public string? Comment { get; set; }
 
-    // Snapshot of the signature image at signing time — does not reference UserSignature back, to
-    // avoid the old signature changing retroactively when the user updates their signature (see docs/attendance-module.md).
+    // Snapshot so a later signature change does not alter past approvals.
     public byte[]? SignatureImage { get; set; }
 
     public DateTime ActionAt { get; set; }

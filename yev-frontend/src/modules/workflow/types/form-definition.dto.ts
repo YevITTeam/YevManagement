@@ -1,4 +1,4 @@
-// workflow-module.md §4 — khớp enum RouteConditionType ở BE (Workflow.Domain.Enums.RouteConditionType).
+// Must match BE enum RouteConditionType.
 export const RouteConditionType = {
     None: 0,
     NumericRange: 1,
@@ -24,8 +24,7 @@ export interface FormDefinitionDto {
     routeConditionType: RouteConditionType;
     routeNumericFieldKey: string | null;
     routeClassFieldKey: string | null;
-    // HTML render từ .docx nhập vào, nhúng <span data-field-key> đánh dấu vị trí field. NULL = chế
-    // độ lưới hiện tại (workflow-module.md §1.5).
+    // HTML from the imported .docx with <span data-field-key> placeholders; null = grid mode.
     layoutHtml: string | null;
     createdByEmployeeId: number;
     createdByEmployeeName: string;
@@ -35,7 +34,7 @@ export interface FormDefinitionDto {
     updatedAt: string;
 }
 
-// KHÔNG có routeConditionType — bất biến sau khi tạo (workflow-module.md §3.2), chỉ có trong Create.
+// No routeConditionType: immutable after creation.
 export interface CreateFormDefinitionDto {
     code: string;
     nameVn: string;
@@ -63,8 +62,7 @@ export interface UpdateFormDefinitionDto {
     routeClassFieldKey: string | null;
 }
 
-// POST /FormDefinition/{id}/clone — KHÔNG sao chép FormAccesses (workflow-module.md §3.2), chỉ
-// FormFields + FormFieldConditions. FormCategoryId/CodePrefix/RouteConditionType... kế thừa từ form gốc.
+// Clone copies FormFields + conditions but not FormAccesses; category, prefix and route condition are inherited.
 export interface CloneFormDefinitionDto {
     code: string;
     nameVn: string;

@@ -7,11 +7,8 @@ using Workflow.Application.Interfaces.Service;
 
 namespace Workflow.Api.Controllers
 {
-    // Aggregate độc lập với FormDefinition (workflow-module.md §3.3 "Nhóm dữ liệu đơn" tách khỏi §3.2
-    // "Nhóm định nghĩa form") — không nhét vào FormDefinitionController. Luật chi tiết "ai duyệt được
-    // bước này / ai xem được đơn này" là DỮ LIỆU (WorkflowRequestStepParticipants + ApprovalDelegations),
-    // không phải permission — mọi action ở đây chỉ đứng sau ĐÚNG 1 permission thô
-    // Workflow.Request.Create (§7), Service tự enforce chi tiết.
+    // Who may approve/view a request is data (step participants + delegations), not permissions:
+    // every action sits behind Workflow.Request.Create only and the Service enforces the details.
     public class WorkflowRequestController : WorkflowBaseController
     {
         private readonly IWorkflowRequestService _workflowRequestService;
@@ -23,8 +20,7 @@ namespace Workflow.Api.Controllers
 
         private bool HasViewAll => User.HasClaim("Permission", "Workflow.Request.ViewAll");
 
-        // Pha 3B-2: 3 endpoint đọc phục vụ FE nộp/duyệt đơn (workflow-module.md §6) — người nộp đơn
-        // thường KHÔNG có Workflow.FormDesign.View nên không đọc được qua FormDefinitionController.
+        // Requesters usually lack Workflow.FormDesign.View, so form definitions are re-exposed here.
         [RequirePermission("Workflow.Request.Create")]
         [HttpGet("available-forms")]
         public async Task<ActionResult<ApiResponse<List<AvailableFormDto>>>> GetAvailableForms()
@@ -156,8 +152,7 @@ namespace Workflow.Api.Controllers
             return Success(result, "Thêm người duyệt thành công.");
         }
 
-        // Pha 4B: đính kèm file (workflow-module.md §6). Upload/Delete chỉ chủ đơn (Service tự enforce
-        // §7); Download theo đúng luật "Ai xem được đơn này?" nên cần HasViewAll như GetById.
+        // Upload/Delete: request owner only (enforced in Service); Download follows the view rule, hence HasViewAll.
         [RequirePermission("Workflow.Request.Create")]
         [HttpPost("{id}/attachments")]
         public async Task<ActionResult<ApiResponse<WorkflowRequestDto>>> UploadAttachment(int id, IFormFile file)
@@ -178,8 +173,7 @@ namespace Workflow.Api.Controllers
             return Success(result, "Xoá file đính kèm thành công.");
         }
 
-        // Trả file nhị phân trực tiếp, KHÔNG bọc ApiResponse<T> (rule §3.4-1 chỉ áp dụng cho JSON) — để
-        // trình duyệt tải file được bằng Content-Disposition chuẩn của PhysicalFile.
+        // Raw file, not wrapped in ApiResponse<T>, so the browser downloads via Content-Disposition.
         [RequirePermission("Workflow.Request.Create")]
         [HttpGet("attachments/{attachmentId}/download")]
         public async Task<IActionResult> DownloadAttachment(int attachmentId)

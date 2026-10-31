@@ -1,15 +1,13 @@
-// Xem docs/asset-module.md §4 — import cấu hình phần cứng hàng loạt từ file kiểm kê Tanium.
-// Khác device-import: CHỈ cập nhật Device đã có sẵn, không tự tạo Device mới.
+// Tanium hardware import only updates existing Devices, never creates them.
 
-// Dữ liệu thô đọc được từ 1 dòng file Tanium — dùng chung cho response preview và request confirm.
-// Format file 10 cột: Computer Name, Tanium IP, Last Logged In User, Custom Registry UserEmail, Manufacturer,
-// Model, Computer Serial Number, CPU, Total Memory, Size. File theo format cũ sẽ đọc lệch cột.
+// Shared by preview and confirm. Expects the 10-column Tanium export (Computer Name, Tanium IP, Last Logged In User,
+// Custom Registry UserEmail, Manufacturer, Model, Computer Serial Number, CPU, Total Memory, Size); older formats misalign.
 export interface DeviceConfigurationImportRowDto {
     computerName: string;
     taniumIpAddress: string | null;
-    // Cột "Last Logged In User" (DOMAIN\user hoặc Local\user).
+    // DOMAIN\user or Local\user.
     lastLoggedInUser: string | null;
-    // Ô "Custom Registry UserEmail" nguyên văn: có thể nhiều email (xuống dòng) hoặc [NOT_FOUND].
+    // Raw cell: may hold several newline-separated emails or [NOT_FOUND].
     userEmail: string | null;
     manufacturer: string | null;
     model: string | null;
@@ -19,7 +17,7 @@ export interface DeviceConfigurationImportRowDto {
     size: string | null;
 }
 
-// Trạng thái tài khoản domain của 1 dòng preview (khớp DomainAccountState bên BE).
+// Mirrors BE DomainAccountState.
 export const DomainAccountState = {
     ExistsInIdentity: 0,
     WillCreate: 1,
@@ -30,21 +28,20 @@ export const DomainAccountState = {
     Failed: 6,
 } as const;
 
-// Item trả về từ bước preview — thêm mã/tên tách được, các Id đã tra sẵn + kết quả validate.
 export interface DeviceConfigurationImportPreviewRowDto extends DeviceConfigurationImportRowDto {
     rowNumber: number;
     parsedDeviceCode: string;
-    // Computer Name nguyên văn sẽ ghi vào tên thiết bị; null = không đổi.
+    // Raw Computer Name written as the device name; null = unchanged.
     resolvedDeviceName: string | null;
     resolvedDeviceId: number | null;
     resolvedIpAddressId: number | null;
-    // null = serial sẽ KHÔNG được ghi (trống, đang thuộc Device khác, hoặc lặp nhiều dòng trong file).
+    // null = serial not written (empty, owned by another Device, or repeated in the file).
     resolvedSerialNumber: string | null;
-    // null = không ghi (trống hoặc là tài khoản Local).
+    // null = not written (empty or a Local account).
     resolvedManagerDomainAccount: string | null;
-    // DomainAccountState của resolvedManagerDomainAccount; null = dòng không có tài khoản domain.
+    // null = row has no domain account.
     accountState: number | null;
-    // Email hợp lệ tách được từ ô email; email máy chưa có sẽ được thêm khi xác nhận.
+    // Valid emails parsed from the cell; ones the device lacks are added on confirm.
     resolvedEmails: string[];
     isValid: boolean;
     errors: string[];
@@ -56,14 +53,12 @@ export interface DeviceConfigurationImportPreviewResultDto {
     totalRows: number;
     validRows: number;
     invalidRows: number;
-    // Số dòng Computer Name không thuộc 5 họ mã (YDC/YLC/YDF/AC/TYC), bị loại thầm lặng trước khi vào "rows".
+    // Rows outside the 5 code families (YDC/YLC/YDF/AC/TYC), silently dropped before "rows".
     outOfScopeSkippedCount: number;
 }
 
-// Response của BE KHÔNG có skippedRows/skippedCount (khác Device Import) — endpoint
-// này vẫn re-validate + atomic theo request gửi lên (xem docs/asset-module.md §4).
-// Để cho phép Confirm dù còn dòng lỗi mà không rủi ro bị BE từ chối cả batch, FE tự
-// lọc bỏ các dòng isValid=false trước khi gửi (xem ImportDeviceConfigurationDialog).
+// Unlike Device Import, BE returns no skippedRows and rejects the whole batch on any invalid row,
+// so FE drops isValid=false rows before sending.
 export interface DeviceConfigurationImportConfirmResultDto {
     createdConfigCount: number;
     updatedConfigCount: number;
@@ -72,8 +67,7 @@ export interface DeviceConfigurationImportConfirmResultDto {
     deviceNameUpdatedCount: number;
     managerAccountUpdatedCount: number;
     emailAddedCount: number;
-    // Chỉ có số khi gửi createMissingUsers = true: user Identity vừa tạo / bỏ qua (bị vô hiệu hoá hoặc không có trong AD)
-    // / không hỏi được AD / tạo lỗi.
+    // Only set when createMissingUsers = true.
     usersCreatedCount: number;
     usersSkippedCount: number;
     usersUnavailableCount: number;
@@ -81,8 +75,7 @@ export interface DeviceConfigurationImportConfirmResultDto {
     updatedDeviceIds: number[];
 }
 
-// 1 dòng của báo cáo đối chiếu hiện trên màn hình (POST /DeviceConfigurationImport/missing-devices) — thiết bị đang
-// "Đang sử dụng" trong hệ thống nhưng không có trong file Tanium. Cùng cột với file Excel tải về.
+// In-use devices missing from the Tanium file; same columns as the downloadable Excel.
 export interface DeviceMissingInTaniumDto {
     deviceCode: string;
     deviceName: string;
@@ -96,9 +89,7 @@ export interface DeviceMissingInTaniumDto {
     note: string | null;
 }
 
-// Kết quả tải "Báo cáo đối chiếu Tanium" (POST /DeviceConfigurationImport/missing-devices-report) —
-// BE trả về file .xlsx (không phải JSON), missingCount đọc từ header X-Missing-Device-Count để FE
-// hiện toast tóm tắt mà không cần mở file ra đếm.
+// BE returns .xlsx, not JSON; missingCount comes from the X-Missing-Device-Count header for the toast.
 export interface MissingDevicesReportResultDto {
     blob: Blob;
     fileName: string;

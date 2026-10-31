@@ -6,15 +6,12 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 export default function nextConfig(phase: string) {
   const config: NextConfig = {
-    /* config options here */
     allowedDevOrigins: ['10.45.1.181', '10.45.1.155'],
-    // `output: 'export'` chỉ bật khi `next build` (static export cho IIS).
-    // Next dev không hỗ trợ middleware/proxy cùng lúc với output: 'export'
-    // (báo lỗi "Middleware cannot be used with output: export"), nên phải tách theo phase.
+    // Export only on `next build`: dev mode rejects middleware together with output: 'export'.
     ...(phase === PHASE_PRODUCTION_BUILD ? { output: "export" as const } : {}),
     trailingSlash: true,
     experimental: {
-      // Tránh webpack dev phải resolve toàn bộ barrel file của lucide-react mỗi lần compile 1 route.
+      // Avoids resolving lucide-react's whole barrel file on every dev route compile.
       optimizePackageImports: ["lucide-react"],
     },
   };

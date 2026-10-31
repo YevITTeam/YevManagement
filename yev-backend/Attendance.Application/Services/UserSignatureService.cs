@@ -11,8 +11,7 @@ namespace Attendance.Application.Services
 {
     public class UserSignatureService : BaseService<IAttendanceUnitOfWork>, IUserSignatureService
     {
-        // Ngắn hơn hẳn hạn của OtFormApprovalEmailToken — tự xác nhận nên làm ngay sau khi request,
-        // không như duyệt đơn phải chờ cấp trên rảnh (xem docs/attendance-module.md).
+        // Short expiry: self-confirmation happens right after the request, unlike form approvals.
         private const int ConfirmationExpiryMinutes = 30;
 
         private readonly IUserDirectoryService _userDirectoryService;
@@ -41,9 +40,7 @@ namespace Attendance.Application.Services
             return new UserSignatureDto { UserName = signature!.UserName, SignatureImage = signature.SignatureImage, UpdatedAt = signature.UpdatedAt };
         }
 
-        // Cập nhật/đăng ký chữ ký KHÔNG còn áp dụng ngay (2026-07-16) — tạo 1 dòng chờ xác nhận rồi
-        // gửi email cho chính người gọi kèm link xác nhận; chữ ký chỉ thật sự có hiệu lực sau khi
-        // bấm xác nhận (ConfirmAsync), chống trường hợp ai đó chiếm phiên đăng nhập đổi chữ ký người khác.
+        // Takes effect only after the emailed confirmation, so a hijacked session cannot change it.
         public async Task RequestUpdateAsync(string userName, UpsertUserSignatureDto request)
         {
             var now = TimeHelper.GetCurrentUtcTime();
@@ -65,8 +62,7 @@ namespace Attendance.Application.Services
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
             var link = $"{baseUrl}/xac-nhan-chu-ky?token={pending.Token}";
 
-            // Render template lỗi (thiếu file, sai định dạng...) không được làm hỏng nghiệp vụ chính
-            // (đăng ký chữ ký vẫn phải thành công) — cùng nguyên tắc với EmailService.SendAsync nuốt lỗi SMTP.
+            // Template rendering failures must not fail the update, same as EmailService swallowing SMTP errors.
             try
             {
                 var html = _emailTemplateRenderer.Render("UserSignature/RequestUpdateConfirmation.html", new Dictionary<string, string>
@@ -81,8 +77,7 @@ namespace Attendance.Application.Services
             }
             catch (FileNotFoundException)
             {
-                // Thiếu file template là lỗi triển khai (deploy quên copy EmailTemplates/), bỏ qua gửi
-                // mail chứ không chặn luồng chính.
+                // Missing template is a deploy issue; skip the mail without blocking the main flow.
             }
         }
 
@@ -130,7 +125,6 @@ namespace Attendance.Application.Services
             return await UpsertAsync(userName, signatureImage);
         }
 
-        // Logic upsert thật — tái dùng nội bộ bởi ConfirmAsync/AdminSetSignatureAsync.
         private async Task<UserSignatureDto> UpsertAsync(string userName, byte[] signatureImage)
         {
             var signature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == userName);

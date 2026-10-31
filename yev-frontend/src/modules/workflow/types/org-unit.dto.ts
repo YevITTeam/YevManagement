@@ -12,21 +12,20 @@ export interface OrgUnitDto {
     validTo: string | null;
 }
 
-// 1 dòng "ai đang giữ chức gì" kèm theo mỗi node cây (chỉ nhân sự còn hoạt động).
+// Active employees only.
 export interface OrgUnitTreeMemberDto {
-    // EmployeeOrgUnits.Id — dùng cho cập nhật/gỡ từng dòng gán.
+    // EmployeeOrgUnits.Id, used to update/remove a single assignment.
     assignmentId: number;
     employeeId: number;
     employeeFullName: string;
     employeeCode: string;
     jobTitleId: number | null;
     jobTitleNameVn: string | null;
-    // Số nhỏ = cao hơn — dùng để nhóm/thụt lề kiểu cây thư mục trên FE, không có ý nghĩa nghiệp vụ nào khác.
+    // Lower = higher level; only used for tree grouping/indentation.
     jobTitleRankOrder: number | null;
     isPrimary: boolean;
 }
 
-// Cây dựng từ GET /Workflow/OrgUnit/tree — dùng cho màn quản trị cây tổ chức.
 export interface OrgUnitTreeDto {
     id: number;
     code: string;

@@ -13,16 +13,12 @@ import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 
-// Lấy hẳn 254 địa chỉ IP (đúng số IP tối đa của 1 dải mạng /24, đã bỏ .0/.255) mỗi lần gọi API
-// để giảm số lần bấm "Trang sau" khi xem hết 1 prefix; UI chỉ hiển thị ~10 dòng
-// cùng lúc và cho cuộn bên trong bảng (xem div bọc <table> có overflow-y-auto).
+// 254 = all hosts of a /24, so one prefix fits a single page; the table scrolls internally.
 const PAGE_SIZE = 254;
 const VISIBLE_ROWS = 10;
 const ROW_HEIGHT_PX = 53;
 
-// docs/asset-module.md §4 (2026-07-11) — IpAddress không còn tạo/xoá thủ công,
-// chỉ sinh hàng loạt qua IpPrefix (POST) và dọn qua IpPrefix (DELETE cascade).
-// Danh sách này chỉ hỗ trợ xem + sửa status/note của từng IP.
+// IpAddresses are only generated/removed via IpPrefix; this list only edits status/note.
 const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddressList({ onLoadingChange }, ref) {
     const [ipAddresses, setIpAddresses] = useState<IpAddressDto[]>([]);
 
@@ -72,17 +68,15 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
 
     useImperativeHandle(ref, () => ({
         refresh: fetchIpAddresses,
-        // Không còn "tạo mới" thủ công cho IpAddress — no-op để khớp ListHandle.
+        // No manual create for IpAddress; no-op to satisfy ListHandle.
         openCreate: () => {},
     }));
 
-    // Đổi trạng thái hàng loạt chỉ nhận status 0/1 (docs/asset-module.md §4) — IP "Đã sử dụng"
-    // (status=2, đang gắn thiết bị) sẽ luôn bị server bỏ qua, nên chỉ cho chọn khi filter đang
-    // khoanh đúng 1 trạng thái 0 hoặc 1 (không cho chọn khi "Tất cả trạng thái" hoặc "Đã sử dụng").
+    // Bulk change accepts only status 0/1 and the server skips in-use IPs (2), so selection requires
+    // the filter to be exactly 0 or 1.
     const canBulkSelect = statusFilter === "0" || statusFilter === "1";
 
-    // Đổi trang/lọc → bỏ chọn hết (dữ liệu hiển thị đã khác), theo pattern "adjusting state
-    // when a prop changes" ở AGENTS.md thay vì dùng effect.
+    // Clear the selection on page/filter change; snapshot compared during render instead of an effect.
     const filtersKey = `${pageIndex}|${appliedKeyword}|${statusFilter}`;
     const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
     if (prevFiltersKey !== filtersKey) {

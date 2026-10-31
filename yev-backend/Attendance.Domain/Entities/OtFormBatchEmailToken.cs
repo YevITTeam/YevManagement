@@ -2,10 +2,7 @@ using System;
 
 namespace Attendance.Domain.Entities;
 
-// Email link token for the "Đơn tổng" batch approval flow — same one-token-per-send pattern as
-// OtFormApprovalEmailToken, except there is no ApprovalLevel (a batch is always approved at the
-// DepartmentManager level) and IsReminder distinguishes the first notice from later reminder sends
-// for the SAME still-unresolved batch (see docs/attendance-module.md — §Đơn tổng).
+// IsReminder separates the first notice from later reminders for the same unresolved batch.
 public partial class OtFormBatchEmailToken
 {
     public int Id { get; set; }

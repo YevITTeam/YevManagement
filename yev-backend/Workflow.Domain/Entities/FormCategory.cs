@@ -1,7 +1,5 @@
 namespace Workflow.Domain.Entities;
 
-// Thư mục form theo phòng ban (workflow-module.md §3.2). OrgUnitId nullable — thư mục có thể chưa
-// gán phòng ban sở hữu cụ thể.
 public partial class FormCategory
 {
     public int Id { get; set; }

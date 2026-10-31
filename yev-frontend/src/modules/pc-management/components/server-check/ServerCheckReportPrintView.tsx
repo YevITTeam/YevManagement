@@ -13,8 +13,7 @@ const formatDate = (value: string) => new Date(value).toLocaleDateString("vi-VN"
 
 const cellText = (status: boolean | null) => (status === null ? "" : status ? "OK" : "NG");
 
-// Gộp mọi lý do NG trong ngày vào 1 ô "Ghi chú" — cùng logic với ServerCheckService.ExportReportAsync
-// bên BE (asset-module.md §1.19) để bản in web và file Excel xuất ra đọc giống nhau.
+// Same merge logic as BE ServerCheckService.ExportReportAsync so the web print and Excel export match.
 export function buildNote(row: ServerCheckReportRowDto): string {
     const parts: string[] = [];
     if (row.serverStatus === false) parts.push(`Đèn báo Server: ${row.serverNote}`);
@@ -64,16 +63,10 @@ export function buildDayRows(
 const th = "border border-black px-1 py-1 text-center font-semibold align-middle";
 const td = "border border-black px-1 py-px text-center align-top leading-tight";
 
-// Bản in khớp layout tờ giấy gốc "YEV–22–CV–IT-QD-810-FR-Check Sheet KT" (xem file mẫu
-// docs/Check sheet kiem tra hang ngay IT.xlsx, cũng là file BE dùng để xuất Excel — 7d.9
-// asset-module.md §4) — KHÔNG dùng lại bảng tương tác trên màn hình (cột "Ngày" sticky, nút "Xem chi
-// tiết"...) vì đó là bảng để THAO TÁC, còn đây là bản để IN, cần đúng cấu trúc 2 nhóm cột merge
-// (Phòng Server / Các kiểm tra khác) như tờ giấy. `hidden print:block` — chỉ hiện khi in, màn hình
-// vẫn dùng bảng tương tác cũ (đã có `print:hidden` ở section bọc ngoài).
+// Mirrors the paper sheet "YEV–22–CV–IT-QD-810-FR-Check Sheet KT" (same template BE exports to Excel)
+// with its two merged column groups; print-only, the screen keeps the interactive table.
 export default function ServerCheckReportPrintView({ rows, manualColumns, fromDate, toDate, branchName, isOffDay }: ServerCheckReportPrintViewProps) {
-    // manualColumns[0] = "Tình trạng âm thanh, mùi, nhiệt độ" thuộc nhóm "Phòng Server" trên tờ giấy;
-    // các mục còn lại (Network Factory/Server, Gởi nhận Mail, Backup x3) thuộc nhóm "Các kiểm tra
-    // khác" — vị trí cố định theo DisplayOrder đã seed (asset-module.md §1.19), không đoán theo tên.
+    // Group placement follows the seeded DisplayOrder (first item = server room, rest = other checks), never names.
     const [ambientColumn, ...otherColumns] = manualColumns;
     const otherColumnsCount = otherColumns.length || 1;
 
@@ -92,7 +85,7 @@ export default function ServerCheckReportPrintView({ rows, manualColumns, fromDa
                     <p className="text-sm">ITの日常的なチェックシート</p>
                 </div>
                 <div className="w-40 shrink-0 text-xs">
-                    {/* 1 tờ = 1 xưởng (phiên quét theo xưởng, asset-module.md §1.21) nên điền tên xưởng đang lọc. */}
+                    {/* One sheet = one branch, so print the filtered branch name. */}
                     <p>Nhà xưởng 工場: {branchName ?? "……………"}</p>
                     <p>Tháng 月: {singleMonth ? from.getMonth() + 1 : "-"}</p>
                     <p>Năm 年: {singleMonth ? from.getFullYear() : "-"}</p>

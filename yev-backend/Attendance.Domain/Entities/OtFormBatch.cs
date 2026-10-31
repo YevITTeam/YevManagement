@@ -3,11 +3,7 @@ using System.Collections.Generic;
 
 namespace Attendance.Domain.Entities;
 
-// "Đơn tổng" — a daily bundle of individual OT Forms sitting at a manager terminal level
-// (JobTitleTerminalLevel.DepartmentManager/WorkshopManager/GeneralDirector) so the approver at that
-// level can approve/reject all of them in a single action instead of one form at a time (see
-// docs/attendance-module.md — §Đơn tổng). No IsDeleted — a system-managed table, same as
-// OtFormApprovalEmailToken.
+// Daily bundle of forms waiting at one terminal level, approved in a single action. System-managed, no IsDeleted.
 public partial class OtFormBatch
 {
     public int Id { get; set; }
@@ -15,19 +11,16 @@ public partial class OtFormBatch
     // Stores Attendance.Domain.Enums.JobTitleTerminalLevel — which manager level this batch is for.
     public int TerminalLevel { get; set; }
 
-    // Only set when TerminalLevel=DepartmentManager (candidates are scoped to 1 Department). Null for
-    // WorkshopManager/GeneralDirector — those 2 levels are company-wide (see
-    // JobTitleApprovalChainService), so 1 batch per level per day covers the whole company.
+    // DepartmentManager level only; WorkshopManager/GeneralDirector are company-wide, so one batch per level per day.
     public int? DepartmentId { get; set; }
 
     // Set together with DepartmentId (DepartmentManager level only): the same department is a separate
     // batch per workshop because its manager differs per workshop.
     public int? WorkshopId { get; set; }
 
-    // The calendar day the daily sweep created this batch — NOT the day it gets processed.
+    // The sweep day, not the processing day.
     public DateOnly BatchDate { get; set; }
 
-    // Stores Attendance.Domain.Enums.OtFormBatchStatus as an int.
     public int Status { get; set; }
 
     public DateTime CreatedAt { get; set; }

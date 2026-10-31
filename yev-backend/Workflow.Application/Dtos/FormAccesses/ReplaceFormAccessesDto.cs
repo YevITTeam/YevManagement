@@ -15,9 +15,7 @@ namespace Workflow.Application.Dtos.FormAccesses
         public int? EmployeeId { get; set; }
     }
 
-    // Thay NGUYÊN danh sách ai được tạo đơn của 1 FormDefinition (workflow-module.md §3.2
-    // PUT /FormDefinition/{id}/accesses) — mirror pattern ReplaceFormCategoryCoordinatorsDto. Gửi
-    // mảng rỗng để bỏ hết (không ai tạo được đơn cho tới khi cấu hình lại).
+    // Replaces the whole list; an empty array means nobody can create requests until reconfigured.
     public class ReplaceFormAccessesDto
     {
         [Required]

@@ -27,7 +27,7 @@ export interface GetInventoryPageNationParams {
 }
 
 export const InventoryApi = {
-    // Phiên InProgress của xưởng chính người gọi được phân công — không nhận branchId (asset-module.md §1.22).
+    // Session of the caller's assigned branch; no branchId parameter.
     getCurrent: async () => {
         const response = await api.get<ApiResponse<InventorySessionDto | null>>(ENDPOINTS.INVENTORY.current);
         return response.data;
@@ -60,6 +60,6 @@ export const InventoryApi = {
         const response = await api.get<ApiResponseWithPageNation<InventorySessionDto>>(url);
         return response.data;
     },
-    // Trả file .xlsx do BE tự dựng, 1 dòng/thiết bị của phiên — đọc bằng getForBlob() (asset-module.md §1.22).
+    // BE-built .xlsx, one row per device; read via getForBlob().
     exportSession: async (id: number): Promise<BlobDownloadResult> => getForBlob(ENDPOINTS.INVENTORY.exportSession(id)),
 };

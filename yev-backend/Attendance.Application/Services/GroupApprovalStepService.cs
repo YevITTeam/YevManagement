@@ -8,20 +8,13 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Quản lý cây duyệt cấu hình tay theo từng Nhóm (2026-08-08) — CHỈ chứa 3 cấp trung gian dưới
-    // Manager (Staff/Group Leader/Team Leader, JobTitle.TerminalLevel=None). 3 cấp cuối vẫn cấu hình
-    // ở DepartmentApprovalStepService theo Bộ phận, không lặp lại ở đây — xem
-    // docs/docs-be/attendance-module.md §Cây chức vụ. Không có Create/Update/Delete từng dòng riêng
-    // lẻ, chỉ thay NGUYÊN danh sách 1 lần (khớp UI kiểu "sắp xếp rồi Lưu", mirror
-    // DepartmentApprovalStepService).
+    // Holds only the intermediate levels (TerminalLevel=None); terminal levels live per department.
+    // Whole-list replace only, matching the "reorder then Save" UI.
     public class GroupApprovalStepService : BaseService<IAttendanceUnitOfWork>, IGroupApprovalStepService
     {
         public GroupApprovalStepService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
 
-        // Admin xem/sửa được mọi Nhóm; không phải Admin thì phải có tên trong
-        // GroupApprovalStepCoordinators của ĐÚNG Nhóm này (gán tay bởi Admin, TÁCH BIỆT hoàn toàn với
-        // DepartmentApprovalStepCoordinator — phụ trách Bộ phận không tự động phụ trách Nhóm con) —
-        // xem docs/docs-be/attendance-module.md §Cây chức vụ, mục "Người phụ trách Cây duyệt".
+        // Group coordinators are separate from department coordinators; coordinating a department doesn't grant its groups.
         private async Task EnsureCanManageGroupAsync(string userName, bool isAdmin, int groupId)
         {
             if (isAdmin) return;
@@ -99,7 +92,6 @@ namespace Attendance.Application.Services
             if (request.Steps.Count(x => x.IsResponsible) > 1)
                 throw new DomainException("Chỉ được đánh dấu tối đa 1 bước là \"người chịu trách nhiệm\".");
 
-            // Batch-fetch JobTitle theo Id thay vì query từng bước trong vòng lặp (2026-08-11).
             var jobTitleIds = request.Steps.Select(x => x.JobTitleId).ToHashSet();
             var jobTitlesById = (await _unitOfWork.JobTitles.FindAsync(x => jobTitleIds.Contains(x.Id) && !x.IsDeleted))
                 .ToDictionary(x => x.Id);
@@ -114,9 +106,7 @@ namespace Attendance.Application.Services
                 if (item.RequiresSignature) signingCount++;
             }
 
-            // Đúng 2 ô "Người đề nghị" cố định trên giấy in YEV-22-024 — mirror
-            // DepartmentApprovalStepService.ReplaceAsync (trước 2026-08-08, cùng luật, dời nguyên
-            // xuống đây vì cấp trung gian giờ chỉ còn tồn tại ở GroupApprovalStep).
+            // The printed YEV-22-024 form has exactly two fixed "requester" signature boxes.
             if (request.Steps.Count > 0 && (signingCount < 1 || signingCount > 2))
                 throw new DomainException("Phải có từ 1 đến 2 bước được đánh dấu \"Bắt buộc ký\" (khớp 2 ô \"Người đề nghị\" cố định trên giấy in) — các bước khác để \"Chỉ xác nhận\", không giới hạn số lượng.");
 

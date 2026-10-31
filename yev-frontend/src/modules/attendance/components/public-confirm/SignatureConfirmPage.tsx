@@ -9,10 +9,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { createBilingualTranslator } from "@/modules/attendance/lib/bilingual";
 
-// Route public (không đăng nhập SPA, bảo mật bằng token trong URL) — docs/attendance-module.md §API
-// Mở qua link email "Xác nhận cập nhật chữ ký". Bilingual (VN / JP) cố định bất kể route đang là
-// /vi hay /ja (2026-07-29, user request) — xem createBilingualTranslator trong lib/bilingual.ts,
-// đồng bộ với OtFormEmailConfirmPage.tsx.
+// Public route secured by the URL token; always bilingual (VN/JP) regardless of the /vi or /ja segment.
 export default function SignatureConfirmPage() {
     const t = createBilingualTranslator("Attendance.SignatureConfirm");
     const searchParams = useSearchParams();
@@ -23,8 +20,7 @@ export default function SignatureConfirmPage() {
     const [confirmed, setConfirmed] = useState(false);
     const [confirmError, setConfirmError] = useState<string | null>(null);
 
-    // Thiếu token ném lỗi dạng JSON {message} để getApiErrorMessage bên trong useFetchEffect parse ra
-    // đúng câu thông báo riêng này thay vì rơi về fallback chung.
+    // Throw a JSON {message} so getApiErrorMessage surfaces this specific text instead of the generic fallback.
     const { isLoading, error: loadError } = useFetchEffect(
         () =>
             token
@@ -67,7 +63,7 @@ export default function SignatureConfirmPage() {
                         <p className="text-sm text-[#5e3f3a]">
                             {t("accountLabel", { userName: preview.userName })}
                         </p>
-                        {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây */}
+                        {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI; next/image can't optimize it and needs fixed width/height */}
                         <img
                             src={`data:image/png;base64,${preview.signatureImage}`}
                             alt={t("newSignatureAlt")}

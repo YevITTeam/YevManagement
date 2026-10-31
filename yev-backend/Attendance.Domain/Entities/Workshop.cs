@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace Attendance.Domain.Entities;
 
-// Factory site (Xưởng, e.g. Dĩ An). Departments are shared across workshops; a Group belongs to exactly
+// Factory site. Departments are shared across workshops; a Group belongs to exactly
 // one (Workshop, Department) pair, so a department's staff per workshop is reached through its Groups.
 public partial class Workshop
 {

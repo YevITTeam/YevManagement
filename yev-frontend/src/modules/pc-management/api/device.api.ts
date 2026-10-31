@@ -27,21 +27,20 @@ export interface GetDevicePageNationParams {
     ipAddress?: string;
     email?: string;
     supplierName?: string;
-    // Lọc chính xác theo Id Nhóm/Bộ phận (docs/asset-module.md §4) — dùng !== undefined vì 0 cũng là Id hợp lệ.
+    // Exact id match; checked with !== undefined since 0 is a valid id.
     groupId?: number;
     departmentId?: number;
     note?: string;
     isOutsourced?: boolean;
     serialNumber?: string;
     isUseUsb?: boolean;
-    // Lọc máy đã tick "Cần kiểm tra hằng ngày (QR)" — gom nhanh danh sách in QR cho phòng server
-    // (asset-module.md §1.19/§1.21).
+    // Devices flagged for the daily QR check, to batch-print server-room labels.
     requiresDailyCheck?: boolean;
     branchId?: number;
     deviceTypeId?: number;
-    // 0=Chưa sử dụng,1=Đang sử dụng,2=Chờ thanh lý,3=Đã thanh lý (Asset.Domain.Enums.DeviceStatus).
+    // 0=Unused, 1=In use, 2=Pending liquidation, 3=Liquidated (Asset.Domain.Enums.DeviceStatus).
     status?: number;
-    // Thiết bị hết hạn vào hoặc trước ngày này (yyyy-MM-dd).
+    // Expiring on or before this date (yyyy-MM-dd).
     expiryDate?: string;
     sortDeviceCodeAscending?: boolean;
     sortIpAddressAscending?: boolean;
@@ -86,7 +85,7 @@ export const DeviceApi = {
         const response = await api.get<ApiResponse<DeviceDetailDto>>(ENDPOINTS.DEVICE.getDeviceDetailById(id));
         return response.data;
     },
-    // Chỉ trả máy đang "Chờ sử dụng" (status=0), không phân trang — dùng cho picker chọn máy mới khi "đổi thiết bị".
+    // Unused devices only (status=0), unpaged, for the replacement picker.
     getAvailableDevices: async (keyword?: string) => {
         const query = new URLSearchParams();
         if (keyword) query.set("keyword", keyword);
@@ -96,7 +95,7 @@ export const DeviceApi = {
         const response = await api.get<ApiResponse<DeviceDto[]>>(url);
         return response.data;
     },
-    // Gợi ý máy mới điền sẵn cho màn "Chuyển máy", suy ra từ cột "MQL Cũ" lúc import Excel — có thể null (docs/asset-module.md §4).
+    // Prefilled replacement inferred from the Excel old-device-code column; may be null.
     getReplacementSuggestion: async (oldDeviceId: number) => {
         const response = await api.get<ApiResponse<DeviceReplacementSuggestionDto | null>>(
             ENDPOINTS.DEVICE.getReplacementSuggestion(oldDeviceId)
@@ -119,8 +118,7 @@ export const DeviceApi = {
         const response = await api.post<ApiResponse<BulkDeleteResultDto>>(ENDPOINTS.DEVICE.bulkDeleteDevices, { ids });
         return response.data;
     },
-    // In tem QR hàng loạt (docs/asset-module.md §4) — giữ đúng thứ tự ids gửi lên,
-    // máy không tồn tại/đã xoá bị BE bỏ qua khỏi kết quả.
+    // BE preserves the ids order and drops missing/deleted devices.
     getQrLabels: async (ids: number[]) => {
         const response = await api.post<ApiResponse<DeviceQrLabelDto[]>>(ENDPOINTS.DEVICE.getQrLabels, { ids });
         return response.data;

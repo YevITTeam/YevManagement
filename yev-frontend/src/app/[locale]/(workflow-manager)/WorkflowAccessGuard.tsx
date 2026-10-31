@@ -5,8 +5,7 @@ import { useRouter } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasModuleAccess } from "@/modules/auth/lib/permissions";
 
-// Chặn truy cập trực tiếp bằng URL vào /workflow/* nếu user không có permission module Workflow —
-// mirror PcAccessGuard.tsx (modules/pc-management).
+// Blocks direct URL access to /workflow/* without any Workflow permission.
 export default function WorkflowAccessGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, isLoading } = useAuth();

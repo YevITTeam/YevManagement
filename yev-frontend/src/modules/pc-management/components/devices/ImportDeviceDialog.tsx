@@ -17,15 +17,13 @@ interface ImportDeviceDialogProps {
     isOpen: boolean;
     onClose: () => void;
     onImported: () => void;
-    // docs/asset-module.md §4 — sau khi Confirm, nếu có pendingTransfers (gợi ý
-    // từ cột "MQL Cũ"), FE điều hướng/điền sẵn sang màn "Chuyển máy".
+    // After Confirm, pendingTransfers (from the old-device-code column) prefill the Transfer screen.
     onRequestTransfer?: (transfer: { oldDeviceId: number; oldDeviceCode: string; newDeviceId: number }) => void;
 }
 
 function formatDate(value: string | null) {
     if (!value) return "-";
-    // BE trả purchaseDate dạng "dd/MM/yyyy" (docs/asset-module.md §4) — parse thủ công vì
-    // new Date("dd/MM/yyyy") bị JS hiểu nhầm thành MM/dd/yyyy (kiểu Mỹ), làm lệch ngày/tháng.
+    // BE returns "dd/MM/yyyy"; parse manually because new Date() reads it as MM/dd/yyyy.
     const slashMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (slashMatch) {
         const [, day, month, year] = slashMatch;
@@ -44,7 +42,7 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
     const [summary, setSummary] = useState<{ totalRows: number; validRows: number; invalidRows: number } | null>(null);
     const [result, setResult] = useState<DeviceImportConfirmResultDto | null>(null);
     const [showPrintPrompt, setShowPrintPrompt] = useState(false);
-    // In tem QR cho thiết bị vừa import (docs/asset-module.md §4) — null = đóng dialog.
+    // null = closed.
     const [qrPrintDeviceIds, setQrPrintDeviceIds] = useState<number[] | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -136,16 +134,14 @@ export default function ImportDeviceDialog({ isOpen, onClose, onImported, onRequ
 
     const canConfirm = summary !== null && rows.length > 0 && result === null;
 
-    // Các dòng đã xử lý thành công = preview rows trừ đi các dòng bị bỏ qua ở bước Confirm,
-    // tách theo isUpdate (2026-07-23: MQL trùng máy "Chờ sử dụng" → cập nhật thay vì tạo mới).
+    // Processed = preview rows minus rows skipped at Confirm, split by isUpdate (duplicate code on an unused device updates it).
     const processedRows = result
         ? rows.filter((row) => !result.skippedRows.some((skipped) => skipped.rowNumber === row.rowNumber))
         : [];
     const createdRows = processedRows.filter((row) => !row.isUpdate);
     const updatedRows = processedRows.filter((row) => row.isUpdate);
-    // BE không trả kèm deviceId ngay trong preview row — giả định `createdDeviceIds` (docs/asset-module.md §4
-    // §5.10) được trả ĐÚNG THỨ TỰ các dòng "tạo mới" đã xử lý, khớp vị trí với `createdRows` để in tem QR
-    // cho từng dòng cụ thể; in "tất cả"/prompt sau import thì dùng thẳng result.createdDeviceIds, không cần map.
+    // Preview rows carry no deviceId, so this assumes createdDeviceIds follows the order of created rows;
+    // "print all" and the post-import prompt use result.createdDeviceIds directly.
     const createdRowDeviceIds = result ? createdRows.map((_, index) => result.createdDeviceIds[index]) : [];
 
     return (

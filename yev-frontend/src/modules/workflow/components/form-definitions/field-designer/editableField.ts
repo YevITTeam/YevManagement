@@ -2,9 +2,8 @@ import type { FormFieldDto, ReplaceFormFieldItemDto, FieldDataType } from "@/mod
 import { randomClientId } from "@/lib/uuid";
 import { FIELD_TYPES_WITH_OPTIONS } from "./fieldTypeMeta";
 
-// State cục bộ trong canvas — thêm/xoá/kéo-sắp xếp/sửa chỉ đổi mảng này, KHÔNG gọi API cho tới khi
-// bấm "Lưu thay đổi" (workflow-module.md §6, xem comment ReplaceFieldsAsync ở BE). clientId là khoá
-// ổn định cho dnd-kit vì field mới thêm chưa có `id` thật (còn null tới khi lưu).
+// Local canvas state, saved only on "Save changes". clientId is the stable dnd-kit key
+// because new fields have no id until saved.
 export interface EditableField extends ReplaceFormFieldItemDto {
     clientId: string;
 }

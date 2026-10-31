@@ -1,8 +1,6 @@
 namespace Attendance.Application.Dtos.Employees
 {
-    // Payload PUT /api/Employee/{id}/department-job-title và /{id}/group-job-title — gán/gỡ Chức vụ
-    // CÓ PHẠM VI (2026-08-11c), khác hẳn PUT /api/Employee/{id} (sửa toàn bộ hồ sơ, chỉ Admin). null =
-    // gỡ Chức vụ hiện tại.
+    // Scoped job-title assignment, unlike PUT /api/Employee/{id} (Admin-only full edit). Null = remove.
     public class AssignEmployeeJobTitleDto
     {
         public int? JobTitleId { get; set; }

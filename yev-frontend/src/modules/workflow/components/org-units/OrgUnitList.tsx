@@ -57,8 +57,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 
-// Flatten cây -> option cho select "Đơn vị cha", label thụt lề theo độ sâu. excludeId dùng khi sửa
-// 1 node để loại cả nhánh con của nó khỏi danh sách (chọn con làm cha của cha sẽ tạo vòng lặp).
+// excludeId drops the node and its subtree, since picking a descendant as parent would create a cycle.
 function flattenTree(nodes: OrgUnitTreeDto[], depth = 0, excludeId?: number | null): FlatOrgUnitOption[] {
     const result: FlatOrgUnitOption[] = [];
     for (const node of nodes) {
@@ -69,7 +68,7 @@ function flattenTree(nodes: OrgUnitTreeDto[], depth = 0, excludeId?: number | nu
     return result;
 }
 
-// Lower-case, accent-free form used for matching, so "xuong di an" finds "Xưởng Dĩ An".
+// Lower-case, accent-free form used for matching, so "xuong di an" matches the accented name.
 function normalizeText(value: string) {
     return value
         .normalize("NFD")

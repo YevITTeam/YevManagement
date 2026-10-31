@@ -11,8 +11,7 @@ const ENDPOINTS = {
 } as const;
 
 export const DepartmentApprovalStepApi = {
-    // Bộ phận cho dropdown chọn ở màn "Cây duyệt" — Admin thấy hết, Coordinator chỉ thấy đúng Bộ
-    // phận mình phụ trách (2026-08-25, thay cho DepartmentApi.getAllDepartments() không lọc trước đó).
+    // Admin sees all; a coordinator only the departments they are assigned to.
     getMyDepartments: async () => {
         const response = await api.get<ApiResponse<ApprovalTreeDepartmentDto[]>>(ENDPOINTS.DEPARTMENT_APPROVAL_STEP.myDepartments);
         return response.data;
@@ -23,7 +22,7 @@ export const DepartmentApprovalStepApi = {
         );
         return response.data;
     },
-    // steps phải là mảng ĐÃ SẮP XẾP theo đúng thứ tự bước duyệt mong muốn (phần tử đầu = bước 1).
+    // `steps` must be in approval order (first item = step 1).
     replaceByDepartment: async (departmentId: number, steps: ReplaceDepartmentApprovalStepItem[]) => {
         const response = await api.put<ApiResponse<DepartmentApprovalStepDto[]>>(
             ENDPOINTS.DEPARTMENT_APPROVAL_STEP.replaceByDepartment(departmentId),

@@ -14,15 +14,13 @@ export interface IpAddressDto {
     note: string | null
 }
 
-// docs/asset-module.md §4 (2026-07-11) — PUT /api/IpAddress/{id} chỉ còn nhận
-// status + note; không còn tạo/xoá IpAddress thủ công (chỉ sinh hàng loạt qua IpPrefix).
+// Only status + note are editable; IpAddresses are generated via IpPrefix, never created/deleted manually.
 export interface IpAddressUpdateDto {
   status: number,
   note: string | null
 }
 
-// docs/asset-module.md §4 — PUT /api/IpAddress/bulk-status. status chỉ nhận 0/1
-// (2 chỉ đến từ assign/unassign). updateNote=false giữ nguyên note riêng từng IP.
+// status accepts only 0/1 (2 comes from device assign/unassign); updateNote=false keeps each IP's own note.
 export interface IpAddressBulkStatusDto {
   ids: number[],
   status: number,
@@ -46,7 +44,7 @@ export interface IpAddressBulkStatusResultDto {
 export interface IpPrefixDto {
     id: number,
     prefix: string,
-    // null nếu dải cũ tạo trước 2026-07-13 chưa gán Chi nhánh (docs/asset-module.md §4).
+    // null for legacy prefixes created before branches were assigned.
     branchId: number | null,
     branchName: string | null,
     subnetMask: string | null,
@@ -68,8 +66,7 @@ export interface IpPrefixCreateDto {
     description: string | null
 }
 
-// docs/asset-module.md §4 (2026-07-13) — PUT không có prefix (bất biến), chỉ sửa
-// Chi nhánh + cấu hình mạng.
+// prefix is immutable; only branch and network config are editable.
 export interface IpPrefixUpdateDto {
     branchId: number,
     subnetMask: string | null,

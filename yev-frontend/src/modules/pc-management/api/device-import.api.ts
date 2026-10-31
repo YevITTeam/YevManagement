@@ -14,7 +14,7 @@ const ENDPOINTS = {
 } as const;
 
 export const DeviceImportApi = {
-  // multipart/form-data — field file tên "file". Chỉ đọc, không ghi DB.
+  // Preview only, no DB writes; multipart field name is "file".
   previewImport: async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -26,7 +26,7 @@ export const DeviceImportApi = {
     return response.data;
   },
 
-  // Gửi lại đúng mảng "rows" thô nhận từ preview — server tự tra lại Id theo DB hiện tại, ghi DB thật.
+  // Send the raw preview rows back; the server re-resolves ids against the current DB before writing.
   confirmImport: async (rows: DeviceImportRowDto[]) => {
     const response = await api.post<ApiResponse<DeviceImportConfirmResultDto>>(
       ENDPOINTS.DEVICE_IMPORT.confirm,

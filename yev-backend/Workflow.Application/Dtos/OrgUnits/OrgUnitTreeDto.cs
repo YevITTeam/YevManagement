@@ -1,6 +1,5 @@
 namespace Workflow.Application.Dtos.OrgUnits
 {
-    // Dựng cây cho màn quản trị kéo-thả (workflow-module.md §6 GET /OrgUnit/tree).
     public class OrgUnitTreeDto
     {
         public int Id { get; set; }

@@ -7,8 +7,7 @@ export interface AdminNavItem {
   permission: string;
 }
 
-// Mỗi mục chỉ hiện (sidebar + thẻ ở trang Tổng quan) khi user có permission "View" của màn nó mở ra —
-// BE vẫn enforce lại 403, FE chỉ ẩn/hiện UI.
+// Each item shows only with its screen's View permission; BE still enforces 403.
 export const adminNavItems: AdminNavItem[] = [
   { key: "adminUsers", href: "/admin/user-roles", icon: Users, permission: "Identity.User.View" },
   { key: "adminRolePermissions", href: "/admin/permissions", icon: Shield, permission: "Identity.Permission.View" },

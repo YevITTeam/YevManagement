@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
-using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Attendance.Application.Dtos.AttendanceSettings;
 using Attendance.Application.Dtos.JobTitles;
@@ -9,7 +8,6 @@ using Attendance.Application.Dtos.OtForms;
 using Attendance.Application.Interfaces.Service;
 using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
-using Microsoft.Extensions.Configuration;
 using Shared.Application.Helper;
 using Shared.Application.Interfaces;
 using Shared.Application.Services;
@@ -20,16 +18,9 @@ using AccumulatedByEmployee = System.Collections.Generic.Dictionary<int, (decima
 
 namespace Attendance.Application.Services
 {
-    // Giai đoạn 3.1 (2026-08-07) — wiring Cây chức vụ (JobTitle/DepartmentApprovalStep) vào luồng
-    // duyệt OT THẬT, thay thế hoàn toàn Submitter/GroupHead/UserApprovalScope/ApprovalLevel cũ. Xem
-    // docs/attendance-module.md §Cây chức vụ. Không cần tương thích ngược — toàn bộ dữ liệu OT cũ đã
-    // bị xoá cùng đợt migrate này (dữ liệu dev).
     public class OtFormService : BaseService<IAttendanceUnitOfWork>, IOtFormService
     {
-        private const int EmailApprovalTokenExpiryDays = 3;
-
-        // Shared by all list endpoints (my-forms/pending-approvals/my-actions/my-participations) —
-        // avoids repeating the same Select block in 4 places.
+        // Shared by all list endpoints.
         private static readonly Expression<Func<OtForm, OtFormListItemDto>> ToListItemDto = x => new OtFormListItemDto
         {
             Id = x.Id,
@@ -48,9 +39,7 @@ namespace Attendance.Application.Services
             CreatedByUserName = x.CreatedByUserName,
             CreatedByFullName = x.CreatedByFullName,
             Status = x.Status,
-            // Giai đoạn 5 (2026-08-27): đơn "theo chuyền" sửa được theo TỪNG BƯỚC (xem UpdateAsync) nên
-            // "có bước nào Approved chưa" không còn chặn — chỉ cần đơn còn InApproval là VẪN CÓ NGƯỜI
-            // sửa được (đúng là ai thì FE/Service tự kiểm khi gọi PUT). Đơn theo Nhóm giữ nguyên luật cũ.
+            // Production forms are editable per step while InApproval; office forms keep the stricter rule.
             IsEditable = x.Status == (int)OtFormStatus.InApproval &&
                 (x.IsProductionForm || !x.ApprovalSteps.Any(s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Approved
                     && s.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None)),
@@ -73,8 +62,7 @@ namespace Attendance.Application.Services
                 .FirstOrDefault() ?? 0
         };
 
-        // Lọc chung cho các endpoint danh sách đơn — fromDate/toDate theo OtForm.Date (bao gồm 2 đầu
-        // mút), status theo đúng giá trị OtFormStatus, cả 3 đều optional (2026-08-06).
+        // Date range is inclusive.
         private static IQueryable<OtForm> ApplyListFilters(IQueryable<OtForm> query, DateOnly? fromDate, DateOnly? toDate, int? status)
         {
             if (fromDate.HasValue) query = query.Where(x => x.Date >= fromDate.Value);
@@ -83,9 +71,7 @@ namespace Attendance.Application.Services
             return query;
         }
 
-        // Lọc theo Bộ phận/Nhóm cho đơn văn phòng (2026-09-04) — song song ApplyProductionFilterAsync
-        // bên dưới, dùng chung cho mọi endpoint danh sách (trước đây không tab nào lọc được theo 2 field
-        // này dù OtFormListItemDto đã hiển thị sẵn). Vô hại với đơn theo chuyền (vẫn có DepartmentId).
+        // Harmless for production forms, which also carry a DepartmentId.
         private static IQueryable<OtForm> ApplyOfficeFilter(IQueryable<OtForm> query, int? groupId, int? departmentId, int? workshopId, bool? isProductionForm)
         {
             if (groupId.HasValue) query = query.Where(x => x.GroupId == groupId.Value);
@@ -95,10 +81,7 @@ namespace Attendance.Application.Services
             return query;
         }
 
-        // Lọc theo Line/Team/Nhóm ca cho đơn dưới chuyền — tách ra từ GetPendingApprovalsAsync
-        // (2026-09-04) để dùng chung cho MỌI endpoint danh sách, không riêng "Chờ tôi duyệt" nữa. So
-        // trực tiếp với BlockCodeSnapshot/TeamCodeSnapshot/ShiftTeamCodeSnapshot đã lưu trên
-        // OtFormEmployee (KHÔNG join ProductionEmployee sống, giữ đúng tinh thần snapshot-tại-thời-điểm-tạo).
+        // Compares against the snapshots on OtFormEmployee, not live ProductionEmployee, to respect create-time state.
         private async Task<IQueryable<OtForm>> ApplyProductionFilterAsync(
             IQueryable<OtForm> query, int? productionLineId, int? productionTeamId, int? productionShiftTeamId)
         {
@@ -124,10 +107,7 @@ namespace Attendance.Application.Services
             return query;
         }
 
-        private readonly IUserDirectoryService _userDirectoryService;
-        private readonly IEmailService _emailService;
-        private readonly IEmailTemplateRenderer _emailTemplateRenderer;
-        private readonly IConfiguration _configuration;
+        private readonly IOtFormNotificationService _notificationService;
         private readonly ISecondaryPasswordService _secondaryPasswordService;
         private readonly IAttendanceSettingService _attendanceSettingService;
         private readonly IJobTitleApprovalChainService _jobTitleApprovalChainService;
@@ -135,50 +115,28 @@ namespace Attendance.Application.Services
 
         public OtFormService(
             IAttendanceUnitOfWork unitOfWork,
-            IUserDirectoryService userDirectoryService,
-            IEmailService emailService,
-            IEmailTemplateRenderer emailTemplateRenderer,
-            IConfiguration configuration,
+            IOtFormNotificationService notificationService,
             ISecondaryPasswordService secondaryPasswordService,
             IAttendanceSettingService attendanceSettingService,
             IJobTitleApprovalChainService jobTitleApprovalChainService,
             IBackgroundTaskQueue taskQueue) : base(unitOfWork)
         {
-            _userDirectoryService = userDirectoryService;
-            _emailService = emailService;
-            _emailTemplateRenderer = emailTemplateRenderer;
-            _configuration = configuration;
+            _notificationService = notificationService;
             _secondaryPasswordService = secondaryPasswordService;
             _attendanceSettingService = attendanceSettingService;
             _jobTitleApprovalChainService = jobTitleApprovalChainService;
             _taskQueue = taskQueue;
         }
 
-        // Đưa việc gửi mail duyệt vào hàng đợi nền thay vì await trực tiếp — Create/Approve đã
-        // SaveChangesAsync xong PHẦN NGHIỆP VỤ CHÍNH trước khi gọi hàm này (xem 2 điểm gọi trong
-        // CreateAsync/ApproveAsync), nên hoãn việc gửi mail không ảnh hưởng tính đúng đắn, chỉ giúp
-        // response trả về ngay mà không đợi round-trip SMTP tới VNMAIL04 (có thể vài trăm ms tới vài
-        // giây mỗi người nhận). Chỉ truyền Id thuần (không truyền entity đã load) vì scope DI của
-        // request sẽ bị dispose trước khi tác vụ nền thực sự chạy (2026-09-03).
+        // Callers have already saved the business change, so mail is queued to avoid waiting on SMTP.
+        // Pass ids only: the request DI scope is disposed before the job runs.
         private void QueueStepApprovalNotification(int otFormId, int otFormApprovalStepId)
         {
             _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
             {
-                var otFormService = sp.GetRequiredService<IOtFormService>();
-                await otFormService.SendStepApprovalNotificationAsync(otFormId, otFormApprovalStepId);
+                var notificationService = sp.GetRequiredService<IOtFormNotificationService>();
+                await notificationService.SendStepApprovalNotificationAsync(otFormId, otFormApprovalStepId);
             });
-        }
-
-        public async Task SendStepApprovalNotificationAsync(int otFormId, int otFormApprovalStepId)
-        {
-            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == otFormId);
-            if (otForm == null) return;
-
-            var step = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
-                x => x.Id == otFormApprovalStepId, x => x.Candidates)).FirstOrDefault();
-            if (step == null) return;
-
-            await NotifyEligibleApproversAsync(otForm, step);
         }
 
         // Notify the form's creator (not the approvers) when the form is approved or rejected, or employees
@@ -188,8 +146,8 @@ namespace Attendance.Application.Services
         {
             _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
             {
-                var otFormService = sp.GetRequiredService<IOtFormService>();
-                await otFormService.SendRejectedNotificationAsync(otFormId);
+                var notificationService = sp.GetRequiredService<IOtFormNotificationService>();
+                await notificationService.SendRejectedNotificationAsync(otFormId);
             });
         }
 
@@ -197,8 +155,8 @@ namespace Attendance.Application.Services
         {
             _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
             {
-                var otFormService = sp.GetRequiredService<IOtFormService>();
-                await otFormService.SendApprovedNotificationAsync(otFormId);
+                var notificationService = sp.GetRequiredService<IOtFormNotificationService>();
+                await notificationService.SendApprovedNotificationAsync(otFormId);
             });
         }
 
@@ -208,139 +166,10 @@ namespace Attendance.Application.Services
 
             _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
             {
-                var otFormService = sp.GetRequiredService<IOtFormService>();
-                await otFormService.SendEmployeesRemovedNotificationAsync(otFormId, employeeIds);
+                var notificationService = sp.GetRequiredService<IOtFormNotificationService>();
+                await notificationService.SendEmployeesRemovedNotificationAsync(otFormId, employeeIds);
             });
         }
-
-        public async Task SendRejectedNotificationAsync(int otFormId)
-        {
-            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == otFormId);
-            if (otForm == null) return;
-
-            var rejection = (await _unitOfWork.OtFormApprovalHistories.FindAsync(
-                x => x.OtFormId == otFormId && x.Action == (int)ApprovalAction.Rejected))
-                .OrderByDescending(x => x.ActionAt).FirstOrDefault();
-            if (rejection == null || rejection.ApproverUserName == otForm.CreatedByUserName) return;
-
-            var detailBlock = BuildRequesterDetailRow("LÝ DO TỪ CHỐI", "却下理由",
-                string.IsNullOrWhiteSpace(rejection.Comment) ? "-" : WebUtility.HtmlEncode(rejection.Comment),
-                RejectedAccentColor);
-
-            await SendRequesterNotificationAsync(
-                otForm,
-                actorFullName: rejection.ApproverFullName ?? rejection.ApproverUserName,
-                subject: $"[TỪ CHỐI] Đơn tăng ca #{otForm.Id} đã bị từ chối - YevManagement",
-                statusLabelVn: "ĐƠN TĂNG CA ĐÃ BỊ TỪ CHỐI", statusLabelJp: "残業申請が却下されました",
-                introVn: "Đơn tăng ca bạn đã lập đã bị từ chối. Vui lòng xem lý do bên dưới và lập đơn mới nếu cần.",
-                introJp: "作成された残業申請が却下されました。下記の理由をご確認のうえ、必要に応じて再度申請してください。",
-                detailBlock, RejectedAccentColor);
-        }
-
-        public async Task SendApprovedNotificationAsync(int otFormId)
-        {
-            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == otFormId);
-            if (otForm == null || otForm.Status != (int)OtFormStatus.Completed) return;
-
-            var approval = (await _unitOfWork.OtFormApprovalHistories.FindAsync(
-                x => x.OtFormId == otFormId && x.Action == (int)ApprovalAction.Approved))
-                .OrderByDescending(x => x.ActionAt).FirstOrDefault();
-            if (approval == null || approval.ApproverUserName == otForm.CreatedByUserName) return;
-
-            var detailBlock = BuildRequesterDetailRow("NGƯỜI DUYỆT CUỐI", "最終承認者",
-                WebUtility.HtmlEncode(approval.ApproverFullName ?? approval.ApproverUserName), ApprovedAccentColor, ApprovedBlockBackground);
-
-            await SendRequesterNotificationAsync(
-                otForm,
-                actorFullName: approval.ApproverFullName ?? approval.ApproverUserName,
-                subject: $"[ĐÃ DUYỆT] Đơn tăng ca #{otForm.Id} đã được duyệt - YevManagement",
-                statusLabelVn: "ĐƠN TĂNG CA ĐÃ ĐƯỢC DUYỆT", statusLabelJp: "残業申請が承認されました",
-                introVn: "Đơn tăng ca bạn đã lập đã được duyệt hoàn tất.",
-                introJp: "作成された残業申請の承認が完了しました。",
-                detailBlock, ApprovedAccentColor);
-        }
-
-        public async Task SendEmployeesRemovedNotificationAsync(int otFormId, List<int> employeeIds)
-        {
-            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == otFormId);
-            if (otForm == null) return;
-
-            var removedRows = (await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
-                x => x.OtFormId == otFormId && employeeIds.Contains(x.EmployeeId) && x.IsRemoved, x => x.Employee))
-                .Where(x => x.RemovedByUserName != otForm.CreatedByUserName)
-                .ToList();
-            if (removedRows.Count == 0) return;
-
-            var employeeLinesHtml = string.Join("<br>", removedRows.Select(x =>
-            {
-                var line = $"{x.Employee.Code} - {x.Employee.LastName} {x.Employee.FirstName}";
-                if (!string.IsNullOrWhiteSpace(x.RemoveReason)) line += $" ({x.RemoveReason})";
-                return WebUtility.HtmlEncode(line);
-            }));
-            var detailBlock = BuildRequesterDetailRow("NHÂN VIÊN BỊ LOẠI KHỎI ĐƠN", "除外された従業員", employeeLinesHtml, EmployeesRemovedAccentColor);
-
-            var first = removedRows[0];
-            await SendRequesterNotificationAsync(
-                otForm,
-                actorFullName: first.RemovedByFullName ?? first.RemovedByUserName ?? "-",
-                subject: $"Đơn tăng ca #{otForm.Id}: có nhân viên bị loại khỏi đơn - YevManagement",
-                statusLabelVn: "NHÂN VIÊN BỊ LOẠI", statusLabelJp: "従業員が除外されました",
-                introVn: "Người duyệt đã loại nhân viên khỏi đơn tăng ca bạn lập. Đơn vẫn được xử lý tiếp với các nhân viên còn lại.",
-                introJp: "作成された残業申請から従業員が除外されました。申請は残りの従業員で引き続き処理されます。",
-                detailBlock, EmployeesRemovedAccentColor);
-        }
-
-        private async Task SendRequesterNotificationAsync(
-            OtForm otForm, string actorFullName, string subject,
-            string statusLabelVn, string statusLabelJp, string introVn, string introJp, string detailBlock, string accentColor)
-        {
-            var (email, requesterFullName) = await _userDirectoryService.GetContactInfoAsync(otForm.CreatedByUserName, EmailModules.Attendance);
-            if (string.IsNullOrWhiteSpace(email)) return;
-
-            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == otForm.GroupId);
-            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == otForm.DepartmentId);
-
-            try
-            {
-                var html = _emailTemplateRenderer.Render("OtForm/RequesterNotification.html", new Dictionary<string, string>
-                {
-                    ["OtFormId"] = otForm.Id.ToString(),
-                    ["RequesterFullName"] = WebUtility.HtmlEncode(requesterFullName ?? otForm.CreatedByFullName ?? otForm.CreatedByUserName),
-                    ["ActorFullName"] = WebUtility.HtmlEncode(actorFullName),
-                    ["DepartmentName"] = WebUtility.HtmlEncode(FormatBilingual(department?.DepartmentNameVn, department?.DepartmentNameJp)),
-                    ["GroupName"] = WebUtility.HtmlEncode(FormatBilingual(group?.GroupNameVn, group?.GroupNameJp)),
-                    ["OtFormDate"] = otForm.Date.ToString("dd/MM/yyyy"),
-                    ["OtFormTime"] = $"{otForm.StartTime:HH\\:mm} - {otForm.EndTime:HH\\:mm}",
-                    ["StatusLabelVn"] = statusLabelVn,
-                    ["StatusLabelJp"] = statusLabelJp,
-                    ["IntroVn"] = introVn,
-                    ["IntroJp"] = introJp,
-                    ["DetailBlock"] = detailBlock,
-                    ["AccentColor"] = accentColor,
-                    ["DetailLink"] = $"{_configuration["AppSettings:FrontendBaseUrl"]}/ot/forms?id={otForm.Id}"
-                });
-
-                await _emailService.SendAsync(email, subject, html);
-            }
-            catch (FileNotFoundException)
-            {
-                // A missing template file is a deployment error — must not break the business flow.
-            }
-        }
-
-        private const string RejectedAccentColor = "#c0182b";
-        private const string EmployeesRemovedAccentColor = "#b45309";
-        private const string ApprovedAccentColor = "#15803d";
-        private const string ApprovedBlockBackground = "#f0f9f3";
-
-        // 1 full-width highlighted row (accent left border) of the outcome-specific block;
-        // valueHtml must already be HTML-encoded.
-        private static string BuildRequesterDetailRow(string labelVn, string labelJp, string valueHtml, string accentColor, string backgroundColor = "#fbf3f4") =>
-            $"<tr><td colspan=\"2\" style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; padding:14px 16px; background-color:{backgroundColor}; border-left:4px solid {accentColor}; border-bottom:1px solid #e7e9ee;\">" +
-            "<span style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:11px; letter-spacing:0.5px; color:#9aa2b1; mso-line-height-rule:exactly; line-height:16px;\">" +
-            $"{labelVn}&nbsp;/&nbsp;{labelJp}</span>" +
-            $"<span style=\"font-family:'Times New Roman', 'Liberation Serif', Georgia, serif; display:block; font-size:15px; font-weight:bold; color:{accentColor}; margin-top:4px; mso-line-height-rule:exactly; line-height:22px;\">" +
-            $"{valueHtml}</span></td></tr>";
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
             string userName, int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
@@ -359,9 +188,6 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // Đơn đang chờ CHÍNH người gọi duyệt — "bước đang chờ xử lý" của 1 đơn là bước Pending có
-        // StepOrder NHỎ NHẤT (các bước Pending StepOrder lớn hơn chưa tới lượt, chưa hiển thị cho ai —
-        // xem OtFormApprovalStep). 2026-08-07, Giai đoạn 3.1 — thay thế hoàn toàn UserApprovalScope cũ.
         // A form is "mine" when I am a candidate of its current step: the Pending step with the smallest StepOrder.
         // Resolved in SQL so history (completed forms) never loads; this also backs the sidebar badge poll.
         private async Task<List<int>> GetMyCurrentPendingFormIdsAsync(string approverUserName)
@@ -400,9 +226,7 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // Hiện Line/Ca trên lưới Duyệt hàng loạt (2026-09-04) — truy vấn riêng SAU khi đã phân trang
-        // (không nhét string.Join/Distinct vào ToListItemDto vì đây là 1 Expression dùng chung cho
-        // nhiều query khác, rủi ro không dịch được sang SQL) — gộp Distinct ở phía C#.
+        // Separate post-paging query: string.Join/Distinct in the shared ToListItemDto expression risks failing SQL translation.
         private async Task EnrichWithProductionLineInfoAsync(IReadOnlyList<OtFormListItemDto> items)
         {
             var productionFormIds = items.Where(x => x.IsProductionForm).Select(x => x.Id).ToList();
@@ -423,8 +247,7 @@ namespace Attendance.Application.Services
             }
         }
 
-        // Số đơn chưa duyệt theo TỪNG ngày (2026-09-04) — lịch mini ở màn Duyệt hàng loạt, cùng scoping
-        // GetMyCurrentPendingFormIdsAsync với GetPendingApprovalsAsync.
+        // Same scoping as GetPendingApprovalsAsync.
         public async Task<List<PendingApprovalDateCountDto>> GetPendingApprovalDatesAsync(
             string approverUserName, DateOnly fromDate, DateOnly toDate)
         {
@@ -442,7 +265,6 @@ namespace Attendance.Application.Services
                 .ToList();
         }
 
-        // Đếm nhanh cho badge sidebar FE — không phân trang/không map DTO, chỉ COUNT (2026-08-19).
         public async Task<int> GetPendingApprovalsCountAsync(string approverUserName)
         {
             var myCurrentFormIds = await GetMyCurrentPendingFormIdsAsync(approverUserName);
@@ -499,9 +321,7 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // "Tất cả đơn" — Admin xem/quản lý toàn bộ đơn tăng ca, không phân biệt người tạo hay phạm vi
-        // duyệt (2026-09-04, gate bằng Attendance.OTForm.ViewAll — CHỈ gán cho Admin, xem migration
-        // AddOtFormViewAllPermission, cùng cách làm với Attendance.OTForm.Delete).
+        // Gated by Attendance.OTForm.ViewAll (Admin only).
         public async Task<PagedResponse<OtFormListItemDto>> GetAllFormsAsync(
             int pageIndex, int pageSize, DateOnly? fromDate = null, DateOnly? toDate = null, int? status = null,
             int? groupId = null, int? departmentId = null,
@@ -569,7 +389,7 @@ namespace Attendance.Application.Services
                     NewValue = x.NewValue
                 });
 
-            // Giai đoạn 5 (2026-08-27) — xem ghi chú ở ToListItemDto.IsEditable.
+            // See ToListItemDto.IsEditable.
             var isEditable = otForm!.Status == (int)OtFormStatus.InApproval &&
                 (otForm.IsProductionForm || orderedSteps.All(s =>
                     s.Status != (int)OtFormApprovalStepStatus.Approved || s.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None));
@@ -619,8 +439,9 @@ namespace Attendance.Application.Services
                     EndTime = x.EndTime,
                     NoteVn = x.NoteVn,
                     NoteJp = x.NoteJp,
-                    MonthToDate = x.MonthToDate,
-                    YearToDate = x.YearToDate,
+                    // The row stores the total before this form; forms and prints show it including this form's own hours.
+                    MonthToDate = x.MonthToDate + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
+                    YearToDate = x.YearToDate + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                     CustomMonthlyOtHourLimit = x.Employee.CustomMonthlyOtHourLimit,
                     CustomYearlyOtHourLimit = x.Employee.CustomYearlyOtHourLimit,
                     MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
@@ -719,17 +540,13 @@ namespace Attendance.Application.Services
 
         private async Task<OtFormDto> CreateCoreAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
         {
-            // KHÔNG hỗ trợ ca qua đêm (2026-08-26, theo yêu cầu người dùng) — giờ kết thúc phải SAU giờ
-            // bắt đầu trong CÙNG ngày. Chặn ở đây trước khi làm gì khác, vì ValidateEmployeesAsync bên
-            // dưới so TimeOnly trực tiếp không tính ngày — nếu EndTime < StartTime lọt qua, validate đó
-            // sẽ sai lệch (coi StartTime/EndTime của đơn như 1 mốc giờ trong ngày, không phải khoảng).
+            // Overnight shifts aren't supported; checked first because later validation compares TimeOnly values directly.
             if (request.EndTime <= request.StartTime)
                 throw new DomainException("Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).");
 
             EnsureDateNotTooFarBack(request.Date, (await _attendanceSettingService.GetAsync()).BackdateDays);
 
-            // Mật khẩu cấp 2 bắt buộc khi tạo đơn (2026-08-28, theo yêu cầu người dùng) — verify SỚM,
-            // trước khi làm bất kỳ việc gì khác, cùng nguyên tắc với ApproveAsync/RejectAsync.
+            // Verified before any other work, same as approve/reject.
             await _secondaryPasswordService.VerifyAsync(createdByUserName, request.SecondaryPassword);
 
             if (request.IsProductionForm)
@@ -754,27 +571,21 @@ namespace Attendance.Application.Services
             var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == request.OtCaseId && !x.IsDeleted);
             otCase.OrThrowNotFound("Trường hợp OT", request.OtCaseId);
 
-            // Ai được tạo đơn cho Group này — CHỈ nhân viên thuộc đúng Group đó, hoặc Admin (2026-08-07,
-            // Giai đoạn 3.1 — thay cho UserApprovalScope(Submitter) cũ). creatorEmployee (nếu có) cũng
-            // chính là "người tạo" dùng để suy luận chuỗi duyệt Cây chức vụ bên dưới.
+            // Only members of the group (or Admin) may create; the creator employee also drives chain resolution.
             var creatorEmployee = await EnsureCanCreateOrEditForScopeAsync(createdByUserName, isAdmin, groupId);
 
             var validatedEmployees = await ValidateEmployeesAsync(groupId, request.StartTime, request.EndTime, request.Employees);
 
             var accumulated = await EnsureOtCaseMatchesRulesAsync(request, isProductionForm: false, otCase!);
 
-            // Kiểm tra trùng giờ tăng ca — 1 nhân viên không được xuất hiện trong 2 đơn tăng ca có
-            // giờ chồng chéo trong cùng 1 ngày. Chỉ xét các đơn chưa bị xóa và chưa bị từ chối.
+            // An employee may not appear in two overlapping non-rejected forms on the same day.
             var employeeTimes = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => (x.StartTime ?? request.StartTime, x.EndTime));
             await EnsureNoOverlappingOtFormsAsync(
                 validatedEmployees, request.Date, employeeTimes, excludeFormId: null);
 
-            // Suy luận chuỗi duyệt tự động qua Cây chức vụ (2026-08-07, Giai đoạn 3.1) — Admin tạo hộ
-            // (creatorEmployee null) coi như đứng ở cấp thấp nhất, không loại bước nào khỏi cây duyệt
-            // của Department (xem JobTitleApprovalChainService.ResolveChainForCreationAsync). KHÔNG
-            // chặn tạo đơn nếu chuỗi không đủ (plan §3 quyết định #10) — đơn vẫn tạo, kẹt ở bước thiếu
-            // candidate, ApprovalChainWarning phản ánh rõ cho FE hiển thị cảnh báo.
+            // Admin-created forms count as lowest level. An incomplete chain doesn't block creation: the form waits at the
+            // step lacking candidates and ApprovalChainWarning tells the FE.
             var chainResult = await _jobTitleApprovalChainService.ResolveChainForCreationAsync(
                 creatorEmployee?.Id, groupId, request.DepartmentId, group.WorkshopId, request.OtCaseId);
 
@@ -798,15 +609,8 @@ namespace Attendance.Application.Services
                 CreatedByFullName = createdByFullName,
                 CreatedAt = TimeHelper.GetCurrentUtcTime(),
                 CreatorSignatureImage = creatorSignatureImage,
-                // Không còn giai đoạn Draft (2026-08-06 đã chốt) — tạo đơn = vào chuỗi ngay lập tức.
-                // CHỈ hoàn tất ngay khi Steps.Count == 0 VÀ IsComplete == true — tức người tạo đã ở cấp
-                // bằng/cao hơn cấp duyệt cuối (không có bước nào để duyệt). KHÔNG được chỉ xét
-                // IsComplete: preview cũng trả IsComplete=true khi chuỗi có ĐỦ bước thật + đủ candidate
-                // (chuỗi "sẵn sàng", không phải "đã xong") — nếu chỉ xét IsComplete thì mọi đơn có chuỗi
-                // duyệt hợp lệ đều bị đánh dấu Completed ngay từ lúc tạo, sai hoàn toàn. Trường hợp
-                // Phòng ban chưa cấu hình chuỗi (Steps.Count == 0, IsComplete=false, có
-                // ApprovalChainWarning) đúng ra vẫn rơi vào nhánh else → InApproval, kẹt lại để Admin
-                // cấu hình xong mới xử lý tiếp (plan §3 quyết định #10).
+                // Complete immediately only when there are no steps AND IsComplete: IsComplete alone also means "chain ready",
+                // and an unconfigured department (no steps, IsComplete=false) must stay InApproval.
                 Status = (chainResult.Steps.Count == 0 && chainResult.IsComplete)
                     ? (int)OtFormStatus.Completed
                     : (int)OtFormStatus.InApproval,
@@ -817,14 +621,8 @@ namespace Attendance.Application.Services
             return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId: null);
         }
 
-        // Đơn "theo chuyền" (OtForm.IsProductionForm = true, 2026-08-24) — chọn nhân viên qua
-        // ProductionEmployee thay vì theo Group cố định, xem docs/docs-be/attendance-module.md
-        // §Cây chức vụ & Cây duyệt. Không có Group để check "ai được tạo đơn cho Group này" như Mode A.
-        //
-        // Ai được tạo đơn theo chuyền do QUYỀN quyết định (Attendance.OTForm.CreateProduction, kiểm ở
-        // OtFormController.Create, cấu hình theo Chức vụ/từng user) — không còn ép "phải là Line Leader
-        // của Line trong đơn" như trước (2026-09-26). Người thường vẫn cần liên kết với 1 Employee để
-        // suy luận chuỗi duyệt.
+        // Who may create production forms is decided by the Attendance.OTForm.CreateProduction permission;
+        // non-Admins still need a linked Employee to resolve the chain.
         // A production form has no group of its own: its workshop is the one all participants belong to.
         private async Task<int> ResolveProductionWorkshopIdAsync(List<int> employeeIds)
         {
@@ -863,22 +661,14 @@ namespace Attendance.Application.Services
                     throw new DomainException("Tài khoản chưa liên kết với nhân viên nào. Liên hệ Admin nếu tài khoản chưa liên kết đúng nhân viên.");
             }
 
-            // Nhóm ca bắt buộc trước khi tạo đơn (2026-08-28, theo yêu cầu người dùng) — phòng vệ thêm
-            // cho dữ liệu cũ/nhập tay ngoài Import; Import đã chặn "Thiếu mã NHOM" từ 2026-08-24 (xem
-            // ProductionEmployeeImportService.ValidateAndResolveRowsAsync) nên trường hợp này hiếm gặp.
+            // Defensive check for legacy/manual data; import already rejects rows without a shift team.
             var productionEmployeesForCheck = await _unitOfWork.ProductionEmployees.FindAsync(
                 x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted);
             var missingShiftTeam = productionEmployeesForCheck.Where(x => x.ShiftTeamId == null).Select(x => x.EmployeeCode).ToList();
             if (missingShiftTeam.Count > 0)
                 throw new DomainException($"Nhân viên chưa có Nhóm ca, cần cập nhật trước khi tạo đơn: {string.Join(", ", missingShiftTeam)}.");
 
-            // Phạm vi Line (2026-09-28, theo quyết định người dùng) — có quyền
-            // Attendance.OTForm.CreateProduction KHÔNG có nghĩa được tạo đơn cho MỌI Line, chỉ được tạo
-            // cho (những) Line mà chính người tạo đang là Line Leader (IsLeader=true). Admin bỏ qua.
-            //
-            // Phải khớp TOÀN BỘ Line trong đơn, không phải chỉ cần giao nhau ≥ 1 phần tử (sửa lỗi
-            // 2026-09-29: bản cũ dùng "isLineLeaderOfAnyLine" nên Line Leader của Line A có thể nhét
-            // thêm nhân viên Line B/C mà mình không quản lý, chỉ cần đơn có ít nhất 1 người của Line A).
+            // Non-Admins may only include lines they lead, and every line on the form must match (not just one of them).
             if (!isAdmin)
             {
                 var orderLineIds = productionEmployeesForCheck
@@ -935,8 +725,7 @@ namespace Attendance.Application.Services
                 IsDeleted = false
             };
 
-            // ProductionEmployee đổi hàng ngày — chụp lại đúng trạng thái LÚC tạo đơn thành snapshot
-            // trên OtFormEmployee (xem OtFormEmployee.CongDoanSnapshot), không đọc lại sau này.
+            // ProductionEmployee changes daily, so its create-time state is snapshotted on OtFormEmployee.
             var productionEmployeesByEmployeeId = (await _unitOfWork.ProductionEmployees.FindAsync(
                 x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted))
                 .ToDictionary(x => x.EmployeeId!.Value);
@@ -944,11 +733,8 @@ namespace Attendance.Application.Services
             return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId);
         }
 
-        // Người tạo đã ở cấp cao hơn/bằng MỌI Chức vụ trung gian "Bắt buộc ký" — không còn ai khác để
-        // ký ô "Người đề nghị" thay họ, nên chính họ tự ký (2026-08-08, theo yêu cầu người dùng — xem
-        // ResolveApprovalChainResultDto.RequiresCreatorSelfSign). Chặn tạo đơn nếu chưa có chữ ký lưu
-        // sẵn, cùng message/cơ chế với ApproveAsync khi bước yêu cầu ký. Dùng chung cho cả 2 kiểu tạo
-        // đơn (theo Nhóm/theo chuyền, 2026-08-24).
+        // When the creator outranks every mandatory signer, they sign the "requester" box themselves;
+        // creation is blocked without a stored signature.
         private async Task<byte[]?> ResolveCreatorSelfSignAsync(string createdByUserName, ResolveApprovalChainResultDto chainResult)
         {
             if (!chainResult.RequiresCreatorSelfSign) return null;
@@ -959,17 +745,9 @@ namespace Attendance.Application.Services
             return creatorSignature.SignatureImage;
         }
 
-        // Ăn uống bắt buộc cho MỌI đơn tăng ca (2026-09-28, theo yêu cầu người dùng) — đơn Theo chuyền
-        // (Sản xuất) không còn cho từng người tự chọn "Có ăn"/"Không ăn" nữa (FE đã bỏ hẳn checkbox
-        // này cho loại đơn này), luôn coi như có ăn (DidEat=true) bất kể FE gửi gì lên (phòng vệ ở tầng
-        // Service). Đơn Theo Nhóm (Văn phòng) giữ nguyên Ý NGHĨA field DidEat như cũ (true = có ăn
-        // TRONG ca, bị trừ MealBreakDeductionHours) — chỉ đổi NHÃN + default hiển thị ở FE thành "Ăn
-        // sau" (mặc định tích sẵn = DidEat false = không trừ giờ), BE không cần đổi gì thêm ở field này.
+        // Meal is mandatory on production forms; on office forms DidEat=true still means eating during the shift (deducted).
         private static bool ResolveDidEat(bool isProductionForm, bool requestedDidEat) => isProductionForm || requestedDidEat;
 
-        // Phần đuôi dùng chung cho cả 2 kiểu tạo đơn (2026-08-24) — thêm OtForm/OtFormEmployee(kèm
-        // snapshot ProductionEmployee nếu có)/ProcessPart/chuỗi bước duyệt, lưu, rồi cộng luỹ kế ngay
-        // nếu Completed hoặc báo email cho bước đầu tiên nếu còn InApproval.
         private async Task<OtFormDto> FinalizeCreateAsync(
             OtForm newOtForm, CreateOtFormDto request, ResolveApprovalChainResultDto chainResult,
             AccumulatedByEmployee accumulated, Dictionary<int, ProductionEmployee>? productionEmployeesByEmployeeId)
@@ -981,8 +759,7 @@ namespace Attendance.Application.Services
             var didEatByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => ResolveDidEat(newOtForm.IsProductionForm, x.DidEat));
 
-            // Chặn CỨNG trước khi ghi bất kỳ gì — vượt giới hạn ngày/tháng/năm của bất kỳ nhân viên nào
-            // thì từ chối tạo cả đơn (2026-08-26, xem ValidateOtHourLimitsAsync).
+            // Hard block before writing anything when any employee exceeds a daily limit.
             var newHoursByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
             await ValidateOtHourLimitsAsync(request.Date, newHoursByEmployeeId, mealSettings, accumulated);
@@ -1019,10 +796,7 @@ namespace Attendance.Application.Services
                 await _unitOfWork.OtFormEmployees.AddAsync(createdRow);
             }
 
-            // ProcessPart giờ LUÔN được tạo, bất kể request.ProcessPart có gửi lên hay không — "Ăn uống"
-            // (IsEat) bắt buộc true cho MỌI đơn (2026-09-28, theo yêu cầu người dùng), không còn tuỳ
-            // chọn tắt như trước. 3 mục còn lại (Xe đưa đón/Phòng photo/Đề nghị khác) vẫn tuỳ chọn,
-            // mặc định rỗng/false nếu request không gửi.
+            // ProcessPart is always created because the meal flag is mandatory; other items stay optional.
             await _unitOfWork.ProcessParts.AddAsync(new ProcessPart
             {
                 OtForm = newOtForm,
@@ -1036,8 +810,7 @@ namespace Attendance.Application.Services
                 AnotherSuggestionJp = request.ProcessPart?.AnotherSuggestionJp
             });
 
-            // Snapshot chuỗi bước duyệt — mọi bước tạo Status=Pending ngay từ đầu; "bước đang chờ xử
-            // lý" thật sự là bước Pending có StepOrder nhỏ nhất (xem GetPendingApprovalsAsync).
+            // All steps start Pending; the current one is the lowest StepOrder.
             OtFormApprovalStep? firstCreatedStep = null;
             foreach (var step in chainResult.Steps)
             {
@@ -1079,11 +852,7 @@ namespace Attendance.Application.Services
             {
                 var firstStepWithCandidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                     x => x.Id == firstCreatedStep.Id, x => x.Candidates)).FirstOrDefault();
-                // Bước ở cấp quản lý (DepartmentManager/WorkshopManager/GeneralDirector) KHÔNG còn gửi
-                // mail riêng từng đơn nữa (2026-09-05) — người ở 3 cấp này chỉ nhận đúng 1 mail tổng
-                // hợp/ngày qua OtFormBatchBackgroundService (xem RunDailyBatchSweepAsync), tránh gửi
-                // trùng 2 lần cho cùng 1 đơn. Cấp trung gian (TerminalLevel=None, Staff/Group
-                // Leader/Team Leader) chưa có cơ chế gom nên vẫn giữ mail tức thời như cũ.
+                // Manager-level steps get only the daily batch mail to avoid duplicates; intermediate steps still mail immediately.
                 if (firstStepWithCandidates != null && firstStepWithCandidates.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None)
                     QueueStepApprovalNotification(newOtForm.Id, firstStepWithCandidates.Id);
             }
@@ -1091,11 +860,7 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(newOtForm.Id);
         }
 
-        // Trả về Employee của userName NẾU họ thuộc đúng Group này — dùng cho cả việc validate quyền
-        // tạo/sửa đơn LẪN xác định "người tạo" để suy luận chuỗi duyệt Cây chức vụ (2026-08-07, Giai
-        // đoạn 3.1 — thay UserApprovalScope(Submitter) cũ). Chỉ 2 đối tượng được tạo/sửa đơn cho 1
-        // Group: (a) chính Nhân viên thuộc Group đó (trả về Employee), (b) Admin (trả về null — Admin
-        // coi như đứng cấp thấp nhất khi suy luận chuỗi, xem ResolveChainForCreationAsync).
+        // Returns the employee when they belong to the group, null for Admin (treated as lowest level in chain resolution).
         private async Task<Employee?> EnsureCanCreateOrEditForScopeAsync(string userName, bool isAdmin, int groupId)
         {
             var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(
@@ -1107,8 +872,7 @@ namespace Attendance.Application.Services
             return callerEmployee;
         }
 
-        // Group DUY NHẤT người gọi được tạo đơn — chính Group của họ (2026-08-07, Giai đoạn 3.1: bỏ
-        // hẳn đường "Admin gán tay UserApprovalScope(Submitter) cho Group khác" cũ).
+        // Only the caller's own group.
         public async Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin)
         {
             if (isAdmin) return new List<MyCreateScopeItemDto>();
@@ -1131,12 +895,8 @@ namespace Attendance.Application.Services
             };
         }
 
-        // (Những) tổ hợp Team/Line/Nhóm ca mà người gọi đang là Line Leader — dùng để FE tự điền sẵn +
-        // khoá cứng 3 dropdown Team/Line/Nhóm ca ở chế độ "Theo chuyền" (2026-09-28, theo yêu cầu người
-        // dùng: "hiện giờ phải nhập team line nhóm ca ... cũng cố định luôn") — mirror GetMyCreateScopesAsync
-        // của chế độ "Theo Nhóm". Admin/người không phải Line Leader trả mảng rỗng → FE giữ nguyên dropdown
-        // tự do như hiện tại (không có gì để khoá). Chỉ tính các dòng ProductionEmployee đã resolve ĐỦ cả 3
-        // FK (ProductionLineId/TeamId/ShiftTeamId) — đúng policy nạp dữ liệu ghi ở ProductionEmployee.cs.
+        // Lets FE prefill and lock the Team/Line/Shift-team dropdowns; empty for Admin and non-leaders.
+        // Only rows with all three FKs resolved count.
         public async Task<List<MyProductionCreateScopeItemDto>> GetMyProductionCreateScopesAsync(string userName, bool isAdmin)
         {
             if (isAdmin) return new List<MyProductionCreateScopeItemDto>();
@@ -1145,9 +905,7 @@ namespace Attendance.Application.Services
                 x => x.UserName == userName && !x.IsDeleted, x => x.Group!);
             if (callerEmployee == null) return new List<MyProductionCreateScopeItemDto>();
 
-            // Line Leader thường được gán qua Group (vd "SHIDO" thuộc Bộ phận "Chế tạo"), KHÔNG set thẳng
-            // Employee.DepartmentId — cùng thứ tự ưu tiên với EnsureCanManageDeptOrGroupScopeAsync. Không
-            // resolve được Bộ phận nào → không có gì để khoá, trả rỗng (fallback dropdown tự do như cũ).
+            // Line Leaders are usually assigned via Group, so fall back to Group.DepartmentId.
             var departmentId = callerEmployee.DepartmentId ?? callerEmployee.Group?.DepartmentId;
             if (departmentId == null) return new List<MyProductionCreateScopeItemDto>();
 
@@ -1172,8 +930,7 @@ namespace Attendance.Application.Services
                     ShiftTeamNameVn = x.ShiftTeam!.NameVn
                 });
 
-            // 1 Line Leader có thể xuất hiện ở nhiều dòng ProductionEmployee cùng 1 tổ hợp (vd nhiều
-            // CongDoan/TaskName khác nhau cùng ngày) — gộp về đúng tổ hợp duy nhất.
+            // A leader may appear on several rows for the same combination; collapse to one.
             return leaderRows
                 .GroupBy(x => (x.ProductionLineId, x.TeamId, x.ShiftTeamId))
                 .Select(g => g.First())
@@ -1422,7 +1179,7 @@ namespace Attendance.Application.Services
                 await EnsureNoOverlappingOtFormsAsync(overlapEmployees, formDate, overlapTimes, excludeFormId: otForm.Id);
             }
 
-            // === Apply: removals, additions, then kept rows (each touches different rows). ===
+            // Apply: removals, additions, then kept rows (each touches different rows).
 
             // The creator takes someone off their own form without a reason; anyone else must give one.
             var isCreator = string.Equals(otForm.CreatedByUserName, currentUserName, StringComparison.OrdinalIgnoreCase);
@@ -1564,7 +1321,7 @@ namespace Attendance.Application.Services
                 await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.Resubmitted,
                     null, null, null, null, resubmitReason);
                 otForm.Status = (int)OtFormStatus.InApproval;
-                // Back into the next daily "Đơn tổng" sweep for the Manager.
+                // Back into the next daily batch sweep for the Manager.
                 otForm.OtFormBatchId = null;
                 if (resubmit.Kind == OtFormResubmitKind.AfterReject)
                     foreach (var step in steps) SoftDeleteStep(step);
@@ -1818,13 +1575,8 @@ namespace Attendance.Application.Services
                 throw new DomainException($"Chỉ được làm đơn cho ngày từ {earliest:dd/MM/yyyy} trở đi (lùi tối đa {backdateDays} ngày).");
         }
 
-        // Nhân viên MỚI thêm vào đơn theo chuyền phải cùng (Line, Nhóm ca) với ít nhất 1 nhân viên còn
-        // lại của đơn (2026-09-04, theo yêu cầu người dùng — trước đó không hề kiểm tra, cho phép thêm
-        // nhân viên Line khác vào đơn). KHÔNG ép tất cả nhân viên của đơn phải cùng 1 Line — đơn theo
-        // chuyền vốn có thể gồm nhiều Line miễn người tạo là Line Leader của ít nhất 1 Line trong đó
-        // (xem CreateProductionFormAsync) — chỉ chặn nhân viên HOÀN TOÀN lạ so với những gì đơn đang có.
-        // Nếu đơn không còn nhân viên "gốc" nào sau khi trừ người bị xóa cùng lượt lưu (hiếm — xóa hết
-        // rồi thêm toàn người mới) thì bỏ qua check này cho lượt lưu đó.
+        // Added employees must share (Line, shift team) with at least one remaining employee; mixed lines are allowed.
+        // Skipped when no original employee remains after this save's removals.
         private static void EnsureAddedEmployeeMatchesFormScope(
             Employee employee, ProductionEmployee productionEmployee, HashSet<(string? BlockCode, string? ShiftTeamCode)> baselinePairs)
         {
@@ -1835,9 +1587,7 @@ namespace Attendance.Application.Services
                 throw new DomainException($"Nhân viên '{employee.Code}' không thuộc Line/Nhóm ca của đơn này.");
         }
 
-        // Bước Pending có StepOrder nhỏ nhất của 1 đơn (kèm Candidates) — dùng chung cho
-        // LoadFormAndCurrentStepAsync (Approve/Reject) VÀ UpdateAsync (Giai đoạn 5, 2026-08-27 — quyền
-        // sửa đơn "theo chuyền" đi theo từng bước, xem UpdateAsync).
+        // Shared by approve/reject and UpdateAsync, since production-form edit rights follow the current step.
         private async Task<OtFormApprovalStep?> GetCurrentPendingStepAsync(int otFormId)
         {
             var pendingSteps = await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
@@ -1945,8 +1695,7 @@ namespace Attendance.Application.Services
 
             await _unitOfWork.SaveChangesAsync();
 
-            // Còn bước tiếp theo — gửi mail cho candidate của bước Pending có StepOrder nhỏ nhất còn
-            // lại; hết bước thì báo người lập đơn đã duyệt xong.
+            // Mail the next step's candidates, or tell the creator the form is fully approved.
             if (remainingPending.Count == 0)
                 QueueApprovedNotification(otForm.Id);
             else
@@ -1954,8 +1703,7 @@ namespace Attendance.Application.Services
                 var nextStepId = remainingPending.OrderBy(x => x.StepOrder).First().Id;
                 var nextStepWithCandidates = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                     x => x.Id == nextStepId, x => x.Candidates)).FirstOrDefault();
-                // Cùng lý do với CreateAsync — bỏ mail riêng cho bước ở cấp quản lý, chỉ còn mail tổng
-                // hợp hằng ngày (xem comment ở CreateAsync).
+                // Manager-level steps rely on the daily batch mail, same as CreateAsync.
                 if (nextStepWithCandidates != null && nextStepWithCandidates.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None)
                     QueueStepApprovalNotification(otForm.Id, nextStepWithCandidates.Id);
             }
@@ -1983,8 +1731,7 @@ namespace Attendance.Application.Services
             currentStep.Status = (int)OtFormApprovalStepStatus.Rejected;
             _unitOfWork.OtFormApprovalSteps.Update(currentStep);
 
-            // Các bước Pending còn lại (chưa tới lượt) không còn ý nghĩa nữa — chuyển Skipped để không
-            // ai còn thấy đơn này trong danh sách chờ duyệt của họ.
+            // Skip remaining Pending steps so the form leaves everyone's pending list.
             var otherPendingSteps = await _unitOfWork.OtFormApprovalSteps.FindAsync(
                 x => x.OtFormId == otForm.Id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending && x.Id != currentStep.Id);
             foreach (var step in otherPendingSteps)
@@ -2001,11 +1748,7 @@ namespace Attendance.Application.Services
             QueueRejectedNotification(otForm.Id);
         }
 
-        // Ký hàng loạt (2026-08-27, theo yêu cầu người dùng — Team Leader/Trưởng phòng có nhiều Group
-        // Leader/Team Leader bên dưới cần xử lý nhanh nhiều đơn cùng lúc). Lặp gọi lại ApproveAsync đơn
-        // lẻ cho từng OtFormId — TÁI DÙNG NGUYÊN logic/validate đã có (candidate đúng bước, chữ ký nếu
-        // bắt buộc, mật khẩu cấp 2...), không viết lại. Từng đơn thành công/thất bại ĐỘC LẬP (bắt
-        // DomainException/NotFoundException của riêng đơn đó, không để 1 đơn lỗi chặn các đơn còn lại).
+        // Reuses ApproveAsync per form so all validation applies; each form succeeds or fails independently.
         public async Task<List<BulkOtFormActionResultItemDto>> BulkApproveAsync(
             string approverUserName, string? approverFullName, BulkApproveOtFormDto request)
         {
@@ -2025,7 +1768,6 @@ namespace Attendance.Application.Services
             return results;
         }
 
-        // Từ chối hàng loạt — mirror BulkApproveAsync.
         public async Task<List<BulkOtFormActionResultItemDto>> BulkRejectAsync(
             string approverUserName, string? approverFullName, BulkRejectOtFormDto request)
         {
@@ -2057,10 +1799,7 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // Kênh trong-app (JWT) — khôi phục 2026-09-30 ngay trên màn Duyệt, xem docs/attendance-module.md
-        // §Loại nhân viên khỏi đơn. Cùng RemoveEmployeeCoreAsync với kênh
-        // email (authorization đã đúng "candidate bước Pending hiện tại" cho CẢ đơn theo Nhóm lẫn theo
-        // chuyền) — KHÔNG cần SecondaryPassword, cùng quyết định 2026-07-31.
+        // Same RemoveEmployeeCoreAsync as the email channel; no SecondaryPassword required.
         public async Task<OtFormDto> RemoveEmployeeAsync(
             int id, string userName, string? fullName, bool isAdmin, RemoveOtFormEmployeeDto request)
         {
@@ -2071,12 +1810,8 @@ namespace Attendance.Application.Services
             return result;
         }
 
-        // Admin xoá đơn kẹt vĩnh viễn (chuỗi duyệt thiếu candidate ở 1 bước, không có cách resolve lại
-        // vì candidate đã snapshot 1 lần lúc tạo — xem docs/attendance-module.md §Cây chức vụ). Chặn
-        // Completed vì đơn đó đã cộng lũy kế THẬT (ghi vào ledger EmployeeAccumulationHistory) — xoá sẽ
-        // làm sai số liệu đã dùng cho lương, không thể tự động đảo ngược an toàn. InApproval/Rejected
-        // chỉ có lũy kế DỰ KIẾN (2026-08-19: không còn lưu ở đâu, tính lúc đọc) nên không cần đảo ngược
-        // gì cả khi xoá — lần đọc tiếp theo tự động không còn thấy đơn này nữa (đã IsDeleted).
+        // For permanently stuck forms. Completed is blocked because its hours are in the payroll ledger;
+        // other statuses only have projected totals computed on read, so nothing needs reversing.
         public async Task DeleteAsync(int id, string deletedByUserName, string? deletedByFullName, DeleteOtFormDto request)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
@@ -2108,8 +1843,6 @@ namespace Attendance.Application.Services
                 x => x.OtFormId == id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending, x => x.Candidates);
             var currentStep = pendingSteps.OrderBy(x => x.StepOrder).FirstOrDefault();
 
-            // Admin luôn được phép — khái niệm "chỉ Admin bypass ở cấp Submitter" cũ không còn (Submitter
-            // đã bị xoá, xem docs/attendance-module.md §Cây chức vụ, Giai đoạn 3.1).
             if (!isAdmin)
             {
                 if (currentStep == null || !MatchStepActor(currentStep, userName, await GetActiveDelegatorsAsync(userName)).IsActor)
@@ -2199,167 +1932,6 @@ namespace Attendance.Application.Services
             return emailToken;
         }
 
-        // Gửi email kèm link Duyệt/Từ chối cho TẤT CẢ candidate của 1 bước cụ thể (step.Candidates phải
-        // đã được Include từ trước) — gọi sau CreateAsync (bước đầu tiên) và sau ApproveAsync (bước kế
-        // tiếp, nếu còn). Không throw nếu thiếu Email/SMTP lỗi — chỉ là kênh bổ sung.
-        private async Task NotifyEligibleApproversAsync(OtForm otForm, OtFormApprovalStep step)
-        {
-            if (step.Candidates.Count == 0) return;
-
-            var recipients = await GetMailRecipientsAsync(step.Candidates.Select(c => c.UserName));
-            if (await SendApprovalMailsAsync(otForm, step, recipients))
-                await _unitOfWork.SaveChangesAsync();
-        }
-
-        // Candidates plus anyone currently covering one of them by delegation (CoveredFullName = the delegator).
-        private async Task<List<(string UserName, string? CoveredFullName)>> GetMailRecipientsAsync(IEnumerable<string> candidateUserNames)
-        {
-            var candidates = candidateUserNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
-            var covering = await _unitOfWork.ApprovalDelegations.SelectAsync(
-                predicate: d => !d.IsDeleted && d.FromDate <= today && d.ToDate >= today
-                    && d.DelegateEmployee.UserName != null && candidates.Contains(d.DelegatorEmployee.UserName!),
-                selector: d => new { Delegate = d.DelegateEmployee.UserName!, d.DelegatorEmployee.LastName, d.DelegatorEmployee.FirstName });
-
-            var recipients = candidates.Select(c => (UserName: c, CoveredFullName: (string?)null)).ToList();
-            foreach (var row in covering)
-            {
-                if (!recipients.Any(r => string.Equals(r.UserName, row.Delegate, StringComparison.OrdinalIgnoreCase)))
-                    recipients.Add((row.Delegate, $"{row.LastName} {row.FirstName}"));
-            }
-            return recipients;
-        }
-
-        // Wording of one notification mail; the renderer substitutes raw text, so names are HTML-encoded here.
-        private sealed record MailWording(string StatusLabel, string Preheader, string IntroVn, string IntroJp, string SubjectTail)
-        {
-            public void AddTo(Dictionary<string, string> placeholders)
-            {
-                placeholders["StatusLabel"] = StatusLabel;
-                placeholders["PreheaderText"] = Preheader;
-                placeholders["IntroVn"] = IntroVn;
-                placeholders["IntroJp"] = IntroJp;
-            }
-        }
-
-        // coveredFullName = the delegator when the recipient is only covering them; null for a direct candidate.
-        private static MailWording BuildApprovalWording(string? coveredFullName, int otFormId, string requesterFullName)
-        {
-            if (coveredFullName == null)
-            {
-                return new MailWording(
-                    "CHỜ PHÊ DUYỆT&nbsp;&nbsp;·&nbsp;&nbsp;承認待ち",
-                    $"Đơn tăng ca #{otFormId} từ {requesterFullName} đang chờ bạn phê duyệt. / 残業申請 #{otFormId} が承認待ちです。",
-                    "Hệ thống ghi nhận một đơn yêu cầu tăng ca đang chờ sự phê duyệt của bạn. Vui lòng xem thông tin chi tiết bên dưới.",
-                    "残業申請が届いており、あなたの承認をお待ちしています。詳細は下記よりご確認ください。",
-                    "đang chờ bạn duyệt");
-            }
-
-            var name = WebUtility.HtmlEncode(coveredFullName);
-            return new MailWording(
-                "CHỜ DUYỆT THAY&nbsp;&nbsp;·&nbsp;&nbsp;代理承認待ち",
-                $"Đơn tăng ca #{otFormId} đang chờ bạn duyệt thay {name}. / 残業申請 #{otFormId} が{name}様の代理承認待ちです。",
-                $"Bạn được <b>{name}</b> ủy quyền duyệt thay. Đơn yêu cầu tăng ca bên dưới đang chờ phê duyệt, bạn có thể duyệt hoặc từ chối thay {name}. Vui lòng xem thông tin chi tiết bên dưới.",
-                $"<b>{name}</b>様より承認の代理を委任されています。下記の残業申請が承認待ちです。{name}様の代理として承認または却下できます。詳細は下記よりご確認ください。",
-                $"đang chờ bạn duyệt thay {coveredFullName}");
-        }
-
-        private static MailWording BuildBatchWording(string? coveredFullName, int batchId, int formCount, string scopeName)
-        {
-            if (coveredFullName == null)
-            {
-                return new MailWording(
-                    "ĐƠN TỔNG&nbsp;&nbsp;·&nbsp;&nbsp;CHỜ PHÊ DUYỆT&nbsp;&nbsp;·&nbsp;&nbsp;一括承認待ち",
-                    $"Đơn tổng #{batchId} gồm {formCount} đơn tăng ca đang chờ bạn phê duyệt. / 一括申請 #{batchId} が承認待ちです。",
-                    $"Hệ thống đã gom {formCount} đơn tăng ca thuộc phạm vi {scopeName} thành 1 đơn tổng, đang chờ bạn phê duyệt 1 lần. Vui lòng xem thông tin chi tiết bên dưới.",
-                    $"{scopeName}の残業申請{formCount}件が一括申請としてまとめられ、あなたの承認をお待ちしています。詳細は下記よりご確認ください。",
-                    "đang chờ bạn duyệt");
-            }
-
-            var name = WebUtility.HtmlEncode(coveredFullName);
-            return new MailWording(
-                "ĐƠN TỔNG&nbsp;&nbsp;·&nbsp;&nbsp;CHỜ DUYỆT THAY&nbsp;&nbsp;·&nbsp;&nbsp;一括代理承認待ち",
-                $"Đơn tổng #{batchId} gồm {formCount} đơn tăng ca đang chờ bạn duyệt thay {name}. / 一括申請 #{batchId} が{name}様の代理承認待ちです。",
-                $"Bạn được <b>{name}</b> ủy quyền duyệt thay. Hệ thống đã gom {formCount} đơn tăng ca thuộc phạm vi {scopeName} thành 1 đơn tổng đang chờ phê duyệt, bạn có thể duyệt thay {name} 1 lần. Vui lòng xem thông tin chi tiết bên dưới.",
-                $"<b>{name}</b>様より承認の代理を委任されています。{scopeName}の残業申請{formCount}件が一括申請としてまとめられ、承認待ちです。{name}様の代理として一括で承認できます。詳細は下記よりご確認ください。",
-                $"đang chờ bạn duyệt thay {coveredFullName}");
-        }
-
-        // True when at least one token was added; the caller owns SaveChanges.
-        private async Task<bool> SendApprovalMailsAsync(
-            OtForm otForm, OtFormApprovalStep step, List<(string UserName, string? CoveredFullName)> recipients)
-        {
-            var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
-            var now = TimeHelper.GetCurrentUtcTime();
-            var hasNewToken = false;
-
-            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == otForm.GroupId);
-            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == otForm.DepartmentId);
-            var reason = await _unitOfWork.Reasons.FirstOrDefaultAsync(x => x.Id == otForm.ReasonId);
-            var departmentName = FormatBilingual(department?.DepartmentNameVn, department?.DepartmentNameJp);
-            var groupName = FormatBilingual(group?.GroupNameVn, group?.GroupNameJp);
-            var reasonName = FormatBilingual(reason?.ReasonNameVn, reason?.ReasonNameJp);
-
-            foreach (var recipient in recipients)
-            {
-                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(recipient.UserName, EmailModules.Attendance);
-                if (string.IsNullOrWhiteSpace(email)) continue;
-
-                var emailToken = new OtFormApprovalEmailToken
-                {
-                    OtFormId = otForm.Id,
-                    ApproverUserName = recipient.UserName,
-                    ApproverFullName = fullName,
-                    OtFormApprovalStepId = step.Id,
-                    Token = TokenHelper.GenerateSecureToken(),
-                    ExpiresAt = now.AddDays(EmailApprovalTokenExpiryDays),
-                    CreatedAt = now
-                };
-                await _unitOfWork.OtFormApprovalEmailTokens.AddAsync(emailToken);
-                hasNewToken = true;
-
-                var link = $"{baseUrl}/xac-nhan-don?token={emailToken.Token}";
-
-                try
-                {
-                    var requesterName = otForm.CreatedByFullName ?? otForm.CreatedByUserName;
-                    var wording = BuildApprovalWording(recipient.CoveredFullName, otForm.Id, requesterName);
-                    var placeholders = new Dictionary<string, string>
-                    {
-                        ["ApproverFullName"] = fullName ?? recipient.UserName,
-                        ["OtFormId"] = otForm.Id.ToString(),
-                        ["RequesterFullName"] = requesterName,
-                        ["DepartmentName"] = departmentName,
-                        ["GroupName"] = groupName,
-                        ["ReasonName"] = reasonName,
-                        ["OtFormDate"] = otForm.Date.ToString("dd/MM/yyyy"),
-                        ["OtFormTime"] = $"{otForm.StartTime:HH\\:mm} - {otForm.EndTime:HH\\:mm}",
-                        ["TotalHour"] = otForm.TotalHour.ToString("0.##"),
-                        ["ConfirmLink"] = link,
-                        ["ExpiryDays"] = EmailApprovalTokenExpiryDays.ToString()
-                    };
-                    wording.AddTo(placeholders);
-                    var html = _emailTemplateRenderer.Render("OtForm/ApprovalNotification.html", placeholders);
-
-                    await _emailService.SendAsync(email, $"Đơn tăng ca #{otForm.Id} {wording.SubjectTail} - YevManagement", html);
-                }
-                catch (FileNotFoundException)
-                {
-                    // A missing template file is a deployment error — skip sending to this person rather
-                    // than blocking the whole notification flow.
-                }
-            }
-
-            return hasNewToken;
-        }
-
-        // Vietnamese is always shown; Japanese is appended only when the master data has it filled in.
-        private static string FormatBilingual(string? nameVn, string? nameJp)
-        {
-            if (string.IsNullOrWhiteSpace(nameVn)) return "-";
-            return string.IsNullOrWhiteSpace(nameJp) ? nameVn : $"{nameVn} / {nameJp}";
-        }
-
         private async Task<List<Employee>> ValidateEmployeesAsync(
             int? groupId, TimeOnly formStartTime, TimeOnly formEndTime, List<CreateOtFormEmployeeItemDto> items)
         {
@@ -2368,9 +1940,7 @@ namespace Attendance.Application.Services
             if (employees.Count != employeeIds.Distinct().Count())
                 throw new DomainException("Có nhân viên không tồn tại hoặc đã bị xóa trong danh sách.");
 
-            // groupId null = đơn "theo chuyền" (OtForm.IsProductionForm = true) — không có Group cố
-            // định để đối chiếu, bỏ qua check này (xem JobTitleApprovalChainService.
-            // ResolveChainForProductionCreationAsync — phạm vi Group/Line suy tự động theo từng bước).
+            // No fixed group on production forms; their scope is inferred per step.
             if (groupId.HasValue)
             {
                 var wrongGroupEmployee = employees.FirstOrDefault(x => x.GroupId != groupId);
@@ -2459,9 +2029,7 @@ namespace Attendance.Application.Services
             return overlappingIds;
         }
 
-        // IsEarlyMealWindowOt/CalculateOtHours/CalculateMealTicketType đã dời sang MealTicketCalculator
-        // (cùng namespace Attendance.Application.Services, 2026-08-28) để ProductionOtReportService
-        // dùng lại đúng công thức — gọi không cần qualify vì cùng namespace.
+        // IsEarlyMealWindowOt/CalculateOtHours/CalculateMealTicketType live in MealTicketCalculator, shared with reports.
         private static (int Main, int Secondary) CalculateMealTicketCounts(
             IEnumerable<OtFormEmployee> activeEmployees, AttendanceSettingDto settings)
         {
@@ -2480,11 +2048,7 @@ namespace Attendance.Application.Services
             return (main, secondary);
         }
 
-        // Gọi lại sau bất kỳ thay đổi nào tới danh sách/DidEat của nhân viên trong đơn SAU lúc tạo
-        // (sửa thực tích, loại người khỏi đơn) để phiếu ăn không bị lệch với thực tế — chỉ đụng tới
-        // MainTicketCount/SecondaryTicketCount, giữ nguyên MilkCount (luôn nhập tay). Mọi đơn từ
-        // 2026-09-28 đều LUÔN có ProcessPart (Ăn uống bắt buộc, xem FinalizeCreateAsync) — guard null
-        // dưới đây chỉ còn ý nghĩa phòng vệ cho đơn cũ tạo trước mốc này (nếu còn sót, dev DB đã xoá).
+        // Call after any post-create change to employees/DidEat; MilkCount is manual and left alone.
         private async Task RecalculateMealTicketCountsAsync(
             int otFormId, IEnumerable<OtFormEmployee> activeEmployees, AttendanceSettingDto settings)
         {
@@ -2497,10 +2061,7 @@ namespace Attendance.Application.Services
             _unitOfWork.ProcessParts.Update(processPart);
         }
 
-        // 1 dòng OtFormEditLog cho 1 field/hành động thay đổi (2026-08-28, theo yêu cầu người dùng —
-        // "mọi thao tác thay đổi này cần log lại ai làm gì thay đổi cái gì"). Gọi từ UpdateAsync (sửa
-        // giờ/ghi chú), AddEmployeeAsync, RemoveEmployeeCoreAsync — KHÔNG gọi từ CreateAsync (đơn mới
-        // đã có CreatedByUserName/CreatedAt làm log riêng).
+        // Not called from CreateAsync: CreatedByUserName/CreatedAt already record creation.
         private async Task LogEditAsync(
             int otFormId, string userName, string? fullName, OtFormEditActionType actionType,
             int? employeeId, string? employeeCode, string? fieldName, string? oldValue, string? newValue)
@@ -2520,13 +2081,8 @@ namespace Attendance.Application.Services
             });
         }
 
-        // Lũy kế THẬT không còn lưu trên Employee (2026-08-19) — hàm này giờ CHỈ ghi ledger
-        // (EmployeeAccumulationHistory), nguồn chân lý DUY NHẤT cho lũy kế thật. EmployeeService tự
-        // tính MonthToDate/YearToDate lúc đọc bằng cách sum ledger theo đúng tháng/năm THỰC TẾ hiện tại
-        // — nên 1 đơn dán ngày tương lai chỉ "hiện" ra khi tới đúng tháng đó, không cộng sớm dù
-        // Completed từ trước (xem docs/docs-be/attendance-module.md §Lũy kế).
-        // Takes the rows explicitly so a form that completes at creation can accumulate in the same save as its insert.
-        // sign = -1 takes a completed form back out of the ledger before it is re-submitted.
+        // Writes only the ledger; readers sum it by today's real month/year, so future-dated forms show up only in their month.
+        // Rows are passed explicitly so a form completing at creation accumulates in the same save. sign = -1 reverses it.
         private async Task AccumulateEmployeeHoursAsync(OtForm otForm, IReadOnlyCollection<OtFormEmployee> otFormEmployees, int sign = 1)
         {
             var mealSettings = await _attendanceSettingService.GetAsync();
@@ -2693,23 +2249,10 @@ namespace Attendance.Application.Services
             return accumulated;
         }
 
-        // === "Đơn tổng" — REDESIGN theo Cây chức vụ (2026-08-07, Giai đoạn 3.2) ===
-        //
-        // Model cũ: 1 trạng thái CỐ ĐỊNH OtFormStatus.Pending = "đang chờ Trưởng phòng" (đã xoá). Model
-        // mới: mỗi đơn có 1 chuỗi bước ĐỘNG (OtFormApprovalStep), số bước trung gian co giãn theo Phòng
-        // ban. "Đang chờ Trưởng phòng" giờ suy ra bằng cách xem bước Pending có StepOrder NHỎ NHẤT của
-        // đơn — nếu đúng là bước có TerminalLevelSnapshot=DepartmentManager thì đơn coi như "đủ điều
-        // kiện gom Đơn tổng"; đơn còn kẹt ở bước trung gian trước đó (SUP/CHIEF...) thì KHÔNG được gom,
-        // vẫn phải duyệt lẻ tới khi tự nó tới lượt Trưởng phòng (quyết định đã chốt với người dùng qua
-        // AskUserQuestion trước khi code — xem docs/attendance-module.md §Đơn tổng).
-        //
-        // Toàn bộ business logic vẫn tái dùng trực tiếp ApproveAsync/RejectAsync/RemoveEmployeeAsync đã
-        // có (không viết lại logic duyệt/từ chối/loại nhân viên) — chỉ thêm lớp gom nhóm + validate
-        // fail-fast + gửi mail tóm tắt ở trên.
+        // === Batch forms ("Don tong") ===
+        // Only forms whose current step is a manager level are batched; processing reuses ApproveAsync/RejectAsync.
 
-        // Id của các OtForm (thoả filter truyền vào) mà bước đang chờ HIỆN TẠI (Pending, StepOrder nhỏ
-        // nhất) đúng là bước ở TerminalLevel truyền vào — điều kiện chung cho còn hiệu lực/tự đóng 1
-        // batch cụ thể (batch đã có sẵn TerminalLevel riêng, xem OtFormBatch).
+        // Forms matching the filter whose current pending step is at the given TerminalLevel.
         private async Task<List<int>> GetActiveFormIdsForBatchAsync(Expression<Func<OtForm, bool>> formFilter, int terminalLevel)
         {
             var formIds = (await _unitOfWork.OtForms.SelectAsync(predicate: formFilter, selector: x => x.Id)).ToHashSet();
@@ -2726,11 +2269,8 @@ namespace Attendance.Application.Services
                 .ToList();
         }
 
-        // Đơn CHƯA từng vào batch nào (OtFormBatchId==null) mà bước đang chờ hiện tại đúng là 1 trong 3
-        // cấp quản lý (DepartmentManager/WorkshopManager/GeneralDirector) — nền tảng cho bước (a) của
-        // RunDailyBatchSweepAsync. Trả kèm DepartmentId/TerminalLevel để nhóm batch đúng phạm vi: cấp
-        // DepartmentManager gom theo từng Phòng ban, 2 cấp còn lại gom company-wide (1 batch/cấp/ngày,
-        // vì candidate ở 2 cấp này vốn không lọc theo Department — xem JobTitleApprovalChainService).
+        // Forms not yet batched whose current step is a manager level; DepartmentManager batches per department,
+        // the two company-wide levels batch once per level per day since their candidates aren't department-filtered.
         private async Task<List<(int OtFormId, int DepartmentId, int WorkshopId, int TerminalLevel)>> GetNewFormsAtManagerStepAsync()
         {
             var candidateForms = await _unitOfWork.OtForms.SelectAsync(
@@ -2755,8 +2295,7 @@ namespace Attendance.Application.Services
                 .ToList();
         }
 
-        // Tên hiển thị phạm vi của 1 batch — Department (bilingual) nếu TerminalLevel=DepartmentManager,
-        // ngược lại là tên JobTitle ứng với TerminalLevel đó (company-wide, JobTitle không có bản Jp).
+        // JobTitle has no Japanese name, so company-wide scopes are Vietnamese only.
         private async Task<(string ScopeNameVn, string? ScopeNameJp)> ResolveBatchScopeNameAsync(OtFormBatch batch)
         {
             if (batch.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager)
@@ -2782,10 +2321,7 @@ namespace Attendance.Application.Services
 
             if (!isAdmin)
             {
-                // Chỉ Admin thấy hết — người thường chỉ thấy Đơn tổng của phạm vi mà mình đang/đã từng
-                // là candidate hợp lệ ở đúng cấp đó (không nhất thiết đơn còn trong batch này): cấp
-                // DepartmentManager so theo đúng DepartmentId; WorkshopManager/GeneralDirector
-                // company-wide nên chỉ cần khớp TerminalLevel, không lọc Department.
+                // Non-Admins see batches where they are or were a candidate at that level; company-wide levels match TerminalLevel only.
                 var actingUserNames = (await GetActiveDelegatorsAsync(userName)).Keys.Append(userName).ToList();
                 var myCandidacies = (await _unitOfWork.OtFormApprovalStepCandidates.SelectAsync(
                     predicate: c => actingUserNames.Contains(c.UserName) && c.OtFormApprovalStep.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None,
@@ -2829,9 +2365,7 @@ namespace Attendance.Application.Services
             return page;
         }
 
-        // ScopeNameVn ở trên chỉ điền được ngay trong query cho batch có Department (TerminalLevel=
-        // DepartmentManager) — 2 cấp company-wide (WorkshopManager/GeneralDirector) không có Department
-        // để join, phải tra riêng qua JobTitle.TerminalLevel (1 query gộp cho cả trang, không N+1).
+        // Company-wide batches have no Department to join, so names come from JobTitle in one query per page.
         private async Task FillCompanyWideBatchScopeNamesAsync(IReadOnlyList<OtFormBatchListItemDto> items)
         {
             var levels = items.Where(x => x.DepartmentId == null).Select(x => x.TerminalLevel).Distinct().ToList();
@@ -2853,9 +2387,7 @@ namespace Attendance.Application.Services
             return await BuildBatchDtoAsync(batch!);
         }
 
-        // otForms chỉ còn các đơn VẪN CÒN hiệu lực xử lý (đang chờ đúng bước ở TerminalLevel của batch)
-        // — đơn nào đã bị duyệt/từ chối lẻ tay ngoài luồng batch thì rơi khỏi danh sách này (không xoá
-        // liên kết OtFormBatchId, chỉ đơn giản không còn hiển thị như "chờ xử lý" ở đây nữa).
+        // Forms handled individually outside the batch drop out of this list but keep their OtFormBatchId.
         private async Task<OtFormBatchDto> BuildBatchDtoAsync(OtFormBatch batch)
         {
             var activeFormIds = await GetActiveFormIdsForBatchAsync(
@@ -2874,8 +2406,6 @@ namespace Attendance.Application.Services
                     .GroupBy(x => x.OtFormId)
                     .ToDictionary(g => g.Key, g => g.ToList());
 
-            // Trưởng phòng cần thấy "Yêu cầu hỗ trợ khác" (ăn uống/xe đưa đón/phòng copy) như màn Chi
-            // tiết đơn thường — trước đây batch chỉ có bảng nhân viên rút gọn (2026-08-08).
             var processPartsByFormId = activeFormIds.Count == 0
                 ? new Dictionary<int, ProcessPart>()
                 : (await _unitOfWork.ProcessParts.FindAsync(x => activeFormIds.Contains(x.OtFormId)))
@@ -2938,8 +2468,9 @@ namespace Attendance.Application.Services
                             EndTime = x.EndTime,
                             NoteVn = x.NoteVn,
                             NoteJp = x.NoteJp,
-                            MonthToDate = x.MonthToDate,
-                            YearToDate = x.YearToDate,
+                            // The row stores the total before this form; forms and prints show it including this form's own hours.
+                            MonthToDate = x.MonthToDate + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
+                            YearToDate = x.YearToDate + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                             CustomMonthlyOtHourLimit = x.Employee.CustomMonthlyOtHourLimit,
                             CustomYearlyOtHourLimit = x.Employee.CustomYearlyOtHourLimit,
                             MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
@@ -2974,8 +2505,7 @@ namespace Attendance.Application.Services
 
             if (activeFormIds.Count == 0)
             {
-                // Mọi đơn thành viên đã được xử lý lẻ tay ngoài luồng batch — tự đóng, không cần
-                // request.Forms khớp gì cả (đằng nào cũng không còn đơn nào để duyệt).
+                // Every member was handled individually, so the batch closes itself.
                 batch.Status = (int)OtFormBatchStatus.Processed;
                 batch.ProcessedAt = TimeHelper.GetCurrentUtcTime();
                 _unitOfWork.OtFormBatches.Update(batch);
@@ -2989,8 +2519,7 @@ namespace Attendance.Application.Services
             if (!requestedFormIds.ToHashSet().SetEquals(activeFormIds))
                 throw new DomainException("Danh sách đơn gửi lên không khớp với danh sách đơn còn hiệu lực của đơn tổng này — vui lòng tải lại trang.");
 
-            // Validate fail-fast TRƯỚC khi ghi bất cứ gì (không dùng transaction DB — đúng tiền lệ
-            // codebase, xem ApproveAsync/RejectAsync — nên phải chặn hết lỗi có thể lường trước ở đây).
+            // Fail fast before writing: there is no DB transaction here.
             var currentStepByFormId = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                 x => activeFormIds.Contains(x.OtFormId) && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending, x => x.Candidates))
                 .GroupBy(x => x.OtFormId)
@@ -3024,9 +2553,7 @@ namespace Attendance.Application.Services
 
             await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
 
-            // Xử lý từng đơn — tái dùng nguyên vẹn RejectAsync/RemoveEmployeeAsync/ApproveAsync đã có,
-            // mỗi đơn tiếp tục đúng luồng hiện hành (cộng lũy kế, gửi mail cấp kế tiếp nếu còn) không
-            // đổi 1 dòng logic duyệt/từ chối.
+            // Reuse the single-form flows unchanged (accumulation, next-level mail).
             foreach (var item in request.Forms)
             {
                 if (item.Decision == (int)OtFormBatchFormDecision.Reject)
@@ -3043,9 +2570,7 @@ namespace Attendance.Application.Services
                 {
                     foreach (var employeeId in item.ExcludedEmployeeIds)
                     {
-                        // Gọi thẳng phần lõi (2026-09-04, sau khi bỏ wrapper RemoveEmployeeAsync trong-app —
-                        // xem docs/attendance-module.md §Cây chức vụ & Cây duyệt (mục Sửa đơn)) — mật khẩu cấp 2 đã
-                        // verify 1 lần ở trên (dòng ~1990) cho cả batch nên truyền null để khỏi verify lại.
+                        // The secondary password was verified once for the whole batch above, so pass null.
                         await RemoveEmployeeCoreAsync(
                             item.OtFormId, approverUserName, approverFullName, isAdmin: false,
                             employeeId, "Loại khi duyệt Đơn tổng", secondaryPassword: null);
@@ -3071,7 +2596,7 @@ namespace Attendance.Application.Services
             return await BuildBatchDtoAsync(batch);
         }
 
-        // === Kênh email cho "Đơn tổng" — cùng nguyên tắc token-là-xác-thực-duy-nhất như OtForm lẻ. ===
+        // === Email channel for batches: the token is the only credential ===
 
         public async Task<OtFormBatchDto> GetBatchByEmailTokenAsync(string token)
         {
@@ -3106,91 +2631,8 @@ namespace Attendance.Application.Services
             return emailToken;
         }
 
-        // Gửi mail tóm tắt cho TẤT CẢ candidate của bước ở TerminalLevel của batch, gộp theo UserName
-        // (1 người có thể là candidate của nhiều đơn trong cùng batch — chỉ nhận 1 mail, không lặp
-        // lại) — mirror NotifyEligibleApproversAsync (đơn lẻ) nhưng gộp nhiều đơn vào 1 email.
-        private async Task NotifyBatchApproversAsync(OtFormBatch batch, List<OtForm> activeForms, bool isReminder)
-        {
-            if (activeForms.Count == 0) return;
-
-            var formIds = activeForms.Select(x => x.Id).ToHashSet();
-            var candidateUserNames = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
-                x => formIds.Contains(x.OtFormId) && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending
-                    && x.TerminalLevelSnapshot == batch.TerminalLevel,
-                x => x.Candidates))
-                .SelectMany(x => x.Candidates)
-                .Select(x => x.UserName);
-
-            var recipients = await GetMailRecipientsAsync(candidateUserNames);
-            if (recipients.Count == 0) return;
-
-            var (scopeNameVn, scopeNameJp) = await ResolveBatchScopeNameAsync(batch);
-            var scopeName = FormatBilingual(scopeNameVn, scopeNameJp);
-            var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
-            var now = TimeHelper.GetCurrentUtcTime();
-            var employeeCount = (await _unitOfWork.OtFormEmployees.FindAsync(x => formIds.Contains(x.OtFormId) && !x.IsRemoved)).Count;
-            var totalHour = activeForms.Sum(x => x.TotalHour);
-            var hasNewToken = false;
-
-            foreach (var recipient in recipients)
-            {
-                var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(recipient.UserName, EmailModules.Attendance);
-                if (string.IsNullOrWhiteSpace(email)) continue;
-
-                var emailToken = new OtFormBatchEmailToken
-                {
-                    OtFormBatchId = batch.Id,
-                    ApproverUserName = recipient.UserName,
-                    ApproverFullName = fullName,
-                    IsReminder = isReminder,
-                    Token = TokenHelper.GenerateSecureToken(),
-                    ExpiresAt = now.AddDays(EmailApprovalTokenExpiryDays),
-                    CreatedAt = now
-                };
-                await _unitOfWork.OtFormBatchEmailTokens.AddAsync(emailToken);
-                hasNewToken = true;
-
-                var link = $"{baseUrl}/xac-nhan-don-tong?token={emailToken.Token}";
-
-                try
-                {
-                    var wording = BuildBatchWording(recipient.CoveredFullName, batch.Id, activeForms.Count, scopeName);
-                    var placeholders = new Dictionary<string, string>
-                    {
-                        ["OtFormBatchId"] = batch.Id.ToString(),
-                        ["ApproverFullName"] = fullName ?? recipient.UserName,
-                        ["FormCount"] = activeForms.Count.ToString(),
-                        ["ScopeName"] = scopeName,
-                        ["BatchDate"] = batch.BatchDate.ToString("dd/MM/yyyy"),
-                        ["EmployeeCount"] = employeeCount.ToString(),
-                        ["TotalHour"] = totalHour.ToString("0.##"),
-                        ["ConfirmLink"] = link,
-                        ["ExpiryDays"] = EmailApprovalTokenExpiryDays.ToString()
-                    };
-                    wording.AddTo(placeholders);
-                    var html = _emailTemplateRenderer.Render("OtForm/BatchApprovalNotification.html", placeholders);
-
-                    var subjectPrefix = isReminder ? "[Nhắc nhở] " : "";
-                    await _emailService.SendAsync(
-                        email, $"{subjectPrefix}Đơn tổng #{batch.Id} ({activeForms.Count} đơn) {wording.SubjectTail} - YevManagement", html);
-                }
-                catch (FileNotFoundException)
-                {
-                    // Thiếu file template là lỗi deploy — bỏ qua gửi mail cho người này, không chặn
-                    // nghiệp vụ chính (cùng nguyên tắc NotifyEligibleApproversAsync).
-                }
-            }
-
-            if (hasNewToken)
-                await _unitOfWork.SaveChangesAsync();
-        }
-
-        // Gọi bởi OtFormBatchBackgroundService (mặc định 15:00 hằng ngày, xem Program.cs):
-        // (a) gom đơn CHƯA từng vào batch, hiện đúng 1 trong 3 bước quản lý → tạo batch mới (Department
-        //     Manager gom theo từng Department; WorkshopManager/GeneralDirector gom company-wide, 1
-        //     batch/cấp/ngày vì candidate 2 cấp này vốn không lọc theo Department), gửi mail lần đầu;
-        //     (b) với batch cũ còn Pending: hết đơn hiệu lực → tự đóng (không mail), còn đơn hiệu lực →
-        //     gửi mail nhắc (IsReminder=true), KHÔNG gộp thêm đơn mới vào batch cũ.
+        // (a) Batch forms newly at a manager step and send the first mail; (b) close empty pending batches or send reminders.
+        // New forms are never added to an existing batch.
         public async Task RunDailyBatchSweepAsync()
         {
             var now = TimeHelper.GetCurrentUtcTime();
@@ -3205,9 +2647,7 @@ namespace Attendance.Application.Services
                 var newFormIds = newFormRows.Select(x => x.OtFormId).ToHashSet();
                 var newFormsById = (await _unitOfWork.OtForms.FindAsync(x => newFormIds.Contains(x.Id))).ToDictionary(x => x.Id);
 
-                // DepartmentManager gom theo (TerminalLevel, DepartmentId); WorkshopManager/GeneralDirector
-                // company-wide nên nhóm theo TerminalLevel với DepartmentId=null (key dùng int.MinValue để
-                // đại diện "null" trong GroupBy, không ảnh hưởng gì ngoài phạm vi vòng lặp này).
+                // int.MinValue stands for a null DepartmentId in the GroupBy key.
                 var groups = newFormRows.GroupBy(r => (
                     TerminalLevel: r.TerminalLevel,
                     DepartmentId: r.TerminalLevel == (int)JobTitleTerminalLevel.DepartmentManager ? r.DepartmentId : (int?)null,
@@ -3240,14 +2680,14 @@ namespace Attendance.Application.Services
             }
 
             foreach (var (batch, forms) in newBatches)
-                await NotifyBatchApproversAsync(batch, forms, isReminder: false);
+                await _notificationService.NotifyBatchApproversAsync(batch, forms, await ResolveBatchScopeNameAsync(batch), isReminder: false);
 
             var newBatchIds = newBatches.Select(x => x.Batch.Id).ToHashSet();
             var pendingBatches = await _unitOfWork.OtFormBatches.FindAsync(x => x.Status == (int)OtFormBatchStatus.Pending);
 
             foreach (var batch in pendingBatches)
             {
-                // Batch vừa tạo ở bước (a) trong CHÍNH lần chạy này đã nhận mail lần đầu rồi, khỏi nhắc lại ngay.
+                // Batches created in step (a) of this run already got their first mail.
                 if (newBatchIds.Contains(batch.Id)) continue;
 
                 var activeFormIds = await GetActiveFormIdsForBatchAsync(
@@ -3262,69 +2702,16 @@ namespace Attendance.Application.Services
                 }
 
                 var activeForms = (await _unitOfWork.OtForms.FindAsync(x => activeFormIds.Contains(x.Id))).ToList();
-                await NotifyBatchApproversAsync(batch, activeForms, isReminder: true);
+                await _notificationService.NotifyBatchApproversAsync(batch, activeForms, await ResolveBatchScopeNameAsync(batch), isReminder: true);
             }
 
             // Delegations that start today were not active when earlier step mails went out.
             var startingToday = await _unitOfWork.ApprovalDelegations.SelectAsync(
                 predicate: d => !d.IsDeleted && d.FromDate == today, selector: d => d.Id);
             foreach (var delegationId in startingToday)
-                await SendDelegationBackfillNotificationsAsync(delegationId);
+                await _notificationService.SendDelegationBackfillNotificationsAsync(delegationId);
 
             await _unitOfWork.SaveChangesAsync();
-        }
-
-        // Mails the delegate for steps already waiting on the delegator (mails sent before the delegation
-        // existed). Manager-level steps are skipped: the daily batch mail covers them.
-        public async Task SendDelegationBackfillNotificationsAsync(int delegationId)
-        {
-            var delegation = (await _unitOfWork.ApprovalDelegations.FindWithIncludesAsync(
-                x => x.Id == delegationId && !x.IsDeleted, x => x.DelegatorEmployee, x => x.DelegateEmployee)).FirstOrDefault();
-            if (delegation?.DelegatorEmployee.UserName == null || delegation.DelegateEmployee.UserName == null) return;
-
-            var now = TimeHelper.GetCurrentUtcTime();
-            var today = DateOnly.FromDateTime(now);
-            if (delegation.FromDate > today || delegation.ToDate < today) return;
-
-            var delegatorUserName = delegation.DelegatorEmployee.UserName;
-            var delegateUserName = delegation.DelegateEmployee.UserName;
-            var delegatorFullName = $"{delegation.DelegatorEmployee.LastName} {delegation.DelegatorEmployee.FirstName}";
-
-            var delegatorSteps = await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
-                x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending
-                    && x.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None
-                    && x.OtForm.Status == (int)OtFormStatus.InApproval && !x.OtForm.IsDeleted
-                    && x.Candidates.Any(c => c.UserName == delegatorUserName),
-                x => x.Candidates);
-            if (delegatorSteps.Count == 0) return;
-
-            // A form's current step is its lowest pending one, which may not be the delegator's step.
-            var formIds = delegatorSteps.Select(x => x.OtFormId).Distinct().ToList();
-            var lowestPendingByForm = (await _unitOfWork.OtFormApprovalSteps.FindAsync(
-                x => formIds.Contains(x.OtFormId) && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending))
-                .GroupBy(x => x.OtFormId)
-                .ToDictionary(g => g.Key, g => g.Min(x => x.StepOrder));
-
-            var hasNewToken = false;
-            foreach (var step in delegatorSteps.Where(x => lowestPendingByForm[x.OtFormId] == x.StepOrder))
-            {
-                if (step.Candidates.Any(c => string.Equals(c.UserName, delegateUserName, StringComparison.OrdinalIgnoreCase)))
-                    continue;
-
-                var alreadyMailed = (await _unitOfWork.OtFormApprovalEmailTokens.FindAsync(
-                    x => x.OtFormApprovalStepId == step.Id && x.ApproverUserName == delegateUserName
-                        && x.UsedAt == null && x.ExpiresAt > now)).Count > 0;
-                if (alreadyMailed) continue;
-
-                var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == step.OtFormId);
-                if (otForm == null) continue;
-
-                var recipients = new List<(string UserName, string? CoveredFullName)> { (delegateUserName, delegatorFullName) };
-                hasNewToken |= await SendApprovalMailsAsync(otForm, step, recipients);
-            }
-
-            if (hasNewToken)
-                await _unitOfWork.SaveChangesAsync();
         }
     }
 }

@@ -17,7 +17,6 @@ const actionClasses: Record<number, string> = {
     4: "border border-[#f0dca6] bg-[#fff9e8] text-[#8a5a00]",
 };
 
-// Chi tiết file của 1 phiên cắm USB, mở khi bấm "Xem" ở hàng phiên.
 export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
     const [rows, setRows] = useState<UsbFileEventDto[]>([]);
     const [pageIndex, setPageIndex] = useState(1);

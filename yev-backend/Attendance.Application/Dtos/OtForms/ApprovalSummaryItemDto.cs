@@ -1,7 +1,6 @@
 namespace Attendance.Application.Dtos.OtForms
 {
-    // Bản rút gọn của OtFormApprovalHistory dùng cho danh sách (list) — bỏ Comment/SignatureImage
-    // để nhẹ, xem đầy đủ qua GET /{id} (approvalHistories).
+    // Lightweight list version without Comment/SignatureImage; full data via GET /{id}.
     public class ApprovalSummaryItemDto
     {
         public int StepOrder { get; set; }

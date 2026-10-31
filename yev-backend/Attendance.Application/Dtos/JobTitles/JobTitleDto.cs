@@ -7,10 +7,10 @@ namespace Attendance.Application.Dtos.JobTitles
         public string Name { get; set; } = null!;
         public int RankOrder { get; set; }
 
-        // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — None(0) nếu chỉ là cấp trung gian.
+        // JobTitleTerminalLevel; None(0) for intermediate levels.
         public int TerminalLevel { get; set; }
 
-        // true CHỈ cho "Line Leader" — xem JobTitle.cs.
+        // True only for "Line Leader".
         public bool IsLineScoped { get; set; }
     }
 }

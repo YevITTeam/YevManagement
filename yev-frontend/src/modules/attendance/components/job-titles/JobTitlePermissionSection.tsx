@@ -11,7 +11,7 @@ import type { PermissionDto } from "@/modules/auth/types/permission.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
-// Lets the parent form save this mapping together with its own fields (one "Lưu" button in the dialog).
+// Lets the parent form save this mapping together with its own fields (one Save button in the dialog).
 export interface JobTitlePermissionSectionHandle {
     isDirty: () => boolean;
     // Resolves true when nothing needed saving or the save succeeded.
@@ -23,12 +23,7 @@ interface JobTitlePermissionSectionProps {
     ref?: React.Ref<JobTitlePermissionSectionHandle>;
 }
 
-// Tích hợp thẳng vào JobTitleForm (2026-09-03d, theo yêu cầu người dùng — trước đó là tab riêng
-// "Quyền theo Chức vụ" ở CategoryManagement.tsx, nay gộp vào đúng modal Sửa chức vụ để không phải
-// chuyển tab). Nguồn dữ liệu: GET /JobTitlePermission/allowed-codes, GET .../by-job-title/{id},
-// PUT .../by-job-title/{id} — xem docs/docs-be/attendance-module.md §Cây chức vụ, mục "Quyền theo
-// Chức vụ". Vẫn là API riêng với Code/Name/TerminalLevel, nhưng nút Lưu của form cha gọi `save()`
-// của section này trước khi lưu phần còn lại, nên người dùng chỉ thấy 1 nút Lưu.
+// Separate API from the title fields, but the parent form calls `save()` first so the user sees one Save button.
 export default function JobTitlePermissionSection({ jobTitleId, ref }: JobTitlePermissionSectionProps) {
     const t = useTranslations("Attendance.JobTitlePermission");
 
@@ -82,8 +77,7 @@ export default function JobTitlePermissionSection({ jobTitleId, ref }: JobTitleP
         setIsDirty(true);
     };
 
-    // Chỉ hiện đúng permission nằm trong danh sách BE cho phép — thứ tự giữ theo thứ tự allowedCodes
-    // (đã nhóm sẵn theo Module > Entity) thay vì thứ tự ngẫu nhiên sau khi flatten.
+    // Keep BE's allowedCodes order (grouped by Module > Entity) rather than the flattened order.
     const allowedPermissions = allowedCodes
         .map((code) => allPermissions.find((p) => p.code === code))
         .filter((p): p is PermissionDto => p !== undefined);

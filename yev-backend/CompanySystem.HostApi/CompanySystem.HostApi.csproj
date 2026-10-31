@@ -4,12 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- InProcess = xử lý request thẳng trong tiến trình IIS (w3wp.exe), không qua reverse-proxy nội
-         bộ tới 1 tiến trình dotnet.exe/Kestrel riêng như OutOfProcess — bớt 1 vòng round-trip loopback
-         mỗi request, và tránh vấn đề NTLM/Negotiate phải bắt tay lại do IIS không đảm bảo forward đúng
-         1 kết nối Kestrel cho mọi request cùng client (2026-08-11, web.config publish trước đó bị đặt
-         nhầm OutOfProcess). Khai rõ ở đây để `dotnet publish` luôn sinh đúng web.config, không phụ
-         thuộc việc có ai chỉnh tay lại file publish hay không. -->
+    <!-- InProcess avoids the Kestrel loopback hop and NTLM/Negotiate re-handshakes; declared here so publish always emits it. -->
     <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
   </PropertyGroup>
 

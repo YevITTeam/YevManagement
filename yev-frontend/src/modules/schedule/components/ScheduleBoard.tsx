@@ -33,7 +33,7 @@ export default function ScheduleBoard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [plans, setPlans] = useState<SchedulePlan[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  // Có thay đổi chưa lưu xuống file hay không.
+  // Unsaved changes not yet written to the file.
   const [dirty, setDirty] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -55,7 +55,7 @@ export default function ScheduleBoard() {
     "schedule-board"
   );
 
-  // Cảnh báo khi rời trang mà còn thay đổi chưa lưu.
+  // Warn before leaving with unsaved changes.
   useEffect(() => {
     if (!dirty) return;
     const handler = (event: BeforeUnloadEvent) => {
@@ -66,7 +66,7 @@ export default function ScheduleBoard() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
 
-  // --- Thành viên ---
+  // --- Members ---
   const addMember = (name: string) => {
     setMembers((current) => [...current, { id: makeId(), name }]);
     setDirty(true);
@@ -74,7 +74,7 @@ export default function ScheduleBoard() {
 
   const removeMember = (id: string) => {
     setMembers((current) => current.filter((member) => member.id !== id));
-    // Gỡ khỏi các task đang giao cho thành viên này.
+    // Unassign the member from their tasks.
     setPlans((current) =>
       current.map((plan) => ({
         ...plan,
@@ -84,7 +84,7 @@ export default function ScheduleBoard() {
     setDirty(true);
   };
 
-  // --- Kế hoạch ---
+  // --- Plans ---
   const openCreateForm = () => {
     setFormMode("create");
     setEditingPlan(null);
@@ -115,7 +115,7 @@ export default function ScheduleBoard() {
     setDeletingPlan(null);
   };
 
-  // Kéo/thả bar trên biểu đồ để đổi ngày bắt đầu/kết thúc.
+  // Dragging a chart bar changes its start/end dates.
   const handleChangeDates = (planId: string, startISO: string, endISO: string) => {
     setPlans((current) =>
       current.map((plan) => (plan.id === planId ? { ...plan, startDate: startISO, endDate: endISO } : plan))
@@ -123,7 +123,7 @@ export default function ScheduleBoard() {
     setDirty(true);
   };
 
-  // --- Task ---
+  // --- Tasks ---
   const updateTask = (planId: string, taskId: string, patch: Partial<ScheduleTask>) => {
     setPlans((current) =>
       current.map((plan) => {
@@ -133,7 +133,7 @@ export default function ScheduleBoard() {
           tasks: plan.tasks.map((task) => {
             if (task.id !== taskId) return task;
             const next = { ...task, ...patch };
-            // Chuyển sang "Hoàn thành" mà chưa có ngày → tự điền hôm nay; rời khỏi "Hoàn thành" → xoá ngày.
+            // Entering Done without a date fills today; leaving Done clears it.
             if (patch.status && patch.status !== task.status) {
               if (patch.status === "done" && !next.completedDate) next.completedDate = toISODate(todayUTC());
               if (patch.status !== "done") next.completedDate = "";
@@ -178,7 +178,7 @@ export default function ScheduleBoard() {
     }
   };
 
-  // --- Thống kê tổng ---
+  // --- Totals ---
   const allTasks = plans.flatMap((plan) => plan.tasks);
   const todayIso = toISODate(todayUTC());
   const stats = {
@@ -252,7 +252,7 @@ export default function ScheduleBoard() {
               </div>
             ) : (
               <>
-                {/* Thống kê nhanh */}
+                {/* Quick stats */}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <StatCard label="Tổng task" value={stats.total} />
                   <StatCard label="Hoàn thành" value={stats.done} tone="text-[#047857]" />
@@ -338,7 +338,7 @@ function PlanCard({ plan, members, onEdit, onDelete, onUpdateTask, onAddTask, on
   const doneCount = plan.tasks.filter((task) => task.status === "done").length;
   const progress = plan.tasks.length > 0 ? Math.round((doneCount / plan.tasks.length) * 100) : 0;
 
-  // Tiến độ kế hoạch: khi tất cả task đã xong, so ngày xong muộn nhất với ngày kết thúc kế hoạch.
+  // Once all tasks are done, compare the latest finish date with the plan end date.
   const allDone = plan.tasks.length > 0 && doneCount === plan.tasks.length;
   const latestCompleted = allDone
     ? plan.tasks.reduce((acc, task) => (task.completedDate > acc ? task.completedDate : acc), "")

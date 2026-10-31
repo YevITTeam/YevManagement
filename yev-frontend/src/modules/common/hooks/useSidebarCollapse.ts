@@ -14,9 +14,7 @@ function applyWidthVar(collapsed: boolean) {
   );
 }
 
-// Đọc trạng thái từ localStorage (external store) qua useSyncExternalStore thay vì
-// useState+useEffect — tránh phải setState đồng bộ trong effect (react-hooks/set-state-in-effect)
-// và vẫn an toàn với SSR (getServerSnapshot trả mặc định "mở rộng" khi render phía server).
+// useSyncExternalStore over localStorage avoids setState in effect and stays SSR-safe (server = expanded).
 const listeners = new Set<() => void>();
 
 function subscribe(onStoreChange: () => void) {
@@ -35,7 +33,7 @@ function getServerSnapshot(): boolean {
 export function useSidebarCollapse() {
   const collapsed = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  // Đồng bộ biến CSS ra DOM — thuần side-effect trên external system (DOM), không setState.
+  // Pure DOM side effect, no setState.
   useEffect(() => {
     applyWidthVar(collapsed);
   }, [collapsed]);

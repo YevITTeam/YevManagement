@@ -8,11 +8,8 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Quản lý cây duyệt cấu hình tay theo từng Phòng ban (2026-08-06) — CHỈ chứa 3 cấp duyệt CUỐI
-    // (Manager/Factory Manager/Director, JobTitle.TerminalLevel != None). 3 cấp trung gian dời sang
-    // GroupApprovalStepService theo từng Nhóm (2026-08-08) — xem
-    // docs/docs-be/attendance-module.md §Cây chức vụ. Không có Create/Update/Delete từng dòng riêng lẻ,
-    // chỉ thay NGUYÊN danh sách 1 lần (khớp UI kiểu "sắp xếp rồi Lưu").
+    // Holds only the terminal levels (Manager/Factory Manager/Director); intermediate levels live per group.
+    // Whole-list replace only, matching the "reorder then Save" UI.
     public class DepartmentApprovalStepService : BaseService<IAttendanceUnitOfWork>, IDepartmentApprovalStepService
     {
         private readonly IDepartmentAccessGuard _departmentAccessGuard;
@@ -67,10 +64,7 @@ namespace Attendance.Application.Services
             if (request.Steps.Select(x => x.JobTitleId).Distinct().Count() != request.Steps.Count)
                 throw new DomainException("Danh sách bước duyệt không được lặp lại cùng 1 Chức vụ.");
 
-            // CHỈ nhận Chức vụ cấp cuối (Manager/Factory Manager/Director) — cấp trung gian
-            // (TerminalLevel=None) cấu hình ở phần "Cây duyệt Nhóm" (GroupApprovalStepService), không
-            // còn được thêm vào đây nữa (2026-08-08).
-            // Batch-fetch JobTitle theo Id thay vì query từng bước trong vòng lặp (2026-08-11).
+            // Only terminal-level titles; intermediate levels are configured in GroupApprovalStepService.
             var jobTitleIds = request.Steps.Select(x => x.JobTitleId).ToHashSet();
             var jobTitlesById = (await _unitOfWork.JobTitles.FindAsync(x => jobTitleIds.Contains(x.Id) && !x.IsDeleted))
                 .ToDictionary(x => x.Id);

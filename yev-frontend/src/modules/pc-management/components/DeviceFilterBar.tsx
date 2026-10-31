@@ -26,12 +26,11 @@ export interface DeviceFilters {
     status: string;
     expiryDate: string;
     serialNumber: string;
-    // "" = tất cả, "true"/"false" — dùng string vì DeviceFilters là bộ lọc kiểu string đồng nhất.
+    // "" = all, else "true"/"false"; strings keep DeviceFilters uniformly string-typed.
     isUseUsb: string;
-    // "" = tất cả, "true"/"false" — lọc theo cờ "Cần kiểm tra hằng ngày (QR)", dùng để gom nhanh danh
-    // sách in QR cho phòng server (asset-module.md §1.19/§1.21).
+    // "" = all, else "true"/"false"; daily QR check flag, for batching server-room QR prints.
     requiresDailyCheck: string;
-    // "" = tất cả, ngược lại là Id (dạng string) của Nhóm/Bộ phận — lọc chính xác qua API (docs/asset-module.md §4).
+    // "" = all, else the group/department id as a string (exact match).
     groupId: string;
     departmentId: string;
 }
@@ -97,8 +96,7 @@ const fieldWithIconClassName = `${fieldClassName} pl-8`;
 
 const fieldLabelClassName = "mb-1 flex items-center gap-1 text-xs font-semibold text-[#5e3f3a]";
 
-// Nhãn hiển thị cho chip "Đang lọc" của field status — value thật gửi lên API là số (0-3) hoặc
-// sentinel "outsourced" (lọc theo IsOutsourced), không phải chuỗi tiếng Việt.
+// Chip labels only; the API value is 0-3 or the "outsourced" sentinel (filters IsOutsourced).
 const statusChipLabels: Record<string, string> = {
     "0": "Chưa sử dụng",
     "1": "Đang sử dụng",
@@ -159,7 +157,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
         };
     }, [filters.departmentId]);
 
-    // Tự động tìm kiếm sau khi người dùng ngừng gõ/thay đổi bộ lọc (debounce), không cần nút "Lọc dữ liệu".
+    // Debounced auto-search, no explicit filter button.
     useEffect(() => {
         if (isFirstRender.current) {
             isFirstRender.current = false;

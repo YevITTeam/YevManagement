@@ -31,9 +31,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { getApiErrorMessage } from "@/lib/apiError";
 
 interface WorkflowRequestDetailProps {
-    // id = null → đơn CHƯA tồn tại trong DB (mới chọn loại đơn, chưa "Lưu nháp"/"Nộp đơn" lần nào),
-    // bắt buộc kèm formDefinitionId. Không gọi createDraft cho tới khi người dùng chủ động bấm 1 trong
-    // 2 nút đó — tránh tạo rác WorkflowRequests chỉ vì bấm nhầm loại đơn (workflow-module.md §10).
+    // null = not yet in DB (requires formDefinitionId); the draft is created only on first save/submit to avoid junk rows.
     id: number | null;
     formDefinitionId?: number | null;
 }
@@ -149,8 +147,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                     .filter((x) => x.isActive)
                     .map((x) => ({ value: x.id, label: `${x.fullName} (${x.employeeCode})`, searchText: `${x.employeeCode} ${x.fullName}`.toLowerCase() }));
 
-                // Object tạm — CHƯA có bản ghi thật trong DB, id=0 chỉ để thoả kiểu WorkflowRequestDto.
-                // Mọi hành động (Huỷ, Duyệt...) đều bị chặn hiển thị vì status luôn là Draft rỗng.
+                // Placeholder with id=0, no DB row yet; actions stay hidden because status is an empty Draft.
                 const req: WorkflowRequestDto = {
                     id: 0,
                     requestCode: null,
@@ -227,10 +224,8 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
         (message) => toast.error(message)
     );
 
-    // Tải trước chữ ký đã đăng ký sẵn (EmployeeSignatures, Pha 4) để tự điền vào SignatureUpload thay
-    // vì bắt tải ảnh lên mỗi lần duyệt — chỉ để hiển thị mặc định (initialBase64), KHÔNG ghi đè
-    // signatureBase64 (giá trị người dùng chủ động chọn trong phiên này luôn thắng, xem handleApprove).
-    // Im lặng khi lỗi/chưa đăng ký (không toast) — đây là trạng thái bình thường, không phải sự cố.
+    // Prefills SignatureUpload from the registered signature without overriding signatureBase64 (user choice wins).
+    // Silent on error: having no registered signature is normal.
     const { isLoading: isSignatureLoading } = useFetchEffect(
         () => EmployeeSignatureApi.getMine(),
         [],
@@ -257,8 +252,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
     // Prevents starting a second action (e.g. Reject) while another one (e.g. Approve) is still in flight.
     const isActionInFlight = isApproving || isRejecting || isSendingBack || isAddingApprover;
     const canCancel = !isNew && request.status !== RequestStatus.Approved && request.status !== RequestStatus.Rejected && request.status !== RequestStatus.Cancelled;
-    // Chủ đơn được thêm/xoá đính kèm xuyên suốt tới khi đơn kết thúc (workflow-module.md §10, Pha 4B) —
-    // BE (GuardCanEditAttachments) là nguồn xác thực thật, điều kiện này chỉ để ẩn/hiện nút cho gọn UI.
+    // UI-only: BE (GuardCanEditAttachments) enforces that the owner may edit attachments until the request closes.
     const canManageAttachments =
         !isNew &&
         request.status !== RequestStatus.Approved &&
@@ -446,7 +440,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
 
     const handleUploadAttachment = async (e: ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        e.target.value = ""; // reset để chọn lại đúng file cũ vẫn bắn onChange
+        e.target.value = ""; // lets re-selecting the same file fire onChange again
         if (!file) return;
         setIsUploadingAttachment(true);
         try {

@@ -17,9 +17,7 @@ interface OrgLevelJobTitleSuggestionsDialogProps {
     onClose: () => void;
 }
 
-// Cấu hình chức danh GỢI Ý (không giới hạn cứng) khi gán nhân sự vào 1 đơn vị thuộc cấp này từ màn
-// Cây tổ chức — PUT /Workflow/OrgLevel/{id}/job-title-suggestions (workflow-module.md §6, §10). Thứ
-// tự trong danh sách "đã chọn" chính là SortOrder; phần tử đầu = giá trị pre-select mặc định ở FE.
+// Suggested (not enforced) job titles for units at this level; list order is SortOrder, first item is the default pre-selection.
 export default function OrgLevelJobTitleSuggestionsDialog({ orgLevel, onClose }: OrgLevelJobTitleSuggestionsDialogProps) {
     const t = useTranslations("Workflow.OrgLevel");
     const tCommon = useTranslations("Common");

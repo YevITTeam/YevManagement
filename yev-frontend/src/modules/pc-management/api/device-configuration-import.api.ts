@@ -18,7 +18,7 @@ const ENDPOINTS = {
 } as const;
 
 export const DeviceConfigurationImportApi = {
-  // multipart/form-data — field file tên "file". Chỉ đọc, không ghi DB.
+  // Preview only, no DB writes; multipart field name is "file".
   previewImport: async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -30,9 +30,8 @@ export const DeviceConfigurationImportApi = {
     return response.data;
   },
 
-  // Gửi lại đúng field thô của "rows" nhận từ preview — server tự resolve lại từ đầu, ghi DB thật.
-  // createMissingUsers: tạo user Identity (role Basic) cho tài khoản có trong AD mà Identity chưa có.
-  // overwriteExistingAccount: thay tài khoản domain đã có trên thiết bị bằng tài khoản Tanium báo (mặc định giữ nguyên).
+  // Send the raw preview rows back; the server re-resolves everything before writing. createMissingUsers adds
+  // Basic-role Identity users for AD accounts; overwriteExistingAccount replaces the device's domain account with Tanium's.
   confirmImport: async (
     rows: DeviceConfigurationImportRowDto[],
     createMissingUsers: boolean,
@@ -45,8 +44,7 @@ export const DeviceConfigurationImportApi = {
     return response.data;
   },
 
-  // Báo cáo đối chiếu hiện trên màn hình: Device đang "Đang sử dụng" mà không có trong file Tanium. Chỉ đọc;
-  // không cần đã bấm "Xem trước". deviceCodePrefixes: cùng ý nghĩa với exportMissingDevicesReport bên dưới.
+  // In-use Devices missing from the Tanium file; read-only and independent of preview.
   getMissingDevices: async (file: File, deviceCodePrefixes: string[]) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -59,10 +57,8 @@ export const DeviceConfigurationImportApi = {
     return response.data;
   },
 
-  // Tải cùng báo cáo đó dưới dạng Excel. Đối chiếu Device đang "Đang sử dụng" trong hệ thống với chính file Tanium vừa chọn — không phụ
-  // thuộc đã bấm "Xem trước" hay chưa, BE tự đọc lại file. Trả file .xlsx tải xuống + số lượng đọc
-  // từ header (không phải body JSON). deviceCodePrefixes: tiền tố mã máy người dùng nhập (VD
-  // ["YDC","YDF","YLC"]) — chỉ Device khớp 1 trong các tiền tố này mới được đối chiếu.
+  // Same report as .xlsx (BE re-reads the file; counts come from response headers).
+  // deviceCodePrefixes (e.g. ["YDC","YDF"]) limit which devices are compared.
   exportMissingDevicesReport: async (
     file: File,
     deviceCodePrefixes: string[]

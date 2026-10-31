@@ -17,9 +17,7 @@ const badgeClass = (overLimit: boolean) =>
         overLimit ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]" : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
     }`;
 
-// Lũy kế THẬT của 1 năm, dạng lưới 12 ô (4 cột × 3 hàng) cho gọn — dùng trong AccumulationHistoryModal.
-// Ngưỡng cảnh báo tái dùng đúng AttendanceSetting.monthlyOtHourLimit/yearlyOtHourLimit (2026-08-11d, xem
-// docs/docs-be/attendance-module.md §Lịch sử lũy kế).
+// Warning thresholds reuse AttendanceSetting.monthlyOtHourLimit/yearlyOtHourLimit.
 export default function AccumulationHistoryTable({ data, setting, onSelectMonth }: AccumulationHistoryTableProps) {
     const t = useTranslations("Attendance.AccumulationHistory");
     const isYearOverLimit = data.yearTotalHours > setting.yearlyOtHourLimit;

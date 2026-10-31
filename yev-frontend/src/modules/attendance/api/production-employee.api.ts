@@ -34,9 +34,7 @@ export interface ProductionEmployeeSearchParams {
     shiftTeamId?: number;
     congDoan?: string;
     keyword?: string;
-    // Ngày trên đơn đang tạo — BẮT BUỘC truyền để lũy kế Dự kiến (projectedDayToDate/MonthToDate/
-    // YearToDate) scope đúng ngày/tháng/năm của đơn đó, không phải hôm nay thực tế (mirror
-    // EmployeeApi.getEmployeesByGroup, 2026-08-26).
+    // The form's date; required so projected accumulation uses that day/month/year, not today.
     date?: string;
 }
 

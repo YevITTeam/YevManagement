@@ -24,9 +24,6 @@ interface CoordinatorItem {
     userName: string | null;
 }
 
-// Khối "Người phụ trách Cây duyệt" — tách dùng chung cho khối Nhóm + khối Bộ phận (2026-09-05, cùng
-// đợt polish với StepCard.tsx/StepHolders.tsx). 2 khối trước đó copy y hệt ~60 dòng JSX này, chỉ khác
-// nguồn dữ liệu/handler truyền vào.
 export default function CoordinatorsBox({
     isLoading,
     coordinators,

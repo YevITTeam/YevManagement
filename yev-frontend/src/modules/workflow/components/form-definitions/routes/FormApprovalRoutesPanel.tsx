@@ -24,7 +24,7 @@ interface FormApprovalRoutesPanelProps {
     routeConditionType: RouteConditionType;
 }
 
-// Đơn vị cha hiển thị thụt lề theo độ sâu trong cây (mirror flattenOrgUnits ở FormAccessesPanel.tsx).
+// Parent units indented by tree depth.
 function flattenOrgUnits(nodes: OrgUnitTreeDto[], depth = 0): SelectOption[] {
     const result: SelectOption[] = [];
     for (const node of nodes) {
@@ -41,8 +41,7 @@ export interface OrgUnitAncestorInfo {
     nameVn: string;
 }
 
-// Map tra cứu ParentId — cây gốc (OrgUnitTreeDto) không mang ParentId (chỉ có children lồng nhau),
-// nên phải tự dựng lúc duyệt đệ quy để nút "Điền chuỗi duyệt" đi ngược lên cây tổ chức được.
+// OrgUnitTreeDto has no ParentId, so build this map during traversal to let "fill approval chain" walk up the tree.
 function buildOrgUnitsById(nodes: OrgUnitTreeDto[], parentId: number | null, acc: Map<number, OrgUnitAncestorInfo>): void {
     for (const node of nodes) {
         acc.set(node.id, { parentId, orgLevelId: node.orgLevelId, nameVn: node.nameVn });
@@ -50,9 +49,7 @@ function buildOrgUnitsById(nodes: OrgUnitTreeDto[], parentId: number | null, acc
     }
 }
 
-// Cấu hình nhánh + bước duyệt + người duyệt (workflow-module.md §3.2 FormRoutes/FormApprovalSteps/
-// FormApprovalStepParticipants) — thuần cấu hình, CHƯA nộp được đơn thật (Pha 3B). Không autosave,
-// mirror mọi panel khác trong module: 1 nút "Lưu thay đổi" gửi lại TOÀN BỘ cây nhánh+bước+người.
+// No autosave: one "Save changes" resends the entire route/step/participant tree.
 export default function FormApprovalRoutesPanel({ formDefinitionId, routeConditionType }: FormApprovalRoutesPanelProps) {
     const t = useTranslations("Workflow.FormDefinition");
     const [routes, setRoutes] = useState<EditableRoute[]>([]);
@@ -104,9 +101,7 @@ export default function FormApprovalRoutesPanel({ formDefinitionId, routeConditi
         });
     };
 
-    // Kiểm tra trước khi gửi API — 2 lỗi này BE cũng chặn (FormDefinitionService.cs GuardParticipantTarget
-    // + "phải có ít nhất 1 người duyệt"), nhưng chặn sẵn ở FE để chỉ đúng nhánh/bước bị thiếu thay vì
-    // chỉ có 1 thông báo chung chung sau khi round-trip lên BE.
+    // BE also rejects these, but checking here points to the exact route/step instead of one generic error.
     const findRouteValidationError = (): string | null => {
         for (const route of routes) {
             for (const step of route.steps) {

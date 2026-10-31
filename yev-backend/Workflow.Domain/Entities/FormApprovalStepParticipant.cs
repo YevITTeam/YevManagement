@@ -2,9 +2,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Ai đứng ở 1 bước duyệt (workflow-module.md §3.2). JobTitle là tầng gián tiếp quan trọng nhất của
-// thiết kế: form ghi "bước 2 = Trưởng phòng", ai đang giữ chức đó tra ở EmployeeOrgUnits lúc resolve
-// (Pha 3B §5.5) — đổi trưởng phòng chỉ sửa 1 dòng, không phải mở lại từng form.
+// JobTitle indirection: the holder is resolved from EmployeeOrgUnits at submit, so a new manager means editing one row, not every form.
 public partial class FormApprovalStepParticipant
 {
     public int Id { get; set; }

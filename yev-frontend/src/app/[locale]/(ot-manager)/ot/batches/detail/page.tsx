@@ -5,9 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import OtFormBatchDetail from "@/modules/attendance/components/ot-form-batch/OtFormBatchDetail";
 
-// Dùng query string (?id=) thay vì route động [id] — giống ot/forms/page.tsx: "output: export"
-// (static export) yêu cầu mọi route động phải khai báo trước toàn bộ id qua generateStaticParams(),
-// không khả thi vì id đơn tổng phát sinh liên tục từ BE.
+// ?id= instead of [id]: static export would need every id in generateStaticParams().
 function OtFormBatchDetailContent() {
     const searchParams = useSearchParams();
     const id = Number(searchParams.get("id"));

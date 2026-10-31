@@ -8,7 +8,7 @@ interface SecondaryPasswordDialogProps {
     title: string;
     label: string;
     hint: string;
-    // true = hiện hint dạng cảnh báo (người dùng chưa đăng ký mật khẩu cấp 2).
+    // true = show the hint as a warning (user has no secondary password yet).
     hintIsWarning?: boolean;
     value: string;
     onChange: (value: string) => void;
@@ -20,8 +20,6 @@ interface SecondaryPasswordDialogProps {
     onClose: () => void;
 }
 
-// Popup nhập mật khẩu cấp 2 lúc bấm nút chốt (Tạo/Lưu đơn) — thay cho ô nhập nằm cố định trên trang.
-// Enter = xác nhận, Escape = đóng (giống ConfirmDialog).
 export default function SecondaryPasswordDialog({
     isOpen,
     title,

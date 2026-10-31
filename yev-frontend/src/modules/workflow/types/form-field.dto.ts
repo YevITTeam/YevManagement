@@ -1,4 +1,4 @@
-// workflow-module.md §4 — khớp enum FieldDataType ở BE (Workflow.Domain.Enums.FieldDataType).
+// Must match BE enum FieldDataType.
 export const FieldDataType = {
     Text: 1,
     TextArea: 2,
@@ -42,8 +42,7 @@ export interface FormFieldDto {
     isReadOnly: boolean;
 }
 
-// id = null nghĩa là dòng mới, có giá trị = update đúng field đã tồn tại (workflow-module.md §6 —
-// FormDefinitionService.ReplaceFieldsAsync merge theo Id/FieldKey, KHÔNG xoá-tất-tạo-lại).
+// id null = new row; otherwise BE merges by Id/FieldKey instead of delete-and-recreate.
 export interface ReplaceFormFieldItemDto {
     id: number | null;
     fieldKey: string;

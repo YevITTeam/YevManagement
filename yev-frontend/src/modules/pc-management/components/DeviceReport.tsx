@@ -9,21 +9,16 @@ import { ReportApi } from "@/modules/pc-management/api/report.api";
 import type { DeviceReportSummaryDto } from "@/modules/pc-management/types/report.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
-// jsPDF/jspdf-autotable (~vài trăm KB) chỉ cần cho hành động "Xuất PDF" — code-split riêng để không
-// nằm trong bundle chính của trang báo cáo, chỉ tải khi user thực sự mở dialog này.
+// jsPDF is a few hundred KB and only needed for PDF export, so it is code-split out of the report bundle.
 const DeviceListReportPrintDialog = dynamic(() => import("./DeviceListReportPrintDialog"), { ssr: false });
 
-// Phải khớp ReportExpiryWindowDays ở Asset.Application/Services/DeviceService.cs — BE đã lọc sẵn
-// ExpiringDevices theo cửa sổ này, FE chỉ hiển thị lại, không tự lọc thêm.
+// Must match ReportExpiryWindowDays in Asset DeviceService.cs; BE already filters, FE only displays.
 const EXPIRY_WINDOW_DAYS = 90;
 
-// Bảng "sắp/đã hết hạn" có thể lên tới hàng nghìn dòng (toàn hệ thống) — dữ liệu đã tải hết trong
-// summary.expiringDevices (không có endpoint phân trang riêng), chỉ cắt trang khi RENDER để tránh
-// mount hàng nghìn node DOM cùng lúc.
+// summary.expiringDevices can hold thousands of rows (no paged endpoint), so paging happens at render time only.
 const EXPIRING_PAGE_SIZE = 20;
 
-// Báo cáo thống kê chỉ tính thiết bị "chờ sử dụng"/"đang sử dụng" (đã lọc sẵn ở BE) — thiết bị chờ
-// thanh lý/đã thanh lý không còn vận hành nên không đưa vào làm dữ liệu thống kê.
+// Stats cover only unused/in-use devices (BE-filtered); liquidation states are no longer operational.
 const statusMeta = [
     { key: "inUseCount" as const, label: "Đang sử dụng", color: "#10b981" },
     { key: "pendingUseCount" as const, label: "Chưa sử dụng", color: "#94a3b8" },
@@ -96,10 +91,8 @@ interface StatusDonutRow {
     color: string;
 }
 
-// Biểu đồ tròn (donut) vẽ tay bằng SVG stroke-dasharray — không thêm thư viện chart (frontend-conventions.md:
-// hạn chế phụ thuộc mới) vì chỉ có 2 lát (Đang sử dụng/Chưa sử dụng), không cần cả 1 thư viện cho việc này.
-// Chart xếp TRÊN, chú thích xếp DƯỚI dạng hàng full-width (không đặt cạnh nhau) — khung thẻ chỉ rộng
-// ~1/3 màn hình nên nếu chia đôi ngang, nhãn dài ("Đang sử dụng") + số liệu dễ bị wrap xuống dòng lệch.
+// Hand-drawn SVG donut: two slices don't justify a chart library.
+// Legend sits below the chart because the card is ~1/3 screen wide and side-by-side labels would wrap.
 function StatusDonutChart({ rows, total }: { rows: StatusDonutRow[]; total: number }) {
     const size = 168;
     const strokeWidth = 26;
@@ -173,8 +166,7 @@ export default function DeviceReport() {
     const [summary, setSummary] = useState<DeviceReportSummaryDto>(emptySummary);
     const [isPrintOpen, setIsPrintOpen] = useState(false);
 
-    // GET /Report/device-summary trả sẵn số liệu tổng hợp (COUNT/GROUP BY ở SQL) thay vì tải nguyên
-    // bảng Device (5000+ dòng) rồi tự cộng dồn ở client (2026-07-30, xem docs/asset-module.md).
+    // BE aggregates in SQL instead of shipping the 5000+ row Device table to the client.
     const { isLoading, error, refetch: fetchSummary } = useFetchEffect(
         () => ReportApi.getDeviceReportSummary(),
         [],
@@ -190,8 +182,7 @@ export default function DeviceReport() {
         count: summary[status.key],
     }));
 
-    // Reset về trang 1 mỗi khi refetch trả về danh sách mới — so sánh snapshot ngay trong render
-    // thay vì dùng effect (xem AGENTS.md "Reset state khi 1 giá trị đổi").
+    // Reset to page 1 on new data; snapshot compared during render instead of an effect.
     const [expiringPageIndex, setExpiringPageIndex] = useState(1);
     const [prevExpiringDevices, setPrevExpiringDevices] = useState(summary.expiringDevices);
     if (prevExpiringDevices !== summary.expiringDevices) {
@@ -234,7 +225,7 @@ export default function DeviceReport() {
                     </button>
                     <Link
                         href="/pc"
-                        // KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11).
+                        // No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404.
                         prefetch={false}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                     >

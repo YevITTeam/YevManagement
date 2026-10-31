@@ -14,9 +14,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 const inputClassName =
     "w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
-// Cấu hình module Workflow, luôn 1 dòng (workflow-module.md §3.4 WorkflowSettings) — chỉ Get/Update,
-// permission Workflow.Setting.Manage (§7). EmailTokenExpiryDays chưa dùng ở đâu tới khi Pha 4C (duyệt
-// qua email) scaffold, nhưng vẫn cho sửa vì cột đã tồn tại trong DB từ Pha 4B.
+// Single-row settings: Get/Update only.
 export default function WorkflowSettingPanel() {
     const t = useTranslations("Workflow.WorkflowSetting");
     const tCommon = useTranslations("Common");

@@ -18,12 +18,10 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 interface FormFieldDesignerProps {
     formDefinitionId: number;
-    // Layout .docx đã lưu của form (workflow-module.md §1.5) — NULL = chế độ lưới hiện tại.
+    // Saved .docx layout; null = grid mode.
     layoutHtml: string | null;
-    // Gọi lại sau khi lưu/xoá layout để FormDefinitionDetail nạp lại FormDefinitionDto (badge/chế độ
-    // hiển thị đúng ngay cả khi component này không unmount). handleSave await hàm này TRƯỚC khi xoá
-    // pendingDocxBytes — nếu không, có khoảng hở đơn hiện tạm về chế độ lưới trước khi layoutHtml mới
-    // (từ refetch) tới nơi.
+    // Refetches the parent's FormDefinitionDto; handleSave awaits it before clearing pendingDocxBytes
+    // so the form never flashes back to grid mode.
     onLayoutChange: () => Promise<void>;
 }
 

@@ -44,10 +44,7 @@ function EmptyDropZone() {
     );
 }
 
-// DndContext bao ngoài palette + canvas — 2 nguồn kéo: từ palette (thêm field mới, id dạng
-// "palette-{dataType}") hoặc trong canvas (sắp xếp lại, id = clientId của field). Không autosave —
-// mọi thay đổi chỉ đổi state `fields` do component cha giữ, lưu thật qua nút riêng (workflow-module.md
-// §8 Pha 2C).
+// Two drag sources: palette (id "palette-{dataType}", adds a field) and canvas (clientId, reorders). No autosave.
 export default function FieldCanvas({ fields, onChange }: FieldCanvasProps) {
     const t = useTranslations("Workflow.FormDefinition");
     const [activeDragLabel, setActiveDragLabel] = useState<string | null>(null);
@@ -105,8 +102,7 @@ export default function FieldCanvas({ fields, onChange }: FieldCanvasProps) {
                     {fields.length === 0 ? (
                         <EmptyDropZone />
                     ) : (
-                        // grid-cols-3 khớp đúng lưới của DynamicFormRenderer.tsx (màn điền đơn thật) — mỗi ô
-                        // chiếm đúng số cột theo columnSpan, để thấy ngay vị trí ô nằm ở đâu khi ra form thật.
+                        // grid-cols-3 matches DynamicFormRenderer so columnSpan previews the real form layout.
                         <SortableContext items={fields.map((f) => f.clientId)} strategy={rectSortingStrategy}>
                             <div className="grid grid-cols-3 gap-3">
                                 {fields.map((field) => (

@@ -6,12 +6,10 @@ namespace Attendance.Application.Interfaces.Service
     {
         Task<List<JobTitlePermissionDto>> GetByJobTitleAsync(int jobTitleId);
 
-        // Thay nguyên danh sách + đồng bộ NGAY quyền Identity cho mọi Employee đang giữ Chức vụ này
-        // (có UserName) — xem JobTitlePermissionService.ReplaceAsync.
+        // Also syncs Identity permissions immediately for every employee holding this title.
         Task<List<JobTitlePermissionDto>> ReplaceAsync(int jobTitleId, ReplaceJobTitlePermissionsDto request);
 
-        // Danh sách permission code được PHÉP chọn (nhóm "tham gia quy trình") — FE dùng để lọc UI,
-        // tránh hiển thị permission quản trị vào màn cấu hình này.
+        // Only workflow-participation permissions; admin permissions must not be grantable via job titles.
         List<string> GetAllowedPermissionCodes();
     }
 }

@@ -2,9 +2,7 @@ using System;
 
 namespace Asset.Domain.Entities;
 
-// Snapshot of 1 checkable device (Server/Máy lạnh/UPS/Network — DeviceType.ServerCheckCategory != null)
-// inside 1 ServerCheckSession. Category is copied at snapshot time so a later change to the DeviceType's
-// category never rewrites past days' report.
+// Snapshot of 1 checkable device in a session; Category is copied so later DeviceType changes don't rewrite past reports.
 public partial class ServerCheckItem
 {
     public int Id { get; set; }

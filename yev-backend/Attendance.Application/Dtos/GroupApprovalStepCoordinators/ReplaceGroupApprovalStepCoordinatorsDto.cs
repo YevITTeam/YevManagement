@@ -2,8 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Attendance.Application.Dtos.GroupApprovalStepCoordinators
 {
-    // Thay NGUYÊN danh sách người phụ trách Cây duyệt của 1 Nhóm. Gửi mảng rỗng để bỏ hết. Mỗi
-    // EmployeeId PHẢI thuộc đúng Nhóm này — validate ở GroupApprovalStepCoordinatorService.ReplaceAsync.
+    // Replaces the whole list; empty clears it. Each EmployeeId must belong to this Group.
     public class ReplaceGroupApprovalStepCoordinatorsDto
     {
         [Required]

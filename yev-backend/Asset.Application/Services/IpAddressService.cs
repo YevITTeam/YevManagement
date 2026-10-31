@@ -32,8 +32,7 @@ namespace Asset.Application.Services
                 query = query.Where(x => x.Status == request.Status.Value);
             }
 
-            // Lọc theo mức độ sử dụng: đang sử dụng = đã gán (Status != Available), chưa sử dụng
-            // = còn trống (Status == Available). Kết hợp AND với filter Status nếu cả hai được gửi.
+            // In use = Status != Available; combined with the Status filter via AND when both are sent.
             if (request.IsInUse.HasValue)
             {
                 query = request.IsInUse.Value
@@ -70,8 +69,6 @@ namespace Asset.Application.Services
                     Id = x.Id,
                     IpAddress = x.IpAddress1,
                     DeviceId = x.DeviceId,
-                    // Status = AssignedExternal (1) → hiển thị "Khác" (gán cho thiết bị ngoài,
-                    // không có DeviceId); Assigned (2) → mã thiết bị thật; Available (0) → null.
                     DeviceCode = x.Status == (int)IpAddressStatus.AssignedExternal ? "Khác"
                         : x.Device != null ? x.Device.DeviceCode : null,
                     IpPrefixId = x.IpPrefixId,
@@ -81,9 +78,7 @@ namespace Asset.Application.Services
                     PrefixPreferredDns = x.IpPrefix.PreferredDns,
                     PrefixAlternateDns = x.IpPrefix.AlternateDns,
                     Status = x.Status,
-                    // StatusText không đặt trong projection: đây là Expression<Func<>> được EF dịch
-                    // sang SQL nên không gọi được method C#. Gán sau khi materialize để dùng chung
-                    // một nguồn text duy nhất (IpAddressStatusExtensions) với các API còn lại.
+                    // StatusText is set after materializing: EF can't call C# methods inside the projection.
                     Note = x.Note
                 }
             );
@@ -133,10 +128,7 @@ namespace Asset.Application.Services
             return ipAddresses.OrderBy(x => NetworkHelper.ToSortableKey(x.IpAddress)).ToList();
         }
 
-        // Used by the AI Chat tool get_ip_prefix_usage (docs/docs-be/asset-module.md §1.18): exact match
-        // on the 3-octet prefix (not Contains — "10.45.1" is a substring of "10.45.10"/"10.45.11"/...,
-        // so a fuzzy match would silently report the wrong subnet). Returns null when the prefix
-        // doesn't exist (no generated child IpAddress rows), which the caller turns into a tool error.
+        // Exact 3-octet match, not Contains ("10.45.1" is a substring of "10.45.10"); null when the prefix doesn't exist.
         public async Task<IpPrefixUsageDto?> GetPrefixUsageAsync(string prefix)
         {
             var query = _unitOfWork.IpAddresses.GetQueryable(false, x => x.Device!, x => x.IpPrefix)
@@ -183,21 +175,14 @@ namespace Asset.Application.Services
             return MapToDto(ipAddress);
         }
 
-        // Không còn CreateAsync/DeleteAsync thủ công cho từng IpAddress (2026-07-11) — IP chỉ
-        // sinh hàng loạt qua IpPrefixService.CreateAsync (254 địa chỉ/prefix, bỏ .0 network và .255
-        // broadcast) và dọn theo qua IpPrefixService.DeleteAsync. UpdateAsync được giữ lại nhưng CHỈ cho đổi Status +
-        // Note (không đổi IpAddress/IpPrefix/DeviceId — xem UpdateIpAddressDto).
+        // IPs are only generated/removed in bulk via IpPrefixService; UpdateAsync only changes Status + Note.
 
         public async Task UpdateAsync(UpdateIpAddressDto request)
         {
             var ipAddress = (await _unitOfWork.IpAddresses.GetByIdAsync(request.Id)).OrThrowNotFound("Địa chỉ IP", request.Id);
 
-            // Chỉ cho đổi Status + Note (2026-07-11, quyết định người dùng). Giữ bất biến
-            // Status == Assigned(2) ⟺ DeviceId != null:
-            // - IP đang gắn thiết bị (DeviceId != null): không cho đổi Status tay (phải gỡ gán
-            //   trước), chỉ đổi được Note.
-            // - IP chưa gắn (DeviceId == null): chỉ cho đặt Available(0) hoặc AssignedExternal(1),
-            //   không cho đặt Assigned(2) vì không có DeviceId.
+            // Keeps the invariant Assigned(2) <=> DeviceId != null: a bound IP can only change Note,
+            // an unbound IP can only be set to Available(0) or AssignedExternal(1).
             if (ipAddress.DeviceId.HasValue)
             {
                 if (request.Status != (int)IpAddressStatus.Assigned)
@@ -217,11 +202,7 @@ namespace Asset.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // Bulk status update (2026-07-23): tick several IPs on the grid and switch them all at once.
-        // Keeps the same invariant as UpdateAsync (Assigned(2) <=> DeviceId != null) but, instead of
-        // failing the whole batch on the first bad row, skips the offending IPs and reports them back
-        // (same pattern as DeviceService.BulkDeleteAsync). All rows are saved in ONE SaveChanges so
-        // the audit log records a single grouped entry, not one row per IP.
+        // Same invariant as UpdateAsync, but bad rows are skipped and reported; one SaveChanges gives one grouped audit entry.
         public async Task<BulkUpdateIpAddressStatusResultDto> BulkUpdateStatusAsync(BulkUpdateIpAddressStatusRequestDto request)
         {
             // Assigned(2) is derived from the assignment, never picked by hand — use assign/unassign.
@@ -230,10 +211,7 @@ namespace Asset.Application.Services
 
             var ids = request.Ids.Distinct().ToList();
 
-            // Deliberately NOT Include(x => x.Device): FindAsync tracks the entities and
-            // GenericRepository.Update() -> DbSet.Update() marks the whole reachable graph as Modified,
-            // so an included Device would be rewritten (and audited) as well. Device codes needed for
-            // the skip message are fetched separately below, only for the rows actually skipped.
+            // No Include(Device): Update() marks the whole tracked graph Modified, so the Device would be rewritten and audited.
             var ipAddresses = await _unitOfWork.IpAddresses.FindAsync(x => ids.Contains(x.Id) && !x.IsDeleted);
 
             var result = new BulkUpdateIpAddressStatusResultDto
@@ -328,7 +306,6 @@ namespace Asset.Application.Services
             Id = ipAddress.Id,
             IpAddress = ipAddress.IpAddress1,
             DeviceId = ipAddress.DeviceId,
-            // AssignedExternal → "Khác"; Assigned → mã thiết bị thật; Available → null.
             DeviceCode = ipAddress.Status == (int)IpAddressStatus.AssignedExternal ? "Khác" : ipAddress.Device?.DeviceCode,
             IpPrefixId = ipAddress.IpPrefixId,
             Prefix = ipAddress.IpPrefix?.Prefix!,

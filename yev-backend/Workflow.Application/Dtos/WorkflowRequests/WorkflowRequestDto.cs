@@ -44,14 +44,12 @@ namespace Workflow.Application.Dtos.WorkflowRequests
         public RequestAction Action { get; set; }
         public int? SentBackToStepOrder { get; set; }
         public string? Comment { get; set; }
-        // byte[] <-> base64 (frontend-conventions.md §2) — Pha 3B-2: cần cho khối chữ ký ở bản in (workflow-module.md
-        // §5.7 "Khối chữ ký: dựng từ WorkflowRequestSteps + WorkflowRequestHistories.SignatureImage").
+        // Used for the signature block on the printed form.
         public string? SignatureImageBase64 { get; set; }
         public DateTime ActionAt { get; set; }
     }
 
-    // DataJson/FormSchemaJson trả về dạng object đã parse sẵn (không phải chuỗi) để FE đỡ phải
-    // JSON.parse lại — workflow-module.md §5.8.
+    // DataJson/FormSchemaJson are returned as parsed objects so the FE needn't JSON.parse them.
     public class WorkflowRequestDto
     {
         public int Id { get; set; }

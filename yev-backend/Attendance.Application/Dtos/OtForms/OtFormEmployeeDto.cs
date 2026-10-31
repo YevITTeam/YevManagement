@@ -10,39 +10,25 @@ namespace Attendance.Application.Dtos.OtForms
         public string? NoteVn { get; set; }
         public string? NoteJp { get; set; }
 
-        // Snapshot of the employee's accumulation AS OF when this row was added to the form (frozen,
-        // NOT the employee's current live accumulation — see OtFormEmployee.MonthToDate/YearToDate,
-        // fixed 2026-07-21: was a live join before, which made old/completed forms show today's
-        // accumulation instead of what justified this form's approval level at the time).
+        // Frozen accumulation from when the row was added, plus this form's own hours (not today's live total).
         public decimal MonthToDate { get; set; }
         public decimal YearToDate { get; set; }
 
-        // Giới hạn giờ OT/tháng/năm RIÊNG của nhân viên này TẠI THỜI ĐIỂM ĐỌC (live, KHÔNG snapshot
-        // như MonthToDate/YearToDate ở trên) — null = dùng mặc định chung. Mirror
-        // EmployeeDto.CustomMonthlyOtHourLimit/CustomYearlyOtHourLimit (2026-08-26), dùng để FE tô đỏ
-        // cảnh báo đúng theo mốc riêng của người này ở màn Sửa đơn.
+        // Live (not snapshotted like MonthToDate/YearToDate) so the edit screen warns against the employee's own limit. Null = global default.
         public decimal? CustomMonthlyOtHourLimit { get; set; }
         public decimal? CustomYearlyOtHourLimit { get; set; }
 
-        // Loại phiếu ăn (0=None/1=Secondary/2=Main, xem Attendance.Domain.Enums.MealTicketType) —
-        // precomputed theo AttendanceSetting hiện hành, thay cho IsEligibleForMeal cũ (redesign 3 bậc
-        // 2026-08-26, xem OtFormService.CalculateMealTicketType).
+        // MealTicketType (0=None/1=Secondary/2=Main), computed from the current AttendanceSetting.
         public int MealTicketType { get; set; }
 
-        // Giờ OT thực tính (2026-08-26) — raw (EndTime-StartTime), trừ MealBreakDeductionHours nếu
-        // DidEat=true (trừ ca khớp đúng khung sớm — không bao giờ trừ). Đây là số DUY NHẤT nên
-        // hiển thị/cộng làm "giờ OT của người này" — xem OtFormService.CalculateOtHours.
+        // Raw hours minus MealBreakDeductionHours when DidEat (never in the early window); the only figure to display/sum.
         public decimal ActualHours { get; set; }
 
-        // Có ăn hay không — xem OtFormEmployee.DidEat. Vẫn ảnh hưởng ActualHours/MealTicketType bất kể
-        // giá trị nào, TRỪ ca khớp đúng khung sớm (luôn bỏ qua DidEat).
+        // Affects ActualHours/MealTicketType, except in the early window where it is ignored.
         public bool DidEat { get; set; }
 
-        // Dropped from the form by an approver (see docs/attendance-module.md — Loại nhân viên khỏi đơn).
-        // Rows with IsRemoved = true are STILL returned here on purpose so the detail screen can show
-        // an audit trail of who was dropped and why — the FE is what filters them out of the printed
-        // PDF and of the "đang tăng ca" list. They are excluded from NumberOfEmployee and never
-        // accumulate OT hours.
+        // Removed rows are still returned for the audit trail; the FE hides them from the PDF and active list.
+        // Excluded from NumberOfEmployee and never accumulate OT hours.
         public bool IsRemoved { get; set; }
         public string? RemovedByUserName { get; set; }
         public string? RemovedByFullName { get; set; }
@@ -50,8 +36,7 @@ namespace Attendance.Application.Dtos.OtForms
         public DateTime? RemovedAt { get; set; }
         public string? RemoveReason { get; set; }
 
-        // Snapshot ProductionEmployee lúc thêm vào đơn — chỉ có giá trị khi OtForm.IsProductionForm =
-        // true (đơn "theo chuyền"), null cho đơn "theo Nhóm" — xem OtFormEmployee.CongDoanSnapshot.
+        // Snapshot from ProductionEmployee; production-line forms only, null for group forms.
         public string? CongDoanSnapshot { get; set; }
         public string? TaskNameSnapshot { get; set; }
         public string? BlockCodeSnapshot { get; set; }

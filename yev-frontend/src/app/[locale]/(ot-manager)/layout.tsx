@@ -6,9 +6,7 @@ export const metadata = {
   title: "OT Manager | YEV Management",
 };
 
-// KHÔNG tự khai chiều cao (`h-screen`/`max-h-screen`) và KHÔNG tự mở `overflow-y-auto` ở đây —
-// `[locale]/layout.tsx` đã giữ vai trò khung chiều cao + vùng cuộn DUY NHẤT của app. Khai lại ở tầng
-// này chính là nguyên nhân lỗi "2 thanh cuộn chồng nhau, bảng bị cắt/che" đã gặp. Xem DESIGN_SYSTEM.md §3.
+// No own height or overflow-y-auto: [locale]/layout.tsx owns the only scroll container; redeclaring it causes double scrollbars.
 export default function OtManagerLayout({ children }: { children: ReactNode }) {
   return (
     <OtAccessGuard>

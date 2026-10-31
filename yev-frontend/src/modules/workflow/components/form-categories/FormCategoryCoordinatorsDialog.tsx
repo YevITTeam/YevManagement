@@ -22,9 +22,7 @@ interface EmployeeOption {
     fullName: string;
 }
 
-// Thay NGUYÊN danh sách người phụ trách thiết kế của 1 FormCategory — mirror pattern
-// PUT /Workflow/FormCategory/{id}/coordinators (workflow-module.md §3.2): tick chọn xong bấm Lưu là
-// gửi lại toàn bộ mảng EmployeeId, không có Create/Update/Delete từng dòng.
+// PUT replaces the whole coordinator list; Save resends every selected EmployeeId.
 export default function FormCategoryCoordinatorsDialog({ formCategory, onClose }: FormCategoryCoordinatorsDialogProps) {
     const t = useTranslations("Workflow.FormCategory");
     const tCommon = useTranslations("Common");
@@ -38,8 +36,7 @@ export default function FormCategoryCoordinatorsDialog({ formCategory, onClose }
         async () => {
             const [coordinators, employees] = await Promise.all([
                 FormCategoryApi.getCoordinators(formCategory.id),
-                // Employee module chưa có endpoint "all" phẳng (chỉ grid-list) — lấy 1 trang lớn đủ
-                // dùng cho danh sách chọn của 1 màn cấu hình admin, không cần phân trang thật ở đây.
+                // Employee API has no flat "all" endpoint; one large page is enough for this admin picker.
                 EmployeeApi.getEmployeePageNation({ pageSize: 1000 }),
             ]);
             return { coordinators, employees: employees.data };

@@ -2,8 +2,7 @@ using System.Collections.Generic;
 
 namespace Asset.Application.Dtos.IpAddresses
 {
-    // Shaped for the AI Chat tool get_ip_prefix_usage (docs/docs-be/asset-module.md §1.18) — not the
-    // grid/detail pages, which already have IpAddressDto for that.
+    // Shaped for the AI chat tool get_ip_prefix_usage; grid/detail pages use IpAddressDto.
     public class IpPrefixUsageDto
     {
         public string Prefix { get; set; } = null!;

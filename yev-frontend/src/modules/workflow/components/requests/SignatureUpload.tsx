@@ -7,15 +7,11 @@ import { cutOutSignature } from "@/lib/signatureCutout";
 interface SignatureUploadProps {
     onChange: (base64: string | null) => void;
     disabled?: boolean;
-    // Chữ ký đã lưu sẵn (EmployeeSignatures) — chỉ dùng làm giá trị hiển thị BAN ĐẦU (lazy init), KHÔNG
-    // tự đồng bộ lại nếu đổi sau khi mount. Cha (WorkflowRequestDetail) tự set state của mình bằng giá
-    // trị này lúc fetch xong, tại đây chỉ cần hiển thị đúng — tránh phải gọi onChange trong effect.
+    // Initial value only (lazy init), not resynced after mount; the parent owns the real state.
     initialBase64?: string | null;
 }
 
-// Upload file ảnh chữ ký (PNG/JPG) → base64 gửi qua ApproveRequestDto.SignatureImageBase64 — mirror Y
-// HỆT modules/attendance/components/signature/SignatureUpload.tsx (không import chéo module, xem
-// workflow-module.md §8 Pha 3B-2): KHÔNG phải canvas vẽ tay, chỉ <input type=file>.
+// Image file -> base64, no hand-drawn canvas. Mirrors attendance's SignatureUpload (no cross-module import).
 export default function SignatureUpload({ onChange, disabled = false, initialBase64 = null }: SignatureUploadProps) {
     const t = useTranslations("Workflow.WorkflowRequest");
     const inputRef = useRef<HTMLInputElement>(null);
@@ -42,7 +38,7 @@ export default function SignatureUpload({ onChange, disabled = false, initialBas
         <div className="space-y-2">
             {preview ? (
                 <>
-                    {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không phù hợp ở đây */}
+                    {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URI */}
                     <img src={`data:image/png;base64,${preview}`} alt={t("signaturePreviewAlt")} className="h-20 w-full rounded-lg border border-[#e0e3e5] bg-white object-contain" />
                     {preview === initialBase64 && <p className="text-[11px] text-[#5e3f3a]">{t("usingSavedSignature")}</p>}
                 </>

@@ -1,7 +1,5 @@
 import { ArrowRight } from "lucide-react";
 
-// Khoảng giờ "18:00 → 22:00" (+ badge số giờ nếu có) — thay cho "18:00 — 22:00 (4h)" dạng chữ phẳng: mũi tên
-// tách rõ điểm bắt đầu/kết thúc, số giờ thành viên thuốc nhỏ để không lẫn vào chuỗi giờ.
 export function TimeRange({ start, end, hours }: { start: string; end: string; hours?: number | string }) {
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums">

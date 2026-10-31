@@ -5,9 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import CreateOtFormPage from "@/modules/attendance/components/ot-form/CreateOtFormPage";
 
-// Dùng query string (?id=) thay vì route động [id]/edit: "output: export" (static export) yêu cầu
-// mọi route động phải khai báo trước toàn bộ id qua generateStaticParams(), không khả thi vì id đơn
-// OT phát sinh liên tục từ BE. Query string không phải 1 phần routing tĩnh nên tương thích static export.
+// ?id= instead of [id]/edit: static export would need every id in generateStaticParams().
 function EditOtFormContent() {
     const searchParams = useSearchParams();
     const id = Number(searchParams.get("id"));

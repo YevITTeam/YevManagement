@@ -15,12 +15,12 @@ export const InventoryAssignmentApi = {
         const response = await api.get<ApiResponse<InventoryAssignmentDto[]>>(ENDPOINTS.ASSIGNMENT.base);
         return response.data;
     },
-    // Xưởng của chính user đang đăng nhập; data = null nếu chưa được phân công.
+    // null if the current user has no assignment.
     getMine: async () => {
         const response = await api.get<ApiResponse<InventoryAssignmentDto | null>>(ENDPOINTS.ASSIGNMENT.me);
         return response.data;
     },
-    // Upsert theo userId — đổi xưởng nếu user đã có phân công.
+    // Upsert by userId; replaces the existing branch.
     save: async (request: SaveInventoryAssignmentDto) => {
         const response = await api.put<ApiResponse<InventoryAssignmentDto>>(ENDPOINTS.ASSIGNMENT.base, request);
         return response.data;

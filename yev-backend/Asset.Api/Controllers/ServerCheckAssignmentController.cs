@@ -6,7 +6,6 @@ using Shared.Application.Wrapper;
 
 namespace Asset.Api.Controllers
 {
-    // Phân công user ↔ xưởng cho kiểm tra server hằng ngày (asset-module.md §1.21).
     public class ServerCheckAssignmentController : BaseController
     {
         private readonly IServerCheckAssignmentService _assignmentService;
@@ -23,7 +22,7 @@ namespace Asset.Api.Controllers
             return Success(await _assignmentService.GetAllAsync());
         }
 
-        // Người quét tự hỏi "tôi được phân công xưởng nào" — null nếu chưa được phân công.
+        // Null when the caller has no assignment.
         [RequirePermission("Asset.ServerCheck.Scan")]
         [HttpGet("me")]
         public async Task<ActionResult<ApiResponse<ServerCheckAssignmentDto?>>> GetMine()

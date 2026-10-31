@@ -41,7 +41,7 @@ export const JobTitleApi = {
         const response = await api.get<ApiResponse<JobTitleDto>>(ENDPOINTS.JOB_TITLE.getJobTitleById(id));
         return response.data;
     },
-    // rankOrder không còn nhập tay — BE tự gán khi tạo (xếp cuối), chỉnh vị trí qua reorderJobTitles.
+    // BE assigns rankOrder (appended last); reorder via reorderJobTitles.
     createJobTitle: async (data: Omit<JobTitleDto, "id" | "rankOrder">) => {
         const response = await api.post<ApiResponse<JobTitleDto>>(ENDPOINTS.JOB_TITLE.createJobTitle, data);
         return response.data;
@@ -54,8 +54,7 @@ export const JobTitleApi = {
         const response = await api.delete<ApiResponse<void>>(ENDPOINTS.JOB_TITLE.deleteJobTitle(id));
         return response.data;
     },
-    // jobTitleIds: TOÀN BỘ id chức vụ active theo đúng thứ tự mới sau khi kéo-thả (không phải danh
-    // sách con) — BE validate khớp đúng tập hợp đang có rồi gán lại rankOrder = 1..N tuần tự.
+    // Must be ALL active job-title ids in the new order; BE checks the set matches and reassigns rankOrder 1..N.
     reorderJobTitles: async (jobTitleIds: number[]) => {
         const response = await api.put<ApiResponse<JobTitleDto[]>>(ENDPOINTS.JOB_TITLE.reorderJobTitles, { jobTitleIds });
         return response.data;

@@ -20,13 +20,12 @@ export const SecondaryPasswordApi = {
         const response = await api.get<ApiResponse<SecondaryPasswordStatusDto>>(ENDPOINTS.SECONDARY_PASSWORD.getMyStatus);
         return response.data;
     },
-    // KHÔNG áp dụng ngay — chỉ gửi email xác nhận, data=true là đã gửi mail thành công. Mật khẩu thật
-    // sự đổi sau khi user tự bấm xác nhận qua confirmMine() (mirror UserSignatureApi.upsertMySignature).
+    // Not applied immediately: only sends a confirmation email (data=true = sent); the change happens on confirmMine().
     upsertMine: async (data: UpsertSecondaryPasswordDto) => {
         const response = await api.put<ApiResponse<boolean>>(ENDPOINTS.SECONDARY_PASSWORD.upsertMine, data);
         return response.data;
     },
-    // Public, [AllowAnonymous] — trang "Xác nhận thiết lập mật khẩu cấp 2" mở qua link email.
+    // Public [AllowAnonymous], opened from the email link.
     getConfirmation: async (token: string) => {
         const response = await api.get<ApiResponse<SecondaryPasswordConfirmationPreviewDto>>(
             ENDPOINTS.SECONDARY_PASSWORD.confirmGet(token)

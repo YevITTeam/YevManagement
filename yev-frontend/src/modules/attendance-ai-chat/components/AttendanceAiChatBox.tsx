@@ -26,9 +26,7 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useRouter } from "@/navigation";
 
-// Tên tool BE trả về là snake_case kỹ thuật — người dùng không cần biết tool là gì, chỉ cần biết hệ
-// thống đang làm gì. Khớp đúng 7 tool khai báo ở BE
-// (Attendance.Application/Dtos/AiChat/AttendanceAiChatToolDefinitions.cs).
+// Friendly labels for BE tool names; keep in sync with AttendanceAiChatToolDefinitions.cs.
 const TOOL_LABELS: Record<string, string> = {
     search_departments: "bộ phận",
     search_groups: "nhóm",
@@ -56,9 +54,7 @@ interface ChatBubble extends AttendanceAiChatMessageDto {
     otFormRefs?: OtFormRef[];
 }
 
-// Tách riêng khỏi component: React Compiler cấm gọi hàm impure (Date.now) trực tiếp trong thân
-// component/render — đưa ra ngoài thành hàm module-level rồi gọi qua tham chiếu, cùng pattern đã
-// dùng ở modules/ai-chat/components/AiChatBox.tsx.
+// React Compiler forbids calling impure Date.now in render, so it is wrapped at module level.
 const now = (): number => Date.now();
 
 const formatTime = (timestamp?: number) =>
@@ -80,12 +76,12 @@ export default function AttendanceAiChatBox() {
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const nextIdRef = useRef(1);
 
-    // Chỉ cuộn xuống đáy — không setState nên dùng effect ở đây là hợp lệ với React Compiler.
+    // Scroll only, no setState — a valid effect under React Compiler.
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, [messages, streamingText, activeTools]);
 
-    // Rời trang giữa lúc đang stream thì hủy request, tránh rò kết nối.
+    // Abort the stream on unmount to avoid leaking the connection.
     useEffect(() => {
         return () => abortRef.current?.abort();
     }, []);
@@ -96,8 +92,7 @@ export default function AttendanceAiChatBox() {
             return;
         }
 
-        // `history` gửi lên là toàn bộ hội thoại TRƯỚC câu này (BE không lưu gì) — không kèm dòng
-        // "tool" vì BE không hiểu nếu FE gửi ngược lại.
+        // BE is stateless, so send the whole prior conversation; "tool" rows are excluded since BE rejects them.
         const history: AttendanceAiChatMessageDto[] = messages.map(({ role, content }) => ({ role, content }));
         const userBubble: ChatBubble = { id: nextIdRef.current++, role: "user", content: trimmed, timestamp: now() };
 
@@ -141,9 +136,7 @@ export default function AttendanceAiChatBox() {
                 }
             }
         } catch (error) {
-            // Người dùng bấm "Dừng" cũng rơi vào đây, nhưng đó không phải lỗi để báo.
-            // Lỗi 403 (thiếu permission Attendance.AiChat.Use) trả body không có field `message` nên
-            // getApiErrorMessage rơi về fallback — viết fallback bao được cả 2 khả năng.
+            // User "Stop" also lands here and isn't an error. 403 bodies have no `message`, so the fallback must cover it.
             if (!controller.signal.aborted) {
                 failed = true;
                 toast.error(
@@ -156,7 +149,7 @@ export default function AttendanceAiChatBox() {
         } finally {
             abortRef.current = null;
 
-            // Giữ lại phần đã trả lời dở (nếu có) làm 1 bubble hoàn chỉnh, để lượt sau vẫn có ngữ cảnh.
+            // Keep the partial answer as a bubble so the next turn still has context.
             if (answer.trim()) {
                 setMessages((prev) => [
                     ...prev,
@@ -247,8 +240,7 @@ export default function AttendanceAiChatBox() {
                 </div>
             </div>
 
-            {/* Cảnh báo cố định — người dùng phải hiểu đây KHÔNG phải bản xem trước: xác nhận sẽ tạo
-                thật 1 bản ghi và gửi thật 1 email, dù đơn còn ở trạng thái Nháp. */}
+            {/* Not a preview: confirming really creates a record and sends an email, even while the form is Draft. */}
             <div className="flex items-start gap-2 border-b border-[#fde68a] bg-[#fffbeb] px-5 py-2 text-xs text-[#92400e]">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
@@ -315,7 +307,6 @@ export default function AttendanceAiChatBox() {
                         value={input}
                         onChange={(event) => setInput(event.target.value)}
                         onKeyDown={(event) => {
-                            // Enter gửi, Shift+Enter xuống dòng — quen thuộc với người dùng chat.
                             if (event.key === "Enter" && !event.shiftKey) {
                                 event.preventDefault();
                                 void send(input);
@@ -384,9 +375,7 @@ function MessageRow({
             </div>
 
             <div className={`flex min-w-0 max-w-[85%] flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
-                {/* Câu trả lời của AI là markdown → render thành HTML. Tin nhắn người dùng giữ nguyên
-                    text thuần (whitespace-pre-wrap) vì họ gõ tay, đem parse markdown sẽ làm méo nội dung
-                    họ vừa nhập. `min-w-0` để bảng markdown cuộn ngang được trong flex item. */}
+                {/* AI replies are markdown; user text stays plain so their input isn't mangled. `min-w-0` lets tables scroll. */}
                 <div
                     className={`min-w-0 rounded-2xl px-3.5 py-2.5 text-sm shadow-sm ${isUser
                         ? "whitespace-pre-wrap bg-[#fff4f2] text-[#191c1e]"

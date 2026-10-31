@@ -2,7 +2,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Snapshot người, ĐÃ resolve ra người thật lúc nộp (workflow-module.md §3.3, §5.5).
+// Snapshot of the real person resolved at submit time.
 public partial class WorkflowRequestStepParticipant
 {
     public int Id { get; set; }

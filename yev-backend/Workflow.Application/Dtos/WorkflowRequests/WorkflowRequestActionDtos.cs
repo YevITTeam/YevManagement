@@ -7,14 +7,11 @@ namespace Workflow.Application.Dtos.WorkflowRequests
         [MaxLength(1000)]
         public string? Comment { get; set; }
 
-        // byte[] <-> base64 trong JSON (frontend-conventions.md §2) — chụp tại thời điểm duyệt, KHÔNG trỏ về
-        // EmployeeSignatures (workflow-module.md §3.3 WorkflowRequestHistories.SignatureImage).
+        // Snapshot taken at approval time, not a reference to EmployeeSignatures.
         public string? SignatureImageBase64 { get; set; }
 
-        // Chỉ cần điền khi người gọi VỪA là Approver trực tiếp của bước VỪA là Delegate của người
-        // khác cùng bước đó — lúc đó hệ thống không tự suy được "duyệt với tư cách ai", phải chỉ định
-        // rõ EmployeeId của người được duyệt thay. Để trống thì ưu tiên duyệt với tư cách bản thân nếu
-        // là Approver trực tiếp, không thì tự tìm 1 ủy quyền còn hiệu lực bất kỳ.
+        // Needed only when the caller is both a direct approver and a delegate on the same step; when empty,
+        // acts as self if a direct approver, otherwise uses any active delegation.
         public int? OnBehalfOfEmployeeId { get; set; }
     }
 
@@ -29,7 +26,7 @@ namespace Workflow.Application.Dtos.WorkflowRequests
 
     public class SendBackRequestDto
     {
-        // 0 = trả về người nộp (workflow-module.md §5.6).
+        // 0 = back to the requester.
         public int TargetStepOrder { get; set; }
 
         [MaxLength(1000)]

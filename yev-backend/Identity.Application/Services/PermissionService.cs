@@ -19,8 +19,7 @@ namespace Identity.Application.Services
         {
             var permissions = await _unitOfWork.Permissions.GetAllAsync();
 
-            // Code has the format "Module.Entity.Action" -> extract the middle segment as the Entity name
-            // to group into 2 levels (Module > Entity) so FE can easily render it as a tree/collapsible view.
+            // Group by the middle segment of "Module.Entity.Action" so FE can render a Module > Entity tree.
             return permissions
                 .OrderBy(p => p.Module)
                 .ThenBy(p => p.Code)
@@ -117,8 +116,7 @@ namespace Identity.Application.Services
             var user = await _unitOfWork.Users.FirstOrDefaultAsync(x => x.Id == userId, x => x.Roles);
             user.OrThrowNotFound("Người dùng", userId);
 
-            // FirstOrDefaultAsync(includes: x => x.Roles) only loads 1 level of Roles, not
-            // Roles.Permissions -> reload the Roles including Permissions for the user's roleIds.
+            // The include loads Roles but not Roles.Permissions, so reload them explicitly.
             var roleIds = user!.Roles.Select(r => r.Id).ToList();
             var rolePermissions = await _unitOfWork.Roles.FindWithIncludesAsync(
                 r => roleIds.Contains(r.Id),
@@ -155,22 +153,15 @@ namespace Identity.Application.Services
             if (overlap)
                 throw new DomainException("1 permission không thể vừa cấp thêm vừa thu hồi cùng lúc cho 1 người dùng.");
 
-            // Chỉ xoá phần Admin đã cấp TAY (IsAutoGranted=false) — KHÔNG đụng tới phần Chức vụ tự
-            // cấp (IsAutoGranted=true, xem JobTitlePermission/EmployeeService), nếu không mỗi lần
-            // Admin lưu màn này cho 1 người sẽ vô tình xoá sạch mọi permission do Chức vụ họ đang giữ
-            // tự cấp (FE cũng không gửi những dòng đó lên nữa — xem UserPermissionOverrideManager.tsx).
+            // Only manual overrides are replaced; touching IsAutoGranted rows would wipe job-title grants on every save.
             var existingManualOverrides = await _unitOfWork.UserPermissions.FindAsync(x => x.UserId == dto.UserId && !x.IsAutoGranted);
             foreach (var existing in existingManualOverrides)
             {
                 _unitOfWork.UserPermissions.Delete(existing);
             }
 
-            // Nếu Admin tick tay đúng permission đang IsAutoGranted=true — thao tác tay "chiếm quyền"
-            // dòng đó luôn. SỬA TẠI CHỖ (Update) trên đúng entity đang tracked thay vì Delete rồi Add
-            // 1 entity mới CÙNG khoá chính (UserId, PermissionId) trong cùng 1 SaveChanges — EF Core
-            // không tách được 2 thao tác đó thành DELETE-rồi-INSERT đúng như mong đợi (đã tự kiểm
-            // chứng: IsAutoGranted của dòng cũ "sống sót" qua Add mới, chỉ IsGranted đổi), Update tại
-            // chỗ tránh hẳn việc phải trông cậy vào hành vi đó.
+            // A manual tick takes over an auto-granted row: update the tracked entity in place, because Delete+Add of the
+            // same key in one SaveChanges leaves the old IsAutoGranted value behind.
             var touchedIds = dto.GrantPermissionIds.Concat(dto.DenyPermissionIds).ToHashSet();
             var existingAutoOverridesBeingClaimed = await _unitOfWork.UserPermissions.FindAsync(
                 x => x.UserId == dto.UserId && x.IsAutoGranted && touchedIds.Contains(x.PermissionId));

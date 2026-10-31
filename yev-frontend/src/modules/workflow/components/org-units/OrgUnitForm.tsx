@@ -16,7 +16,7 @@ export interface OrgUnitFormValues {
     sortOrder: number;
 }
 
-// Item phẳng cho select "Đơn vị cha" — label đã thụt lề sẵn theo độ sâu trong cây.
+// Label pre-indented by tree depth.
 export interface FlatOrgUnitOption {
     id: number;
     label: string;

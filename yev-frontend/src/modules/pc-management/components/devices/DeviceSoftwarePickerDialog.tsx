@@ -23,8 +23,7 @@ interface NewItemDetails {
     installDate: string;
 }
 
-// Picker (GET /DeviceSoftware/picker/{deviceId}) không trả về softwarePriority — phải lấy riêng từ
-// GET /Software/all rồi merge theo softwareId để có dữ liệu sắp xếp theo mức độ ưu tiên.
+// The picker endpoint omits softwarePriority, so it's merged from GET /Software/all by softwareId.
 interface PickerItemWithPriority extends DeviceSoftwarePickerDto {
     softwarePriority: number | null;
 }

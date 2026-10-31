@@ -28,36 +28,24 @@ export interface ProductionEmployeeListHandle {
 }
 
 interface ProductionEmployeeListProps {
-    // Nút Nhập/Xuất Excel (do EmployeeList sở hữu dialog/handler) — render ngay trong hàng bộ lọc để
-    // không thêm 1 hàng toolbar riêng.
     actions?: ReactNode;
-    // Công tắc chuyển Nhân viên / Nhân viên dưới chuyền (do EmployeeList sở hữu) — nằm đầu thanh công cụ.
     leading?: ReactNode;
 }
 
-// Màn "Nhân viên dưới chuyền" — view riêng đọc thẳng ProductionEmployees. Dữ liệu CẤU TRÚC
-// (Line/Team/Nhóm ca) vẫn đọc-only, chỉnh qua Import lại file Excel — xem docs/docs-be/attendance-module.md
-// §Import nhân sự dưới chuyền. Riêng lũy kế (Xem lịch sử/Giới hạn OT) sửa được trực tiếp tại đây từ
-// 2026-09-04, xem comment ở khối state bên dưới. Bộ lọc dùng đúng 3 dropdown Line/Team/Nhóm ca đã có
-// sẵn cho màn tạo đơn "Theo chuyền".
+// Structure (Line/Team/shift group) is changed via Excel import or the edit dialog; accumulation is editable here.
 const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, ProductionEmployeeListProps>(function ProductionEmployeeList(
     { actions, leading },
     ref
 ) {
     const t = useTranslations("Attendance.ProductionEmployeeList");
-    // Tái dùng nguyên xi text + 2 dialog "Xem lịch sử lũy kế"/"Giới hạn OT" đã có ở EmployeeList.tsx
-    // (view "Nhân viên") — cả 2 đều thao tác trên Employee gốc (qua ProductionEmployee.EmployeeId), không
-    // đụng dữ liệu cấu trúc ProductionEmployee (Line/Team/Nhóm ca vẫn đọc-only, chỉnh qua Import Excel
-    // như cũ) nên đưa thêm vào đây không phá nguyên tắc "màn này chỉ đọc" (2026-09-04, theo yêu cầu
-    // người dùng "cho thêm chức năng chỉnh sửa xem lũy kế giống bên văn phòng").
+    // History/OT-limit dialogs act on the linked Employee, not ProductionEmployee structure data.
     const tEmployee = useTranslations("Attendance.Employee");
     const tCommon = useTranslations("Common");
     const { setting } = useAttendanceSetting();
     const { user } = useAuth();
     const canUpdateOtLimit = hasPermission(user, "Attendance.Employee.UpdateOtLimit");
     const canUpdateAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Update");
-    // Sửa tay Team/Line/Nhóm ca/Trưởng nhóm (2026-09-04) — permission RIÊNG với Import (khác population:
-    // Import nạp cả file, Update sửa nhanh 1 người), xem ProductionEmployeeEditDialog.tsx.
+    // Separate from Import: Update edits a single row.
     const canUpdateProduction = hasPermission(user, "Attendance.ProductionEmployee.Update");
 
     const [items, setItems] = useState<ProductionEmployeeListItemDto[]>([]);
@@ -76,9 +64,7 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
     const [productionLineId, setProductionLineId] = useState<number | "">("");
     const [teamId, setTeamId] = useState<number | "">("");
     const [shiftTeamId, setShiftTeamId] = useState<number | "">("");
-    // Lọc theo Bộ phận (2026-08-27, theo yêu cầu người dùng) — ProductionEmployee về lý thuyết không
-    // giới hạn cứng chỉ 1 Bộ phận "Chế tạo" (suy qua Employee.Group.DepartmentId, không phải field cố
-    // định), nên vẫn cần lọc được như các view Nhân viên khác — mirror EmployeeList.tsx.
+    // Department is derived via Employee.Group, not fixed to the production department, so it stays filterable.
     const [departmentId, setDepartmentId] = useState<number | "">("");
 
     const [pageIndex, setPageIndex] = useState(1);
@@ -165,9 +151,7 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
         setAppliedKeyword(keyword.trim());
     };
 
-    // EmployeeOtLimitDialog cần EmployeeDto đầy đủ (họ/tên tách riêng, giới hạn hiện tại) — dữ liệu
-    // dòng ProductionEmployee không có sẵn nên gọi thêm 1 lượt GET đúng lúc bấm, không tải trước cho
-    // toàn bộ danh sách.
+    // The dialog needs a full EmployeeDto that list rows lack, so fetch it on click rather than for every row.
     const openOtLimitDialog = async (employeeId: number) => {
         setLoadingOtLimitFor(employeeId);
         try {
@@ -252,9 +236,7 @@ const ProductionEmployeeList = forwardRef<ProductionEmployeeListHandle, Producti
                             <th className="px-3 py-2">{t("colShiftTeam")}</th>
                             <th className="px-3 py-2">{t("colTaskName")}</th>
                             <th className="px-3 py-2">{t("colLeader")}</th>
-                            {/* Trước đây nhồi chung 2 badge "T"/"N" vào 1 ô — dễ vỡ layout khi bảng đã có
-                                11 cột (badge bị bóp méo, xem phản hồi người dùng 2026-09-28). Tách thành 2
-                                cột text riêng, giống cách các bảng OT khác trong module đang hiển thị. */}
+                            {/* Separate text columns instead of combined badges, which squeezed the 11-column layout. */}
                             <th className="whitespace-nowrap px-3 py-2 text-center">{t("colMonthToDate")}</th>
                             <th className="whitespace-nowrap px-3 py-2 text-center">{t("colYearToDate")}</th>
                             <th className="px-3 py-2 text-right">{tCommon("actions")}</th>

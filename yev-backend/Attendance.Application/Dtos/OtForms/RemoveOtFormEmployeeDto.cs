@@ -2,10 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Attendance.Application.Dtos.OtForms
 {
-    // Kênh trong-app (JWT), khôi phục lại 2026-09-30 — xem docs/attendance-module.md §Loại nhân viên
-    // khỏi đơn. Gọi thẳng RemoveEmployeeCoreAsync (đã dùng đúng luật "candidate
-    // của bước Pending hiện tại" cho CẢ đơn theo Nhóm lẫn theo chuyền, không phải UpdateAsync creator-only)
-    // — KHÔNG cần SecondaryPassword, cùng quyết định 2026-07-31 áp dụng cho kênh email.
+    // In-app removal: uses the current Pending step's candidate rule for both group and line forms; no SecondaryPassword required.
     public class RemoveOtFormEmployeeDto
     {
         [Required(ErrorMessage = "Nhân viên cần loại không được để trống")]

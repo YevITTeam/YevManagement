@@ -2,9 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Workflow.Application.Dtos.EmployeeOrgUnits
 {
-    // Thay NGUYÊN danh sách đơn vị/chức danh kiêm nhiệm của 1 Employee (workflow-module.md §6
-    // PUT /Employee/{id}/org-units) — mirror pattern ReplaceAsync của Attendance
-    // (DepartmentApprovalStepCoordinatorService). Gửi mảng rỗng để bỏ hết.
+    // Replaces the whole assignment list; send an empty array to clear it.
     public class ReplaceEmployeeOrgUnitsDto
     {
         [Required]

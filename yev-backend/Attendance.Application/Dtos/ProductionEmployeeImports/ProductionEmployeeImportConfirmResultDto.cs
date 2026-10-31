@@ -2,7 +2,7 @@ namespace Attendance.Application.Dtos.ProductionEmployeeImports
 {
     public class ProductionEmployeeImportConfirmResultDto
     {
-        // 0 hoặc 1 — Group "Chưa phân loại" dưới Phòng ban Chế Tạo, tạo đúng 1 lần rồi tái dùng.
+        // 0 or 1: the "Unclassified" group under Manufacturing is created once and reused.
         public int CreatedGroupCount { get; set; }
         public int CreatedEmployeeCount { get; set; }
         public int CreatedProductionEmployeeCount { get; set; }

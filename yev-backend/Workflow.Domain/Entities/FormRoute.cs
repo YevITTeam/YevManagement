@@ -1,9 +1,6 @@
 namespace Workflow.Domain.Entities;
 
-// Nhánh duyệt theo điều kiện (workflow-module.md §3.2) — WorkflowRequests.FormRouteId (Pha 3B) sẽ là
-// FK thật Restrict trỏ vào đây, nên ReplaceRoutesAsync PHẢI merge theo Id, không xoá-tất-tạo-lại
-// (khác FormApprovalSteps/FormApprovalStepParticipants bên dưới, luôn xoá-tất-tạo-lại vì
-// WorkflowRequestSteps chỉ snapshot giá trị, không FK ngược).
+// Referenced by WorkflowRequests.FormRouteId (Restrict), so ReplaceRoutesAsync must merge by Id, not recreate.
 public partial class FormRoute
 {
     public int Id { get; set; }

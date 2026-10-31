@@ -12,8 +12,7 @@ namespace Attendance.Application.Services
 {
     public class SecondaryPasswordService : BaseService<IAttendanceUnitOfWork>, ISecondaryPasswordService
     {
-        // Same rationale as UserSignatureService — self-confirm, done right after the request, not
-        // waiting on someone else being available (see docs/attendance-module.md).
+        // Short expiry: self-confirmation happens right after the request.
         private const int ConfirmationExpiryMinutes = 30;
 
         private static readonly PasswordHasher<object> PasswordHasher = new();
@@ -47,9 +46,7 @@ namespace Attendance.Application.Services
             };
         }
 
-        // Cập nhật/đăng ký mật khẩu cấp 2 KHÔNG áp dụng ngay — tạo 1 dòng chờ xác nhận rồi gửi email
-        // cho chính người gọi kèm link xác nhận; mật khẩu chỉ thật sự có hiệu lực sau khi bấm xác nhận
-        // (ConfirmAsync), chống trường hợp ai đó chiếm phiên đăng nhập đổi mật khẩu cấp 2 hộ.
+        // Takes effect only after the emailed confirmation, so a hijacked session cannot change it.
         public async Task RequestUpdateAsync(string userName, UpsertSecondaryPasswordDto request)
         {
             var now = TimeHelper.GetCurrentUtcTime();
@@ -71,9 +68,7 @@ namespace Attendance.Application.Services
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
             var link = $"{baseUrl}/xac-nhan-mat-khau-cap-2?token={pending.Token}";
 
-            // Render template lỗi (thiếu file, sai định dạng...) không được làm hỏng nghiệp vụ chính
-            // (đăng ký mật khẩu cấp 2 vẫn phải thành công) — cùng nguyên tắc với EmailService.SendAsync
-            // nuốt lỗi SMTP.
+            // Template rendering failures must not fail the update, same as EmailService swallowing SMTP errors.
             try
             {
                 var html = _emailTemplateRenderer.Render("SecondaryPassword/RequestUpdateConfirmation.html", new Dictionary<string, string>
@@ -88,8 +83,7 @@ namespace Attendance.Application.Services
             }
             catch (FileNotFoundException)
             {
-                // Thiếu file template là lỗi triển khai (deploy quên copy EmailTemplates/), bỏ qua gửi
-                // mail chứ không chặn luồng chính.
+                // Missing template is a deploy issue; skip the mail without blocking the main flow.
             }
         }
 
@@ -140,8 +134,7 @@ namespace Attendance.Application.Services
             return pending;
         }
 
-        // Logic upsert thật — tái dùng nội bộ bởi ConfirmAsync, không expose ra ngoài interface vì
-        // Controller không được gọi thẳng (luôn phải qua request+confirm).
+        // Not on the interface: controllers must always go through request + confirm.
         private async Task UpsertAsync(string userName, string passwordHash)
         {
             var record = await _unitOfWork.SecondaryPasswords.FirstOrDefaultAsync(x => x.UserName == userName);

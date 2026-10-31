@@ -1,4 +1,4 @@
-// Enum dùng chung module Attendance (docs/attendance-module.md §API) — gửi/nhận là số; nhãn nằm ở useEnumLabels (i18n).
+// Sent/received as numbers; labels live in useEnumLabels (i18n).
 
 export const otFormStatusClasses: Record<number, string> = {
     0: "border border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]",

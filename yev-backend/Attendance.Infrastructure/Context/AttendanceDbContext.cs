@@ -59,8 +59,7 @@ public partial class AttendanceDbContext : DbContext
         modelBuilder.Entity<AttendanceSetting>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_AttendanceSettings");
-            // decimal(5,2) đủ cho mốc giờ phiếu ăn (vd 2.50), decimal(10,2) cho giới hạn lũy kế
-            // tháng/năm — cùng kiểu với Employee.MonthToDate/YearToDate để so sánh không bị lệch.
+            // Same precision as Employee.MonthToDate/YearToDate so comparisons don't drift.
             entity.Property(e => e.MainMealTicketMinHours).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.NoMealTicketMaxHours).HasColumnType("decimal(5, 2)");
             entity.Property(e => e.MealBreakDeductionHours).HasColumnType("decimal(5, 2)");
@@ -133,16 +132,14 @@ public partial class AttendanceDbContext : DbContext
             entity.HasIndex(e => e.GroupId, "IX_Employees_GroupId");
             entity.HasIndex(e => e.DepartmentId, "IX_Employees_DepartmentId");
             entity.HasIndex(e => e.JobTitleId, "IX_Employees_JobTitleId");
-            // Filtered unique index: SQL Server only allows 1 NULL in a regular unique index,
-            // so filter IS NOT NULL to let multiple employees without an assigned UserName still be insertable.
+            // Filtered so multiple employees without a UserName are allowed (SQL Server permits only one NULL otherwise).
             entity.HasIndex(e => e.UserName, "IX_Employees_UserName").IsUnique().HasFilter("[UserName] IS NOT NULL");
 
             entity.Property(e => e.Code).HasMaxLength(50);
             entity.Property(e => e.FirstName).HasMaxLength(150);
             entity.Property(e => e.LastName).HasMaxLength(150);
             entity.Property(e => e.UserName).HasMaxLength(100);
-            // decimal(10,2) — cùng kiểu với AttendanceSetting.MonthlyOtHourLimit/YearlyOtHourLimit để
-            // so sánh không bị lệch.
+            // Same type as AttendanceSetting limits so comparisons don't drift.
             entity.Property(e => e.CustomMonthlyOtHourLimit).HasColumnType("decimal(10, 2)");
             entity.Property(e => e.CustomYearlyOtHourLimit).HasColumnType("decimal(10, 2)");
 

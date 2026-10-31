@@ -4,10 +4,9 @@ namespace Attendance.Application.Dtos.OtFormBatches
     {
         public int Id { get; set; }
 
-        // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — cấp duyệt của batch này.
         public int TerminalLevel { get; set; }
 
-        // Chỉ có giá trị khi TerminalLevel=DepartmentManager — xem OtFormBatchDto.
+        // Only for DepartmentManager (see OtFormBatchDto).
         public int? DepartmentId { get; set; }
 
         public string ScopeNameVn { get; set; } = null!;
@@ -18,8 +17,7 @@ namespace Attendance.Application.Dtos.OtFormBatches
         // Enum Attendance.Domain.Enums.OtFormBatchStatus.
         public int Status { get; set; }
 
-        // Only counts member forms still Status==Pending (waiting for THIS batch) — a form resolved
-        // individually outside the batch flow no longer counts here, see docs/attendance-module.md — §Đơn tổng.
+        // Only member forms still Pending; forms resolved individually outside the batch are excluded.
         public int FormCount { get; set; }
         public int EmployeeCount { get; set; }
         public decimal TotalHour { get; set; }

@@ -1,8 +1,6 @@
 import { useRef } from "react";
 
-// Kéo-thả để cuộn vùng có overflow (ngang + dọc) bằng chuột, như kéo bản đồ. Bỏ qua khi bấm vào phần tử
-// tương tác (input/button/select/textarea/a/label) để không phá thao tác nhập liệu. Gắn cặp [ref, onMouseDown] vào chính
-// phần tử cuộn: <div ref={ref} onMouseDown={onMouseDown} className="... cursor-grab">.
+// Mouse drag-to-scroll; skips interactive elements so inputs keep working. Attach [ref, onMouseDown] to the scroller.
 export function useDragScroll<T extends HTMLElement>() {
     const ref = useRef<T | null>(null);
 

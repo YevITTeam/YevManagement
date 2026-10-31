@@ -32,11 +32,8 @@ import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import BrandLogo from "@/components/common/BrandLogo";
 
-// Mỗi mục khai báo permission "View" của chính màn hình nó mở ra, và CHỈ hiện khi user có ít nhất 1
-// trong số đó. `PcAccessGuard` chỉ chặn ở mức module (`Asset.*`) nên nếu không lọc ở đây, user chỉ
-// có quyền xem Thiết bị vẫn thấy đủ menu rồi bấm vào là ăn 403 — đúng nguyên tắc "FE dựa
-// user.permissions ẩn/hiện" trong docs/docs-be/asset-module.md §4.
-// Màn hình gộp 2 loại dữ liệu (IP + dải IP, Phần mềm + nhóm phần mềm) chỉ cần 1 trong 2 quyền.
+// PcAccessGuard only checks the module, so items are filtered by their screen's View permission to avoid 403 clicks.
+// Screens combining two data types need either permission.
 const navItems = [
   { key: "devices", href: "/pc", icon: Computer, group: "assets", permissions: ["Asset.Device.View"] },
   { key: "reports", href: "/pc/reports", icon: Flag, group: "assets", permissions: ["Asset.Report.View"] },
@@ -48,8 +45,7 @@ const navItems = [
   { key: "deviceDepartments", href: "/pc/device-departments", icon: Users, group: "catalog", permissions: ["Asset.DeviceDepartment.View"] },
   { key: "softwares", href: "/pc/softwares", icon: ShieldCheck, group: "assets", permissions: ["Asset.Software.View", "Asset.SoftwareGroup.View"] },
   { key: "suppliers", href: "/pc/suppliers", icon: Package, group: "catalog", permissions: ["Asset.Supplier.View"] },
-  // Asset.AuditTrail.View và Asset.AiChat.Use chỉ được seed sẵn cho Admin (docs/docs-be/asset-module.md §4
-  // §7b, §7c) — role khác phải được Admin gán tay.
+  // Seeded for Admin only; other roles must be granted manually.
   { key: "auditTrail", href: "/pc/audit-trail", icon: History, group: "system", permissions: ["Asset.AuditTrail.View"] },
   { key: "serverCheck", href: "/pc/server-check", icon: QrCode, group: "checks", permissions: ["Asset.ServerCheck.View", "Asset.ServerCheck.Scan"] },
   { key: "inventory", href: "/pc/inventory", icon: ClipboardCheck, group: "checks", permissions: ["Asset.Inventory.View", "Asset.Inventory.Scan"] },
@@ -58,8 +54,7 @@ const navItems = [
   { key: "settings", href: "/pc/settings", icon: Settings, group: "system", permissions: ["Asset.Setting.View"] },
 ] as const;
 
-// Gom menu thành 4 nhóm có thể đóng/mở để cột menu không phải cuộn dọc (15 mục phẳng trước đây). Nhóm đang
-// chứa trang hiện tại luôn tự mở; nhóm "Thiết bị & phần mềm" mở sẵn, các nhóm còn lại đóng cho tới khi bấm.
+// The group containing the current page is always open; "devices & software" is open by default.
 const navGroups = [
   { id: "assets", labelKey: "pcGroupAssets", icon: LayoutGrid, defaultOpen: true },
   { id: "catalog", labelKey: "pcGroupCatalog", icon: FolderTree, defaultOpen: false },
@@ -72,11 +67,10 @@ export default function PcManagerSidebar() {
   const pathname = usePathname() || "";
   const { user } = useAuth();
   const { collapsed, toggle } = useSidebarCollapse();
-  // Người dùng tự đóng/mở nhóm nào thì ghi đè ở đây; chưa đụng tới thì theo mặc định (nhóm có trang hiện tại / defaultOpen).
+  // User toggles override the default open state.
   const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({});
 
   return (
-    // Trích xuất phần khai báo aside trong PcManagerSidebar.tsx
     <aside
       className={`print:hidden fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-[#e0e3e5] bg-[#f7f9fb] py-4 transition-[width] duration-200 ${collapsed ? "w-[4.5rem]" : "w-[13.75rem]"
         }`}
@@ -114,24 +108,20 @@ export default function PcManagerSidebar() {
         )}
       </div>
 
-      {/* overflow-x-clip (KHÔNG phải overflow-x-hidden): hidden vẫn tạo scroll container nên khi
-          trình duyệt tự scrollIntoView() 1 link đang focus/active, nav bị cuộn ngang và kẹt luôn ở đó
-          (không thanh cuộn để kéo lại) — icon + đầu chữ label bị cắt mất. clip không tạo scroll
-          container nên không thể bị cuộn ngang nữa. */}
+      {/* overflow-x-clip, not hidden: hidden creates a scroll container that scrollIntoView() can shift sideways and get stuck. */}
       <nav className="mt-4 flex-1 overflow-y-auto overflow-x-clip">
         {navGroups.map((group, groupIndex) => {
           const items = navItems
             .filter((item) => item.group === group.id && hasAnyPermission(user, [...item.permissions]))
             .map((baseItem) => {
-              // Người chỉ có quyền Scan (role "Kiểm tra Server"/"Kiểm kê thiết bị") không có View nên trang
-              // báo cáo sẽ 403 — cho vào thẳng trang quét (asset-module.md §1.21, §1.22).
+              // Scan-only roles lack View, so the report page would 403; send them straight to the scan page.
               const item =
                 baseItem.key === "serverCheck" && !hasPermission(user, "Asset.ServerCheck.View")
                   ? { ...baseItem, href: "/pc/server-check/scan" }
                   : baseItem.key === "inventory" && !hasPermission(user, "Asset.Inventory.View")
                     ? { ...baseItem, href: "/pc/inventory/scan" }
                     : baseItem;
-              // Logic tách riêng cho route gốc "/pc" để tránh highlight sai ở các route con
+              // Root "/pc" handled separately so it doesn't match every child route.
               const isActive =
                 item.href === "/pc" ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
               return { item, isActive };
@@ -156,11 +146,8 @@ export default function PcManagerSidebar() {
             <Link
               key={item.key}
               href={item.href}
-              // KHÔNG bật prefetch: output "export" + routing [locale] khiến URL RSC payload
-              // Next.js tự sinh lúc runtime không khớp file tĩnh đã export ra (out/) → mọi
-              // prefetch đều 301 rồi 404 hàng loạt, không tăng tốc mà còn chiếm connection pool
-              // của trình duyệt (2026-08-11, xem Network tab lúc bật thử — toàn bộ *._PAGE_.txt
-              // đều lỗi). Nếu định bật lại, phải verify bằng ảnh Network thật trước.
+              // Prefetch off: with static export + [locale] routing the RSC prefetch URLs 301 then 404 and
+              // just clog the browser connection pool. Verify in the Network tab before re-enabling.
               prefetch={false}
               title={t(item.key)}
               className={linkClassName(isActive)}
@@ -170,7 +157,7 @@ export default function PcManagerSidebar() {
             </Link>
           ));
 
-          // Thu gọn: menu phẳng chỉ icon, ngăn nhóm bằng đường kẻ mảnh.
+          // Collapsed: flat icon-only menu, groups separated by thin dividers.
           if (collapsed) {
             return (
               <div key={group.id} className={groupIndex > 0 ? "mt-1 border-t border-[#e0e3e5] pt-1" : ""}>

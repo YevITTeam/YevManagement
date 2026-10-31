@@ -6,10 +6,7 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Quản lý danh sách Employee được Admin CHỈ ĐỊNH TAY phụ trách cấu hình Cây duyệt của 1 Nhóm
-    // (2026-08-11, sửa 2026-08-11b: khoá theo EmployeeId, chỉ chọn được Employee thuộc đúng Nhóm) —
-    // mirror DepartmentApprovalStepCoordinatorService. Xem docs/docs-be/attendance-module.md §Cây
-    // chức vụ, mục "Người phụ trách Cây duyệt".
+    // Coordinators are assigned manually by Admin and keyed by EmployeeId; mirrors DepartmentApprovalStepCoordinatorService.
     public class GroupApprovalStepCoordinatorService : BaseService<IAttendanceUnitOfWork>, IGroupApprovalStepCoordinatorService
     {
         private readonly IEmployeeService _employeeService;

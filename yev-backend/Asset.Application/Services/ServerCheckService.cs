@@ -45,8 +45,7 @@ namespace Asset.Application.Services
 
         public async Task<ServerCheckSessionDto> StartSessionAsync()
         {
-            // Xưởng lấy từ phân công của user (asset-module.md §1.21), KHÔNG nhận từ client — không có
-            // đường nào để quét nhầm xưởng.
+            // Branch comes from the user's assignment, never from the client, so a wrong-branch scan is impossible.
             var branchId = await RequireAssignedBranchIdAsync();
 
             var today = TimeHelper.GetCurrentUtcTime().Date;
@@ -58,14 +57,12 @@ namespace Asset.Application.Services
                 if (existing.Status == (int)ServerCheckSessionStatus.Completed)
                     throw new DomainException("Xưởng của bạn đã hoàn thành phiên kiểm tra hôm nay.");
 
-                // Đã có phiên InProgress (vd trình duyệt bị đóng giữa chừng) — tiếp tục phiên đó, không tạo mới.
+                // Resume an InProgress session (e.g. the browser was closed mid-way) instead of creating a new one.
                 return await BuildSessionDtoAsync(existing);
             }
 
-            // Chỉ thiết bị Admin đánh dấu RequiresDailyCheck (nằm trong phòng server, có dán QR) mới được
-            // snapshot vào phiên — quét QR là thao tác VẬT LÝ, nên phạm vi phải là "máy có thật trong
-            // phòng" (asset-module.md §1.19). Lọc theo loại (DeviceType.ServerCheckCategory) vẫn giữ vì báo
-            // cáo gộp cột theo loại; lọc theo xưởng vì mỗi xưởng có phiên + tờ check sheet riêng (§1.21).
+            // Only RequiresDailyCheck devices (physically in the server room with a QR) are snapshotted; filtered by
+            // category for report columns and by branch since each branch has its own session and sheet.
             var deviceRows = await _unitOfWork.Devices.SelectAsync(
                 predicate: d => !d.IsDeleted && d.Status == (int)DeviceStatus.InUse
                     && d.DeviceType.ServerCheckCategory != null && d.RequiresDailyCheck && d.BranchId == branchId,
@@ -121,8 +118,7 @@ namespace Asset.Application.Services
             var item = await _unitOfWork.ServerCheckItems.FirstOrDefaultAsync(x => x.SessionId == sessionId && x.DeviceId == device.Id);
             if (item == null) throw new DomainException($"Thiết bị '{deviceCode}' không thuộc phạm vi kiểm tra hằng ngày hôm nay.");
 
-            // Only physical iDRAC/SAN-type devices are scanned; the rest are pinged automatically at session
-            // end (asset-module.md §1.19), so a scan of them is a mistake worth flagging rather than accepting.
+            // Only iDRAC/SAN-type devices are scanned; the rest are pinged at session end, so scanning them is flagged as a mistake.
             var requiresScan = (await _unitOfWork.Devices.SelectAsync(
                 predicate: d => d.Id == device.Id,
                 selector: d => d.DeviceType.RequiresQrScan
@@ -130,7 +126,7 @@ namespace Asset.Application.Services
             if (!requiresScan)
                 throw new DomainException($"Thiết bị '{deviceCode}' không cần quét QR — hệ thống tự ping khi kết thúc phiên.");
 
-            // Quét lại 1 máy đã Ok vẫn hợp lệ (idempotent) — chỉ cập nhật giờ quét mới nhất, không báo lỗi.
+            // Rescanning an Ok device is idempotent; only the scan time is refreshed.
             item.ScannedAt = TimeHelper.GetCurrentUtcTime();
             item.ScannedBy = GetCurrentUser();
             item.Status = (int)ServerCheckItemStatus.Ok;
@@ -233,18 +229,12 @@ namespace Asset.Application.Services
             return items.OrderBy(x => x.DisplayOrder).ToList();
         }
 
-        // Pings the IPs of Server/Network/UPS devices (asset-module.md §1.20) so staff can verify the
-        // "Network - Factory"/"Network - Server" checklist items on the spot instead of by hand.
-        // Scope is narrowed to AssetSetting.NetworkCheckBranchId when set (Admin-configurable), otherwise all
-        // branches. Only IPs actually assigned to a Device are pinged (Available IPs have no host to
-        // reach). Pings run in parallel (capped concurrency) with a short timeout so a large subnet
-        // still finishes in a few seconds.
+        // Lets staff verify the network checklist items on the spot. Only IPs assigned to a Device are pinged,
+        // in parallel with a short timeout so large subnets still finish in seconds.
         public async Task<NetworkPingResultDto> PingNetworkAsync()
         {
-            // Scope = every device the Admin ticked RequiresDailyCheck, including the QR-scanned IDR group
-            // (their ping is informational; only non-scan devices are auto-resolved by EndSessionAsync).
-            // Xưởng của người quét (§1.21) ưu tiên hơn AssetSetting.ServerCheckBranchId — cấu hình chung
-            // đó chỉ còn là fallback cho tài khoản chưa được phân công xưởng (vd Admin).
+            // Includes QR-scanned devices (ping is informational). The scanner's assigned branch takes precedence;
+            // AssetSetting.ServerCheckBranchId is only a fallback for unassigned accounts (e.g. Admin).
             var branchId = await GetAssignedBranchIdAsync();
             if (branchId == null)
             {
@@ -334,10 +324,7 @@ namespace Asset.Application.Services
                 await throttle.WaitAsync();
                 try
                 {
-                    // Exactly PingCount pings per IP, no early exit (asset-module.md §1.20): the user prefers a
-                    // slower but certain result. Reachable when at least MinSuccessesForOk of the PingCount
-                    // pings get a reply — a few dropped packets on a flaky link don't flip the result.
-                    // RoundtripMs is the average of the successful replies.
+                    // Always PingCount pings (user prefers certainty over speed); OK when at least MinSuccessesForOk reply.
                     var successCount = 0;
                     var replyTimes = new List<long>();
                     for (var attempt = 0; attempt < PingCount; attempt++)
@@ -450,9 +437,7 @@ namespace Asset.Application.Services
                 selector: x => new { x.SessionId, x.ManualItemId, ManualItemName = x.ManualItem.Name, IsAirConditioner = x.ManualItem.IsAirConditioner, x.Status, x.Note, x.ConfirmedBy, x.ConfirmedAt }
             );
 
-            // "Người kiểm" hiển thị họ tên thay vì tên đăng nhập: Session.EndedBy chỉ lưu username (Identity.Name),
-            // còn họ tên nằm ở DB Identity (khác DB) — lấy từ snapshot FullName trong ServerCheckAssignment.
-            // User chưa có phân công (vd Admin, phiên cũ) giữ nguyên username.
+            // EndedBy stores only the username; full names live in the Identity DB, so use the ServerCheckAssignment snapshot.
             var fullNameByUserName = (await _unitOfWork.ServerCheckAssignments.SelectAsync(
                 predicate: a => a.FullName != null,
                 selector: a => new { a.UserName, a.FullName }
@@ -464,7 +449,7 @@ namespace Asset.Application.Services
 
             (bool? status, string? note) Aggregate(int sessionStatus, List<ReportItemRow> sessionItems, ServerCheckCategory category)
             {
-                // Chưa "Kết thúc phiên" thì chưa có kết luận cuối cho ngày đó (asset-module.md §2).
+                // No final verdict for the day until the session is completed.
                 if (sessionStatus != (int)ServerCheckSessionStatus.Completed) return (null, null);
 
                 var group = sessionItems.Where(i => i.Category == (int)category).ToList();
@@ -484,8 +469,7 @@ namespace Asset.Application.Services
                 var (serverStatus, serverNote) = Aggregate(s.Status, sessionItems, ServerCheckCategory.Server);
                 var (networkStatus, networkNote) = Aggregate(s.Status, sessionItems, ServerCheckCategory.Network);
                 var (upsStatus, upsNote) = Aggregate(s.Status, sessionItems, ServerCheckCategory.Ups);
-                // Máy lạnh is a manual tick (no device): OK/NG comes from its manual result, and it is kept
-                // out of ManualResults so the generic manual columns stay unchanged.
+                // The air conditioner is a manual tick (no device), kept out of ManualResults so generic manual columns stay unchanged.
                 var acResult = manualBySession[s.Id].FirstOrDefault(m => m.IsAirConditioner);
                 bool? acStatus = acResult == null ? null : acResult.Status == (int)ServerCheckItemStatus.Ok;
                 var acNote = acResult != null && acStatus == false ? acResult.Note : null;
@@ -521,11 +505,7 @@ namespace Asset.Application.Services
             }).ToList();
         }
 
-        // Điền dữ liệu GetReportAsync() vào ĐÚNG layout file mẫu giấy gốc (YEV–22–CV–IT-QD-810-FR-Check
-        // Sheet KT, xem Asset.Infrastructure/Templates/) thay vì tự dựng 1 bảng Excel mới — cột cố định
-        // của template (B/C/D=Đèn cảnh báo Server/Network/UPS, E=Máy lạnh, F..L=7 mục thủ công theo đúng
-        // thứ tự DisplayOrder, M=Người kiểm, N=Ghi chú) khớp 1-1 với ServerCheckReportRowDto nên không
-        // cần build header động như màn hình web (asset-module.md §1.19/§1.20).
+        // Fills the original paper template; its fixed columns map 1-1 to ServerCheckReportRowDto, so no dynamic header.
         public async Task<(byte[] Content, string FileName)> ExportReportAsync(DateTime fromDate, DateTime toDate, int? branchId)
         {
             var rows = await GetReportAsync(fromDate, toDate, branchId);
@@ -540,23 +520,19 @@ namespace Asset.Application.Services
                 else displayRows.AddRange(dayRows.Select(r => (day, (ServerCheckReportRowDto?)r)));
             }
 
-            // Thứ tự cột F..L trong file mẫu ĐÃ IN SẴN đúng tên 7 mục (Tình trạng âm thanh.../Network -
-            // Factory/Server/Gởi nhận Mail/Backup - File Srv/OES/Domain) theo DisplayOrder 1..7 — không
-            // ghi lại tên cột, chỉ cần map giá trị theo ĐÚNG thứ tự này, KHÔNG theo ManualItemId cụ thể
-            // (id thật do DB sinh, có thể khác nhau giữa các môi trường).
+            // Columns F..L are pre-printed in DisplayOrder 1..7; map by that order, not by ManualItemId (DB ids differ per environment).
             var manualItemIdsInOrder = (await GetManualItemsAsync()).Where(x => !x.IsAirConditioner).Select(x => x.Id).ToList();
 
             using var workbook = new XLWorkbook(new MemoryStream(_templateService.GetCheckSheetTemplateBytes()));
             var sheet = workbook.Worksheet("Sheet1");
 
             const int templateFirstDataRow = 9;
-            const int templateLastDataRow = 34; // 26 dòng trống có sẵn trong file mẫu
+            const int templateLastDataRow = 34; // 26 empty rows pre-made in the template
             const int templateRowCount = templateLastDataRow - templateFirstDataRow + 1;
 
             if (displayRows.Count < templateRowCount)
             {
-                // Bớt dòng thừa (kéo theo phần chú thích/chữ ký ở dưới tự trồi lên) để không in ra
-                // hàng loạt dòng trắng khi khoảng ngày lọc ngắn hơn 1 tháng.
+                // Drop unused rows (the footer/signature block moves up) so short ranges don't print blank rows.
                 sheet.Rows(templateFirstDataRow + displayRows.Count, templateLastDataRow).Delete();
             }
             else if (displayRows.Count > templateRowCount)
@@ -568,10 +544,9 @@ namespace Asset.Application.Services
                     templateRow.CopyTo(newRow);
             }
 
-            // "Tháng"/"Năm" ở góc trên chỉ có 1 ô — chỉ điền khi cả khoảng ngày nằm gọn trong 1 tháng,
-            // tránh ghi sai khi người dùng lọc báo cáo trải dài nhiều tháng.
+            // The month/year header has a single cell, so fill it only when the range fits in one month.
             var singleMonth = fromDate.Year == toDate.Year && fromDate.Month == toDate.Month;
-            // "Nhà xưởng" (N2): điền khi báo cáo thuộc đúng 1 xưởng (1 tờ = 1 xưởng, §1.21).
+            // Fill the branch cell (N2) only when the report covers exactly one branch.
             var branchNames = rows.Select(r => r.BranchName).Where(n => !string.IsNullOrEmpty(n)).Distinct().ToList();
             if (branchNames.Count == 1) sheet.Cell("N2").Value = branchNames[0];
 
@@ -601,8 +576,7 @@ namespace Asset.Application.Services
                 sheet.Cell(excelRow, 4).Value = StatusText(row.UpsStatus);
                 sheet.Cell(excelRow, 5).Value = StatusText(row.AirConditionerStatus);
 
-                // ManualResults chỉ có dòng khi phiên đã "Kết thúc" (BE chỉ ghi ServerCheckManualResult
-                // lúc EndSessionAsync) — phiên đang InProgress nên mảng này rỗng, ô tự để trống.
+                // ManualResults exist only after EndSessionAsync; InProgress sessions leave these cells blank.
                 var manualByItemId = row.ManualResults.ToDictionary(m => m.ManualItemId);
                 for (var col = 0; col < manualItemIdsInOrder.Count && col < 7; col++)
                 {
@@ -644,8 +618,7 @@ namespace Asset.Application.Services
                     DeviceCode = x.Device.DeviceCode,
                     DeviceName = x.Device.DeviceName,
                     Category = x.Category,
-                    // Ternary trực tiếp (không gọi extension) vì đây là Expression<Func<>> được EF dịch
-                    // sang SQL — cùng lý do DeviceService.StatusText inline (§1.4 asset-module.md).
+                    // Inline ternary: EF translates this expression to SQL and can't call an extension method.
                     CategoryText = x.Category == (int)ServerCheckCategory.Server ? "Server"
                         : x.Category == (int)ServerCheckCategory.Network ? "Network"
                         : x.Category == (int)ServerCheckCategory.Ups ? "UPS"
@@ -723,7 +696,7 @@ namespace Asset.Application.Services
             }).ToList();
         }
 
-        // Xưởng user hiện tại được phân công (asset-module.md §1.21); null = chưa được phân công.
+        // Null = not assigned.
         private async Task<int?> GetAssignedBranchIdAsync()
         {
             var userId = ServerCheckUserContext.GetUserId(_httpContextAccessor);
@@ -743,7 +716,7 @@ namespace Asset.Application.Services
                 "Tài khoản của bạn chưa được phân công xưởng kiểm tra server. Vui lòng liên hệ Admin để được phân công.");
         }
 
-        // Quét/kết thúc phiên chỉ được làm trên phiên của ĐÚNG xưởng mình được phân công — kể cả Admin.
+        // Only the caller's own assigned branch session, even for Admin.
         private async Task EnsureOwnBranchSessionAsync(ServerCheckSession session)
         {
             var branchId = await RequireAssignedBranchIdAsync();
@@ -751,10 +724,8 @@ namespace Asset.Application.Services
                 throw new DomainException("Phiên kiểm tra này thuộc xưởng khác, bạn không được thao tác.");
         }
 
-        // Which branch a READ endpoint is limited to. Users holding Asset.ServerCheck.View see every
-        // branch (optionally narrowed by `requested`); scan-only users are forced to their assigned
-        // branch. `enforceOnly`: return only the forced branch (null for viewers) - used by GetById,
-        // which has no branch filter of its own.
+        // Viewers see every branch (optionally narrowed by `requested`); scan-only users are forced to their branch.
+        // `enforceOnly`: return only the forced branch (null for viewers), for GetById which has no branch filter.
         private async Task<int?> ResolveViewBranchIdAsync(int? requested, bool enforceOnly = false)
         {
             if (ServerCheckUserContext.HasPermission(_httpContextAccessor, "Asset.ServerCheck.View"))

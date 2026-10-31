@@ -13,7 +13,7 @@ namespace Attendance.Application.Dtos.OtForms
         public string DelegateFullName { get; set; } = null!;
     }
 
-    // Chuỗi bước duyệt đã snapshot lúc tạo đơn (2026-08-07, Giai đoạn 3.1) — xem OtForm.ApprovalSteps.
+    // Snapshotted when the form is created.
     public class OtFormApprovalStepDto
     {
         public int Id { get; set; }

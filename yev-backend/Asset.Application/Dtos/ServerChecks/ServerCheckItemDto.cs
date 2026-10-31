@@ -16,7 +16,7 @@ namespace Asset.Application.Dtos.ServerChecks
         public string StatusText { get; set; } = null!;
         public string? Note { get; set; }
 
-        // True = phải quét QR; false = BE tự ping (hoặc auto-OK nếu không có IP) khi kết thúc phiên.
+        // False = BE pings it (or auto-OKs when it has no IP) at session end.
         public bool RequiresScan { get; set; }
     }
 }

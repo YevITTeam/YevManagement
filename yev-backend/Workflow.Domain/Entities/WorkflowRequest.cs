@@ -2,8 +2,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Bảng trung tâm của module (workflow-module.md §3.3). RequestCode NULL cho tới lúc Submit (Pha 3B-1
-// quyết định #1) — Draft không có mã, sinh atomic lúc nộp qua WorkflowSequences (§5.4).
+// RequestCode is null until Submit, when it is allocated atomically via WorkflowSequences.
 public partial class WorkflowRequest
 {
     public int Id { get; set; }

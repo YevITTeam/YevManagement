@@ -2,8 +2,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Nguồn dữ liệu cho ô nhập dạng chọn (workflow-module.md §3.2). Admin đăng ký sẵn, designer chỉ được
-// chọn từ danh sách — không có đường nào để người thiết kế form tự nhập SQL.
+// Registered by admins; designers can only pick from the list, never enter SQL themselves.
 public partial class FormDataSource
 {
     public int Id { get; set; }

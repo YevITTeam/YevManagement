@@ -1,9 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
-// Ảnh 1x1 trong suốt dùng chung cho MỌI lần kéo — thay ảnh ghost mặc định của trình duyệt (bản sao mờ
-// nửa trong suốt trôi theo con trỏ, chính là thứ gây cảm giác "xuất hồn" khi kết hợp với item gốc cũng
-// bị làm mờ opacity-50). Ẩn hẳn ghost mặc định, chỉ còn item gốc được tô đậm ngay tại chỗ + các item
-// khác trượt mượt nhường chỗ — cảm giác "cầm" trực quan hơn nhiều so với 1 bản mờ bay lơ lửng.
+// Transparent 1x1 image replaces the browser's ghost, which looked doubled next to the dimmed original item.
 let transparentDragImage: HTMLImageElement | null = null;
 function getTransparentDragImage(): HTMLImageElement {
     if (!transparentDragImage) {
@@ -13,21 +10,8 @@ function getTransparentDragImage(): HTMLImageElement {
     return transparentDragImage;
 }
 
-// Kéo-thả sắp xếp lại 1 mảng bằng HTML5 Drag & Drop thuần (không thêm thư viện ngoài) — dùng chung
-// cho 2 khối bước duyệt trong ApprovalStepManager.tsx thay cho 2 nút mũi tên trước đây.
-//
-// Có animation FLIP (First-Last-Invert-Play) khi thứ tự đổi: các item bị đẩy chỗ TRƯỢT mượt sang vị
-// trí mới thay vì nhảy khựng ngay lập tức. Cách làm — không phụ thuộc thư viện ngoài:
-//   1. NGAY TRƯỚC khi đổi thứ tự (trong handleDragOver) — chụp lại vị trí hiện tại (getBoundingClientRect)
-//      của mọi item, lưu theo `key` (KHÔNG theo index, vì index sẽ đổi ngay sau đó).
-//   2. Sau khi React render lại theo thứ tự mới (useLayoutEffect theo dõi `items`) — với mỗi item, so
-//      vị trí MỚI với vị trí ĐÃ CHỤP theo đúng key: lệch bao nhiêu thì dịch ngược lại y hệt bằng
-//      transform, KHÔNG bật transition (để mắt không thấy bước "dịch giả" này).
-//   3. Ép trình duyệt reflow 1 lần (đọc `offsetHeight`) rồi mới sang frame kế tiếp (requestAnimationFrame)
-//      mới bật transition + trả transform về 0 — trình duyệt tự animate mượt từ vị trí "giả" về vị trí
-//      thật. Thiếu bước ép reflow này trình duyệt có thể gộp 2 lần đổi style làm 1, không animate.
-// Item ĐANG được kéo (dragIndex) không tham gia animate này — nó cần đứng yên để nhận highlight riêng
-// (xem className tô đậm ở ApprovalStepManager.tsx), animate theo sẽ giật.
+// FLIP animation: snapshot positions by key before reordering, invert with an untransitioned transform after
+// render, force a reflow, then animate to 0. The dragged item is excluded so it stays still.
 export function useDragReorder<T>(
     items: T[],
     onChange: (next: T[]) => void,
@@ -56,13 +40,11 @@ export function useDragReorder<T>(
             if (dx === 0 && dy === 0) return;
             el.style.transition = "none";
             el.style.transform = `translate(${dx}px, ${dy}px)`;
-            void el.offsetHeight; // ép reflow — tách "dịch giả" và "animate về 0" thành 2 frame riêng
+            void el.offsetHeight; // force reflow so the invert and the animate land in separate frames
             requestAnimationFrame(() => {
                 el.style.transition = "transform 220ms cubic-bezier(0.2, 0, 0, 1)";
                 el.style.transform = "";
-                // Dọn lại "transition" inline sau khi animate xong — nếu không, nó đè vĩnh viễn lên
-                // transition (box-shadow/border-color) khai báo bằng className Tailwind, khiến item
-                // này mất hiệu ứng mượt ở những lần đổi style khác sau đó (VD tới lượt chính nó được kéo).
+                // Clear the inline transition, otherwise it permanently overrides the Tailwind transition classes.
                 el.addEventListener("transitionend", () => { el.style.transition = ""; }, { once: true });
             });
         });

@@ -8,8 +8,7 @@ namespace Attendance.Application.Dtos.OtCases
         public string? DescriptionJp { get; set; }
         public bool RequireSignature { get; set; }
 
-        // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — the FINAL level an OtForm using this OtCase
-        // must reach (2026-08-07, Giai đoạn 3.1 — thay ApprovalLevel cũ, value int 1/2/3 trùng nhau).
+        // JobTitleTerminalLevel: the final level a form using this case must reach.
         public int RequiredApprovalLevel { get; set; }
     }
 }

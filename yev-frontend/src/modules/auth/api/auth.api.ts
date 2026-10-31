@@ -20,9 +20,8 @@ const ENDPOINTS = {
 } as const;
 
 export const AuthApi = {
-  // Đi qua requestWindowsLogin() (single-flight ở client.ts) thay vì api.post thẳng — nếu lúc này có
-  // request khác cũng đang tự retry sau 401, cả hai gộp về đúng 1 lần gọi Negotiate thật sự, tránh
-  // trình duyệt phải xử lý nhiều handshake NTLM chồng chéo (nguyên nhân gây lặp popup đăng nhập domain).
+  // Goes through the single-flight requestWindowsLogin() so concurrent 401 retries share one Negotiate,
+  // avoiding overlapping NTLM handshakes that cause repeated domain login popups.
   windowsLogin: async (): Promise<UserDto> => {
     const payload = (await requestWindowsLogin()) as ApiResponse<WindowsLoginResponseDto> | null;
     if (!payload?.data?.user) {
@@ -31,9 +30,7 @@ export const AuthApi = {
     return payload.data.user;
   },
 
-  // Đăng nhập bằng form username/password tự viết (trang /login) — BE tự xác thực qua AD, không phải
-  // Negotiate (docs/identity-module.md §6). Không đi qua ENDPOINTS.AUTH.login/api.post vì cần tự lưu
-  // token giống windowsLogin (client.ts đã làm sẵn trong requestPasswordLogin).
+  // BE validates against AD (not Negotiate); requestPasswordLogin stores the token like windowsLogin.
   login: async ({ userName, password }: LoginRequestDto): Promise<UserDto> => {
     const payload = (await requestPasswordLogin(userName, password)) as ApiResponse<WindowsLoginResponseDto> | null;
     if (!payload?.data?.user) {
@@ -42,8 +39,7 @@ export const AuthApi = {
     return payload.data.user;
   },
 
-  // Lấy hồ sơ + quyền hiện hành bằng JWT đang có (Bearer) và gia hạn luôn token đó — KHÔNG cần
-  // handshake Negotiate (docs/identity-module.md §6). `client.ts` tự lưu token mới trong payload.
+  // Renews the current JWT without a Negotiate handshake; client.ts stores the new token.
   me: async (): Promise<UserDto> => {
     const payload = await api.get<ApiResponse<WindowsLoginResponseDto>>(ENDPOINTS.AUTH.me);
     if (!payload?.data?.user) {
@@ -52,8 +48,7 @@ export const AuthApi = {
     return payload.data.user;
   },
 
-  // Lấy hồ sơ user hiện tại nếu đang có JWT token. Tuyệt đối KHÔNG tự động gọi windowsLogin()
-  // vì request Negotiate sẽ làm trình duyệt bật popup Windows Security mặc định khi chưa có SSO.
+  // Never fall back to windowsLogin(): Negotiate would pop the Windows Security dialog when SSO is absent.
   getCurrentUser: async (): Promise<UserDto | null> => {
     if (typeof window === "undefined") return null;
     if (!getAuthToken()) return null;
@@ -64,15 +59,13 @@ export const AuthApi = {
     }
   },
 
-  // Chuẩn bị trước 1 user cho UserName cụ thể — dùng khi nhân viên mới chưa từng đăng nhập Windows
-  // lần nào (docs/identity-module.md §6). deviceName (2026-07-11) chỉ để tham khảo/hiển thị,
-  // KHÔNG còn dùng để khớp login (chỉ khớp theo userName).
+  // Pre-provisions a user who has never logged in via Windows; deviceName is display-only, login matches userName.
   createUser: async (data: CreateUserDto) => {
     const response = await api.post<ApiResponse<UserDto>>(ENDPOINTS.AUTH.createUser, data);
     return response.data;
   },
 
-  // roleId optional (docs/identity-module.md §6) — lọc user thuộc Role đó; không truyền → trả toàn bộ.
+  // Omit roleId to get all users.
   getAllUsersWithRoles: async (roleId?: number) => {
     const query = roleId !== undefined ? `?roleId=${roleId}` : "";
     const response = await api.get<ApiResponse<UserDto[]>>(`${ENDPOINTS.AUTH.getAllUsersWithRoles}${query}`);
@@ -83,7 +76,7 @@ export const AuthApi = {
     return response.data;
   },
 
-  // Sửa CHỈ tên hiển thị (FullName) — không sửa được userName/deviceName (docs/identity-module.md §6).
+  // Only FullName is editable.
   updateUserFullName: async ({ userId, fullName }: UpdateUserFullNameDto) => {
     const response = await api.put<ApiResponse<UserDto>>(ENDPOINTS.AUTH.updateUserFullName, { userId, fullName });
     return response.data;

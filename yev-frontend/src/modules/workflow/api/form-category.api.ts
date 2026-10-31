@@ -3,7 +3,7 @@ import type { FormCategoryDto, CreateUpdateFormCategoryDto } from "@/modules/wor
 import type { FormCategoryCoordinatorDto } from "@/modules/workflow/types/form-category-coordinator.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Tiền tố "/Workflow" bắt buộc (workflow-module.md §1.7).
+// "/Workflow" prefix avoids route clashes with Attendance controllers.
 const ENDPOINTS = {
     FORM_CATEGORY: {
         getFormCategoryPageNation: "/Workflow/FormCategory/grid-list",

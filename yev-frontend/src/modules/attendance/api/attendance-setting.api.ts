@@ -11,20 +11,17 @@ const ENDPOINTS = {
 } as const;
 
 export const AttendanceSettingApi = {
-    // GET không cần permission (mọi tài khoản đăng nhập đều gọi được) — màn Tạo đơn cần cấu hình này
-    // để tự tính phiếu ăn và tô đỏ lũy kế vượt ngưỡng, xem docs §6d.
+    // Open to every signed-in user: the create-form screen needs it for meal vouchers and over-limit highlighting.
     getSetting: async () => {
         const response = await api.get<ApiResponse<AttendanceSettingDto>>(ENDPOINTS.ATTENDANCE_SETTING.get);
         return response.data;
     },
-    // PUT cần permission `Attendance.Setting.Update` (thực tế chỉ Admin) — FE ẩn nút Lưu nếu thiếu quyền,
-    // BE vẫn enforce lại 403.
+    // Requires Attendance.Setting.Update; BE enforces 403 even though FE hides the Save button.
     updateSetting: async (data: UpdateAttendanceSettingDto) => {
         const response = await api.put<ApiResponse<AttendanceSettingDto>>(ENDPOINTS.ATTENDANCE_SETTING.update, data);
         return response.data;
     },
-    // Cùng permission với updateSetting (Attendance.Setting.Update) — BE trả false (không throw) nếu
-    // SMTP gửi thất bại, xem AttendanceSettingService.SendTestEmailAsync.
+    // BE returns false (does not throw) when SMTP sending fails.
     sendTestEmail: async (data: SendTestEmailDto) => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.ATTENDANCE_SETTING.testEmail, data);
         return response.data;

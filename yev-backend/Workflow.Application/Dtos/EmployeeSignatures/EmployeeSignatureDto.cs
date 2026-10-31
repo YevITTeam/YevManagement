@@ -4,7 +4,7 @@ namespace Workflow.Application.Dtos.EmployeeSignatures
     {
         public int EmployeeId { get; set; }
 
-        // System.Text.Json tự serialize byte[] thành chuỗi base64.
+        // Serialized as base64 by System.Text.Json.
         public byte[] SignatureImage { get; set; } = null!;
 
         public DateTime UpdatedAt { get; set; }

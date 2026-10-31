@@ -17,8 +17,7 @@ function formatDateTime(value: string) {
     return new Date(value).toLocaleString("vi-VN");
 }
 
-// Tab "Lịch sử" trong màn chi tiết Device — GET /AuditTrail/record?tableName=Device&recordId=
-// (docs/asset-module.md §4), không phân trang, mới nhất trước.
+// Device History tab: unpaged, newest first.
 export default function DeviceAuditHistoryPanel({ deviceId }: DeviceAuditHistoryPanelProps) {
     const [rows, setRows] = useState<AuditTrailDto[]>([]);
 

@@ -2,9 +2,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Domain.Entities;
 
-// Ẩn/hiện · bắt buộc theo điều kiện (workflow-module.md §3.2, §5.3). TargetFieldId là ô BỊ điều
-// khiển (Cascade — xoá field đó thì điều kiện này vô nghĩa, xoá theo), SourceFieldId là ô MANG giá
-// trị điều kiện (Restrict — không cho xoá field đang được điều kiện khác dựa vào).
+// Target field (controlled) cascades on delete; Source field (holds the value) is Restrict so it can't be deleted while used.
 public partial class FormFieldCondition
 {
     public int Id { get; set; }

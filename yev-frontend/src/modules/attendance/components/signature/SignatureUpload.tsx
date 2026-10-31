@@ -5,16 +5,13 @@ import { useTranslations } from "next-intl";
 import { cutOutSignature } from "@/lib/signatureCutout";
 
 interface SignatureUploadProps {
-    // Base64 thuần (không kèm prefix data:image/...;base64,) của chữ ký đang có hiệu lực, để hiện preview
-    // sẵn khi mở màn — docs/attendance-module.md §API chỉ yêu cầu preview, không bắt buộc phải sửa lại.
+    // Raw base64 (no data: prefix) of the active signature, for preview.
     initialImage?: string | null;
     onChange: (base64: string | null) => void;
     disabled?: boolean;
 }
 
-// Upload file ảnh chữ ký tay thật (PNG/JPG chụp/scan) — KHÔNG phải canvas vẽ bằng chuột/tay
-// (docs/attendance-module.md §API đầu file + §1.3.D + §6: "Upload file ảnh, KHÔNG phải canvas ký bằng
-// chuột/tay ... FE chỉ cần <input type="file" accept="image/*"> rồi convert sang base64").
+// Real signature image upload (scan/photo), deliberately not a drawing canvas.
 export default function SignatureUpload({ initialImage, onChange, disabled = false }: SignatureUploadProps) {
     const t = useTranslations("Attendance.SignatureUpload");
     const tCommon = useTranslations("Common");
@@ -41,7 +38,7 @@ export default function SignatureUpload({ initialImage, onChange, disabled = fal
     return (
         <div className="space-y-2">
             {preview ? (
-                // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được và cần width/height cố định trái với className fluid ở đây
+                // eslint-disable-next-line @next/next/no-img-element -- base64 data URI; next/image can't optimize it and needs fixed width/height
                 <img
                     src={`data:image/png;base64,${preview}`}
                     alt={t("newImageAlt")}

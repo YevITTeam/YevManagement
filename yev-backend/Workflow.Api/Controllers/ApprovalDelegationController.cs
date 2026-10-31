@@ -6,9 +6,7 @@ using Workflow.Application.Interfaces.Service;
 
 namespace Workflow.Api.Controllers
 {
-    // Mỗi người tự quản lý ủy quyền của chính mình — Service chặn sửa/xoá dòng không phải của mình
-    // (workflow-module.md §7). DelegatorEmployeeId luôn resolve = người dùng hiện tại, không nhận qua
-    // body (xem CreateUpdateApprovalDelegationDto).
+    // Delegator is always the current user (never taken from the body); Service blocks editing others' rows.
     public class ApprovalDelegationController : WorkflowBaseController
     {
         private readonly IApprovalDelegationService _approvalDelegationService;

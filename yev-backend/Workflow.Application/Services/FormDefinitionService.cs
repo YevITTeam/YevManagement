@@ -119,8 +119,7 @@ namespace Workflow.Application.Services
 
             (await _unitOfWork.FormCategories.GetByIdAsync(request.FormCategoryId)).OrThrowNotFound("Danh mục form", request.FormCategoryId);
 
-            // RouteConditionType bất biến (workflow-module.md §3.2) — không nằm trong UpdateDto, chỉ
-            // re-validate 2 field key theo đúng kiểu đã chốt lúc tạo.
+            // RouteConditionType is immutable, so only re-validate the field keys against the stored type.
             GuardRouteFieldKeys(entity.RouteConditionType, request.RouteNumericFieldKey, request.RouteClassFieldKey);
 
             entity.Code = request.Code;
@@ -153,9 +152,7 @@ namespace Workflow.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // LayoutHtml là lớp trình bày thuần tuý (workflow-module.md §1.5) — tách khỏi UpdateAsync để
-        // designer "Nhập từ Word" lưu layout độc lập với thông tin cơ bản của form, giống cách
-        // fields/conditions/accesses/routes đã có endpoint bulk-replace riêng.
+        // Separate from UpdateAsync so the "Import from Word" designer saves layout independently of basic info.
         public async Task<FormDefinitionDto> UpdateLayoutAsync(int formDefinitionId, UpdateFormDefinitionLayoutDto request, int? currentUserId)
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
@@ -206,11 +203,8 @@ namespace Workflow.Application.Services
             });
         }
 
-        // KHÔNG xoá-tất-tạo-lại như các pattern "replace" khác trong module: FormFieldConditions trỏ
-        // Id thẳng vào FormFields (TargetFieldId Cascade / SourceFieldId Restrict, workflow-module.md
-        // §3.2) — xoá-tạo-lại sẽ đổi Id liên tục và làm gãy tham chiếu đã cấu hình trước đó. Merge
-        // theo Item.Id: có Id + khớp field hiện có -> update tại chỗ; không có Id -> tạo mới; field cũ
-        // không còn trong danh sách gửi lên -> xoá (trừ khi đang là SourceFieldId của condition khác).
+        // Merged by Id, not delete-and-recreate: FormFieldConditions reference field Ids, so recreating would break them.
+        // Fields missing from the payload are deleted unless still used by a condition.
         public async Task<List<FormFieldDto>> ReplaceFieldsAsync(int formDefinitionId, ReplaceFormFieldsDto request)
         {
             (await _unitOfWork.FormDefinitions.GetByIdAsync(formDefinitionId)).OrThrowNotFound("Form", formDefinitionId);
@@ -253,8 +247,7 @@ namespace Workflow.Application.Services
                 _unitOfWork.FormFields.Delete(field);
             }
 
-            // SortOrder do BE tự gán = vị trí trong mảng gửi lên, không tin SortOrder FE gửi lên —
-            // tránh lệch giữa nhiều lần lưu khi FE tính toán sai.
+            // SortOrder is the array position; the FE-sent SortOrder is not trusted.
             var sortOrder = 0;
             foreach (var item in request.Items)
             {
@@ -339,8 +332,7 @@ namespace Workflow.Application.Services
             });
         }
 
-        // Không bảng nào tham chiếu Id của FormFieldConditions -> đúng pattern xoá-tất-tạo-lại như
-        // FormCategoryCoordinators/EmployeeOrgUnits, khác hẳn ReplaceFieldsAsync ở trên.
+        // Delete-and-recreate is safe: nothing references FormFieldConditions.Id.
         public async Task<List<FormFieldConditionDto>> ReplaceConditionsAsync(int formDefinitionId, ReplaceFormFieldConditionsDto request)
         {
             (await _unitOfWork.FormDefinitions.GetByIdAsync(formDefinitionId)).OrThrowNotFound("Form", formDefinitionId);
@@ -413,10 +405,7 @@ namespace Workflow.Application.Services
             }
         }
 
-        // Dựng đồ thị cạnh SourceFieldId -> TargetFieldId (workflow-module.md §5.3: "Service PHẢI
-        // chặn vòng lặp khi lưu") rồi DFS 3 màu (unvisited/visiting/visited) để phát hiện chu trình.
-        // Chạy trên TOÀN BỘ danh sách gửi lên trong 1 lượt lưu, không chỉ từng cặp riêng lẻ — 1 chu
-        // trình có thể đi qua nhiều điều kiện khác nhau (A->B->C->A).
+        // 3-colour DFS over the whole payload: a cycle may span several conditions (A->B->C->A).
         private static void GuardNoCycle(List<(int Source, int Target)> edges)
         {
             var adjacency = edges
@@ -473,8 +462,7 @@ namespace Workflow.Application.Services
                 .ToList();
         }
 
-        // Không bảng nào tham chiếu Id của FormAccesses -> xoá-tất-tạo-lại như FormCategoryCoordinators,
-        // không phải merge-theo-Id như FormFields (workflow-module.md §3.2).
+        // Delete-and-recreate is safe: nothing references FormAccesses.Id.
         public async Task<List<FormAccessDto>> ReplaceAccessesAsync(int formDefinitionId, ReplaceFormAccessesDto request)
         {
             (await _unitOfWork.FormDefinitions.GetByIdAsync(formDefinitionId)).OrThrowNotFound("Form", formDefinitionId);
@@ -596,10 +584,8 @@ namespace Workflow.Application.Services
             });
         }
 
-        // Merge FormRoutes theo Id (như FormFields ở Pha 2C) vì WorkflowRequests.FormRouteId (Pha 3B)
-        // sẽ là FK thật Restrict trỏ vào đây — route đã dùng bởi 1 đơn thật không được đổi Id.
-        // FormApprovalSteps/FormApprovalStepParticipants thì luôn xoá-tất-tạo-lại (không bảng nào
-        // tham chiếu Id của chúng — WorkflowRequestSteps chỉ snapshot GIÁ TRỊ, không FK ngược).
+        // Routes are merged by Id because WorkflowRequests.FormRouteId references them (Restrict);
+        // steps/participants are recreated since request steps only snapshot their values.
         public async Task<ReplaceFormRoutesResultDto> ReplaceRoutesAsync(int formDefinitionId, ReplaceFormRoutesDto request)
         {
             var form = (await _unitOfWork.FormDefinitions.GetByIdAsync(formDefinitionId)).OrThrowNotFound("Form", formDefinitionId);
@@ -640,8 +626,7 @@ namespace Workflow.Application.Services
 
             foreach (var route in existing.Where(x => !incomingIds.Contains(x.Id)))
             {
-                // Guard bổ sung ở Pha 3B-1 (đúng chỗ TODO đã đánh dấu từ Pha 3A) — WorkflowRequests giờ
-                // đã tồn tại, chặn xoá route còn đơn thật đang tham chiếu FormRouteId.
+                // Block deleting a route still referenced by a real request.
                 var inUse = await _unitOfWork.WorkflowRequests.FirstOrDefaultAsync(x => x.FormRouteId == route.Id);
                 if (inUse is not null)
                     throw new DomainException($"Không thể xóa nhánh '{route.NameVn}' vì đang có đơn tham chiếu tới nhánh này.");
@@ -745,10 +730,8 @@ namespace Workflow.Application.Services
             return result;
         }
 
-        // RouteConditionType = None không có khái niệm "thêm nhánh sau" — cấu trúc chỉ có đúng 1
-        // nhánh, và nhánh đó bắt buộc IsDefault (workflow-module.md §5.2). Mọi kiểu khác chỉ chặn
-        // "quá nhiều IsDefault", KHÔNG bắt buộc phải CÓ IsDefault lúc lưu — "không có nhánh mặc định"
-        // là luật lúc NỘP đơn (Pha 3B), không phải điều kiện để lưu cấu hình.
+        // None means exactly one route, which must be IsDefault. Other types only reject multiple defaults;
+        // a missing default is a submit-time rule, not a save-time one.
         private static void GuardRouteStructure(RouteConditionType routeConditionType, List<ReplaceFormRouteItemDto> items)
         {
             if (routeConditionType == RouteConditionType.None)
@@ -762,8 +745,7 @@ namespace Workflow.Application.Services
                 throw new DomainException("Chỉ được có tối đa 1 nhánh mặc định.");
         }
 
-        // Nhánh IsDefault=true là nhánh DỰ PHÒNG dùng khi không khớp nhánh nào khác (§5.2) — không cần
-        // tự có Min/Max/ClassValue riêng, nên miễn 2 luật bắt buộc dưới đây cho nhánh mặc định.
+        // The default route is a fallback, so it is exempt from the Min/Max/ClassValue requirements.
         private static void GuardRouteFields(RouteConditionType routeConditionType, ReplaceFormRouteItemDto route)
         {
             if (route.IsDefault)
@@ -816,10 +798,8 @@ namespace Workflow.Application.Services
                 {
                     var jobTitle = (await _unitOfWork.JobTitles.GetByIdAsync(participant.JobTitleId.Value)).OrThrowNotFound("Chức danh", participant.JobTitleId.Value);
 
-                    // Chức danh phổ thông (IsUniquePerOrgUnit=false) có thể nhiều người cùng giữ tại 1
-                    // đơn vị — ResolveStepParticipantsAsync chỉ lấy 1 người bất kỳ (FirstOrDefault),
-                    // route sẽ không xác định. Chặn dùng làm mốc Approver, Viewer vẫn cho phép (chỉ để
-                    // hiển thị, không cần xác định). Chốt 2026-08-26, workflow-module.md §10.
+                    // Non-unique titles can be held by several people per unit and participant resolution picks
+                    // an arbitrary one, so they're allowed as Viewer but not as Approver.
                     if (participant.ParticipantRole == ParticipantRole.Approver && !jobTitle.IsUniquePerOrgUnit)
                         throw new DomainException($"Bước '{step.NameVn}': chức danh '{jobTitle.NameVn}' là chức danh phổ thông (nhiều người cùng giữ), không dùng làm người duyệt được — chỉ chức danh duy nhất/đơn vị (vd Trưởng phòng) mới route đúng.");
 
@@ -829,14 +809,8 @@ namespace Workflow.Application.Services
             }
         }
 
-        // "Duyệt đủ cấp tổ chức" (workflow-module.md §5.x, chốt 2026-08-29) — KHÔNG phải suy luận
-        // runtime (§1.6 vẫn giữ nguyên, ResolveStepParticipantsAsync §5.5 không đổi gì): đây thuần là
-        // ràng buộc lúc LƯU cấu hình route. Chỉ xét bước OrgUnitScope=Fixed (có OrgUnitId cụ thể ngay
-        // lúc thiết kế) — bước ApplicantUnit không có đơn vị xác định trước khi nộp đơn nên bỏ qua.
-        // Nếu route có ≥2 bước Fixed nằm trên CÙNG 1 nhánh cha-con của cây tổ chức, bắt buộc đủ bước
-        // cho MỌI đơn vị tổ tiên nằm giữa 2 đầu, và thứ tự bước phải tăng dần từ đơn vị sâu (cấp thấp)
-        // lên đơn vị cao. 2 bước Fixed KHÔNG có quan hệ tổ tiên-con cháu (vd 2 phòng ban duyệt song
-        // song) bị bỏ qua — không phải lỗi cấu hình.
+        // Save-time rule, not runtime inference: Fixed-scope steps on the same ancestor chain must cover every
+        // ancestor unit in between, ordered from the deepest unit upward. Unrelated Fixed units are ignored.
         private async Task GuardOrgLevelChainAsync(string routeName, List<ReplaceFormApprovalStepItemDto> steps)
         {
             var fixedSteps = steps
@@ -923,9 +897,7 @@ namespace Workflow.Application.Services
                 throw new DomainException("Nguồn người duyệt (ParticipantSource) không khớp với cột đích được điền.");
         }
 
-        // Cảnh báo KHÔNG chặn lưu (workflow-module.md §5.2: "cảnh báo nếu các khoảng chồng nhau hoặc
-        // để hở") — chỉ xét route có Min/Max, bỏ qua route IsDefault (đó là nhánh dự phòng, không
-        // tham gia so khớp khoảng). Khớp đúng luật resolve ở §5.2: MinValue <= v < MaxValue.
+        // Non-blocking warning; default routes are skipped. Matches the resolve rule MinValue <= v < MaxValue.
         private static string? BuildNumericRangeWarning(List<ReplaceFormRouteItemDto> items)
         {
             var ranges = items
@@ -952,10 +924,7 @@ namespace Workflow.Application.Services
             return warnings.Count > 0 ? $"Cảnh báo cấu hình khoảng số: {string.Join("; ", warnings)}." : null;
         }
 
-        // Version chỉ tăng khi PUBLISH LẠI (đã publish từ trước, gọi lần nữa sau khi sửa cấu hình) —
-        // lần publish đầu tiên giữ nguyên Version=1 mặc định (workflow-module.md §3.2: "tăng mỗi lần
-        // publish lại"). Không có endpoint unpublish trong roadmap nên "gọi /publish khi đã publish"
-        // luôn có nghĩa là "vừa sửa xong, publish lại".
+        // Version bumps only on re-publish (first publish keeps 1); with no unpublish, publishing again means "edited".
         public async Task<FormDefinitionDto> PublishAsync(int formDefinitionId, int? currentUserId)
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
@@ -986,12 +955,8 @@ namespace Workflow.Application.Services
             return await GetByIdAsync(formDefinitionId);
         }
 
-        // Copies FormFields + FormFieldConditions + FormRoutes/FormApprovalSteps/
-        // FormApprovalStepParticipants into a brand-new FormDefinition. Does NOT copy FormAccesses
-        // (§3.2, see CloneFormDefinitionDto) — access is configured per form, never inherited.
-        // Needs several intermediate SaveChangesAsync calls to get real Ids for the new route/step/
-        // field before creating their children; a mid-way failure leaves orphaned rows under clone.Id,
-        // but since that's a fresh unpublished form, the admin can just delete it and retry.
+        // FormAccesses are not copied (configured per form). Not transactional: a mid-way failure leaves an
+        // unpublished partial clone the admin can delete and retry.
         public async Task<FormDefinitionDto> CloneAsync(int formDefinitionId, CloneFormDefinitionDto request, int? currentUserId)
         {
             var currentEmployeeId = await ResolveCurrentEmployeeIdAsync(currentUserId);
@@ -1026,7 +991,7 @@ namespace Workflow.Application.Services
             };
 
             await _unitOfWork.FormDefinitions.AddAsync(clone);
-            await _unitOfWork.SaveChangesAsync(); // cần clone.Id thật trước khi tạo FormFields con
+            await _unitOfWork.SaveChangesAsync(); // need the real clone.Id before creating child FormFields
 
             var sourceFields = (await _unitOfWork.FormFields.FindAsync(x => x.FormDefinitionId == formDefinitionId && !x.IsDeleted)).ToList();
 
@@ -1058,9 +1023,8 @@ namespace Workflow.Application.Services
                 await _unitOfWork.FormFields.AddAsync(newField);
             }
 
-            // FieldKey là UNIQUE (FormDefinitionId, FieldKey) nên dùng làm khoá remap Source/Target
-            // sang Id mới thay vì phải giữ tham chiếu object EF (an toàn hơn qua nhiều lần SaveChanges).
-            await _unitOfWork.SaveChangesAsync(); // cần Id thật của FormFields mới trước khi remap FormFieldConditions
+            // FieldKey is unique per form, so it remaps Source/Target Ids more safely than EF object refs across saves.
+            await _unitOfWork.SaveChangesAsync(); // need new FormField Ids before remapping conditions
 
             var newFields = (await _unitOfWork.FormFields.FindAsync(x => x.FormDefinitionId == clone.Id && !x.IsDeleted)).ToList();
             var keyToNewId = newFields.ToDictionary(x => x.FieldKey, x => x.Id, StringComparer.OrdinalIgnoreCase);
@@ -1167,9 +1131,7 @@ namespace Workflow.Application.Services
             return await GetByIdAsync(clone.Id);
         }
 
-        // Employees.UserId -> Identity.Users.Id là điểm neo cross-DB duy nhất (workflow-module.md
-        // §1.4) — nếu tài khoản đang đăng nhập chưa được gán vào bất kỳ hồ sơ Employee nào thì không
-        // có CreatedByEmployeeId hợp lệ để ghi, phải chặn ngay chứ không ghi tạm bằng giá trị giả.
+        // Employees.UserId is the only cross-DB anchor; without a linked Employee there is no valid CreatedBy, so fail fast.
         private async Task<int> ResolveCurrentEmployeeIdAsync(int? currentUserId)
         {
             if (currentUserId is null)
@@ -1182,10 +1144,7 @@ namespace Workflow.Application.Services
             return employee.Id;
         }
 
-        // FormFields chưa scaffold ở Pha 2B (workflow-module.md §8 Pha 2C) nên chưa thể xác thực
-        // RouteNumericFieldKey/RouteClassFieldKey trỏ đúng vào 1 FieldKey thật — chỉ validate ở mức
-        // "có nhập hay chưa" theo đúng RouteConditionType đã chọn. Nâng cấp thành picker thật khi có
-        // FormFields.
+        // Only checks presence per RouteConditionType, not that the key matches a real FieldKey.
         private static void GuardRouteFieldKeys(RouteConditionType type, string? numericFieldKey, string? classFieldKey)
         {
             if ((type == RouteConditionType.NumericRange || type == RouteConditionType.Both) && string.IsNullOrWhiteSpace(numericFieldKey))

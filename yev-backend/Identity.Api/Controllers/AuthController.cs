@@ -45,8 +45,6 @@ namespace Identity.Api.Controllers
             _webHostEnvironment = webHostEnvironment;
         }
 
-        // Prefix bắt buộc của mọi UserName trong TestLoginAccount — xem
-        // Identity.Domain.Entities.TestLoginAccount.
         private const string TestLoginPrefix = "TEST\\";
 
         [Authorize(AuthenticationSchemes = "Negotiate")]
@@ -61,20 +59,13 @@ namespace Identity.Api.Controllers
             return Success(BuildSession(User), "Đăng nhập thành công!");
         }
 
-        // Đăng nhập bằng form username/password tự viết (không phải popup Negotiate của trình duyệt),
-        // dùng cho trang /login tuỳ biến ở FE. Vẫn xác thực bằng Windows Authentication thật sự — bind
-        // thẳng vào AD qua PrincipalContext.ValidateCredentials, không lưu password ở đâu cả. Sau khi
-        // AD xác nhận đúng, dựng 1 ClaimsPrincipal "mồi" chỉ có Name rồi chạy qua đúng
-        // MyClaimsTransformation (IClaimsTransformation) mà windows-login/me đang dùng, để tái sử dụng
-        // nguyên vẹn logic JIT-provisioning + gộp Role/Permission thay vì viết lại.
+        // Credentials are validated against AD (never stored), then a minimal principal runs through
+        // MyClaimsTransformation to reuse JIT provisioning and role/permission loading.
         [AllowAnonymous]
         [HttpPost("login")]
         public async Task<ActionResult<ApiResponse<LoginResponseDto>>> Login([FromBody] LoginRequestDto request)
         {
-            // Đăng nhập TEST (2026-08-28, theo yêu cầu người dùng — phục vụ test nhanh Cây duyệt Chuyền
-            // khi nhân viên thật chưa có tài khoản AD): UserName bắt đầu bằng "TEST\" → xác thực bằng
-            // TestLoginAccount.PasswordHash, KHÔNG gọi AD. Chỉ hoạt động khi Development — tự động vô
-            // hiệu hoá đường bypass này nếu server chạy môi trường khác (khớp cách /scalar/v1 hiện có).
+            // "TEST\" accounts use TestLoginAccount.PasswordHash instead of AD; only in Development.
             if (request.UserName != null && request.UserName.StartsWith(TestLoginPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 if (!_webHostEnvironment.IsDevelopment())
@@ -115,9 +106,7 @@ namespace Identity.Api.Controllers
             return Success(BuildSession(transformedPrincipal), "Đăng nhập thành công!");
         }
 
-        // Logs in with the code scanned from a printed QR (YEV Scan mobile app). The code only maps to a
-        // user through the LoginQrCode table; the session is then built through the same
-        // MyClaimsTransformation path as the other login endpoints.
+        // The QR code maps to a user only through the LoginQrCode table.
         [AllowAnonymous]
         [HttpPost("qr-login")]
         public async Task<ActionResult<ApiResponse<LoginResponseDto>>> QrLogin([FromBody] QrLoginRequestDto request)
@@ -137,14 +126,8 @@ namespace Identity.Api.Controllers
             return Success(BuildSession(transformedPrincipal), "Đăng nhập bằng QR thành công!");
         }
 
-        // Re-reads the current profile/permissions and renews the JWT using the Bearer token the caller
-        // already has — no Negotiate handshake involved. The frontend calls this on every page load when
-        // a token is already stored, instead of hitting windows-login again: each windows-login call is
-        // one more NTLM/Kerberos handshake, and on a machine where the browser has no SSO configured for
-        // this origin that handshake is a domain credential prompt — the reason users kept being asked to
-        // sign in again although they had just signed in successfully.
-        // Permissions stay fresh because MyClaimsTransformation reloads Role/Permission from the DB on
-        // every authenticated request, Bearer requests included.
+        // Renews the JWT from the existing Bearer token; avoids another windows-login handshake, which prompts for
+        // domain credentials when the browser has no SSO for this origin.
         [Authorize]
         [HttpGet("me")]
         public ActionResult<ApiResponse<LoginResponseDto>> Me()
@@ -152,13 +135,8 @@ namespace Identity.Api.Controllers
             return Success(BuildSession(User), "Lấy thông tin phiên đăng nhập thành công!");
         }
 
-        // Builds the profile + JWT from the given principal. Role/Permission/FullName… are read from the
-        // "DbRoles" identity that MyClaimsTransformation just loaded from the DB for THIS principal; the
-        // copies carried inside an incoming JWT are only the snapshot taken at login time and may already
-        // be stale (e.g. a permission revoked in the meantime).
-        // Takes an explicit principal (not just controller's `User`) so Login() above can build a session
-        // from a principal it assembled itself after validating credentials against AD, without having
-        // gone through the ASP.NET Core authentication middleware.
+        // Reads roles/permissions from the fresh "DbRoles" identity, not the possibly stale JWT copies.
+        // Takes an explicit principal so Login() can pass one built after AD validation, outside the auth middleware.
         private LoginResponseDto BuildSession(ClaimsPrincipal principal)
         {
             var dbIdentity = principal.Identities
@@ -220,8 +198,7 @@ namespace Identity.Api.Controllers
             }
         }
 
-        // Admin edits ONLY the display name (FullName). UserName (Windows login identity) and DeviceName
-        // are not editable here — see UserService.UpdateUserFullNameAsync.
+        // Only FullName is editable; UserName and DeviceName are login identity.
         [RequirePermission("Identity.User.UpdateFullName")]
         [HttpPut("update-user-fullname")]
         public async Task<ActionResult<ApiResponse<UserDto>>> UpdateUserFullName([FromBody] UpdateUserFullNameDto request)

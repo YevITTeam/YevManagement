@@ -25,10 +25,8 @@ interface StepCardProps {
     onRemove: () => void;
 }
 
-// KHÔNG gộp "w-full" ở đây — 1 số nơi dùng chung constant này còn tự thêm w-28/w-32 (participant
-// row): 2 class w-* cùng lúc trên 1 phần tử khiến Tailwind chọn class nào thắng tuỳ thứ tự sinh CSS,
-// từng khiến select "Người duyệt" bị kéo full-width tràn màn hình. Field nào cần full width tự thêm
-// "w-full" ở nơi gọi.
+// Don't add "w-full" here: callers append w-28/w-32 and two w-* classes conflict by CSS order
+// (it once stretched the approver select full-width). Add "w-full" at the call site instead.
 const fieldBaseClassName =
     "h-9 rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 const fieldClassName = `${fieldBaseClassName} w-full`;

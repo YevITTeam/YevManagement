@@ -34,7 +34,7 @@ export const toExportQuery = (filter: EmployeeExportFilter, extra: Record<string
 };
 
 export const EmployeeImportApi = {
-    // multipart/form-data — field "file". Chỉ đọc, không ghi DB (docs/attendance-module.md §API).
+    // Read-only, no DB writes.
     previewImport: async (file: File) => {
         const formData = new FormData();
         formData.append("file", file);
@@ -44,14 +44,14 @@ export const EmployeeImportApi = {
         );
         return response.data;
     },
-    // Gửi lại NGUYÊN "rows" từ Preview (kể cả Resolved*/isNew*) — BE tự re-validate lại từ đầu.
+    // Re-send the preview rows unchanged (including Resolved*/isNew*); BE re-validates from scratch.
     confirmImport: async (rows: EmployeeImportPreviewRowDto[]) => {
         const response = await api.post<ApiResponse<EmployeeImportConfirmResultDto>>(ENDPOINTS.EMPLOYEE_IMPORT.confirm, {
             rows,
         });
         return response.data;
     },
-    // multipart/form-data — field "file". Áp dụng thẳng, không có Preview riêng (mục 5, 2026-08-27).
+    // Applied directly, no preview step.
     importOtHourLimits: async (file: File) => {
         const formData = new FormData();
         formData.append("file", file);
@@ -61,9 +61,7 @@ export const EmployeeImportApi = {
         );
         return response.data;
     },
-    // multipart/form-data — field "file" + query Year/Month. Áp dụng thẳng, không có Preview riêng
-    // (2026-09-03) — tổng quát cho MỌI Phòng ban (Coordinator của bất kỳ Phòng ban nào cũng gọi được,
-    // không hardcode "Chế tạo" như ProductionEmployeeImportApi.applyAccumulation).
+    // Applied directly, no preview step; works for any department, unlike the production-only applyAccumulation.
     importMonthlyAccumulation: async (year: number, month: number, file: File) => {
         const formData = new FormData();
         formData.append("file", file);

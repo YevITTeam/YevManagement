@@ -35,8 +35,7 @@ namespace Asset.Application.Services
 
         public async Task<InventoryAssignmentDto?> GetMyAssignmentAsync()
         {
-            // ServerCheckUserContext chỉ đọc claim "UserId"/"Permission" từ JWT — không đặc thù cho
-            // ServerCheck, dùng lại thay vì tạo 1 helper trùng lặp.
+            // ServerCheckUserContext only reads JWT claims, nothing ServerCheck-specific, so it is reused here.
             var userId = ServerCheckUserContext.GetUserId(_httpContextAccessor);
             if (userId == null) return null;
 

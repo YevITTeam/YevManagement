@@ -34,14 +34,10 @@ export default function CategoryManagement() {
     const t = useTranslations("Attendance.CategoryManagement");
     const tCommon = useTranslations("Common");
     const { user } = useAuth();
-    // Mỗi tab tự gate theo ĐÚNG quyền quản trị của nó (2026-09-26) — trước đây 8 tab chung 1 điều kiện
-    // "canManageCategories" nên Người phụ trách Cây duyệt thấy cả tab Bộ phận/Nhóm/Lý do/Cấu hình...
-    // dù không có quyền gì trong đó. Dùng .Create/.Update (không dùng .View vì View đã cấp rộng cho
-    // Trưởng nhóm/Người phụ trách chỉ để nạp dropdown).
+    // Each tab is gated by its own .Create/.Update permission; .View is granted broadly just to load dropdowns.
     const canViewReports = hasPermission(user, "Attendance.ProductionOtReport.View");
     const canCreateEmployee = hasPermission(user, "Attendance.Employee.Create");
-    // "settings" không có addLabel — tab này không phải danh sách CRUD nên không có nút "Thêm mới"
-    // (xem chỗ ẩn nút bên dưới).
+    // "settings" is not a CRUD list, so it has no add button.
     const allTabs: { key: CategoryTab; label: string; addLabel: string | null; visible: boolean }[] = [
         { key: "workshops", label: t("tabWorkshops"), addLabel: t("addWorkshops"), visible: hasPermission(user, "Attendance.Workshop.Create") },
         { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments"), visible: hasPermission(user, "Attendance.Department.Create") },
@@ -78,15 +74,11 @@ export default function CategoryManagement() {
     const tabs = allTabs.filter((tab) => tab.visible);
     const defaultTabKey: CategoryTab = tabs[0]?.key ?? "departments";
     const [activeTab, setActiveTab] = usePersistedTab<CategoryTab>("ot-category-tab", tabs.map((tab) => tab.key), defaultTabKey);
-    // Tab nào đã từng được xem thì mới mount (và giữ mounted luôn sau đó) — chỉ tab mặc định mount
-    // ngay từ đầu. Tránh gọi song song cả 10 API mỗi lần vào màn "Danh mục" trong khi đa số user chỉ
-    // xem 1-2 tab/lượt, nhưng vẫn giữ được lợi ích "chuyển tab tức thì, không tải lại" cho những tab
-    // đã ghé qua trong phiên này.
+    // Mount a tab on first visit and keep it mounted: avoids firing every tab's API on entry while keeping
+    // instant switching for visited tabs.
     const [visitedTabs, setVisitedTabs] = useState<Set<CategoryTab>>(() => new Set());
     const isMounted = (key: CategoryTab) => key === activeTab || visitedTabs.has(key);
-    // Cả 9 tab giờ mounted song song (xem ghi chú bên dưới) nên mỗi tab phải báo loading vào
-    // đúng slot riêng của nó — nếu dùng chung 1 state boolean, tab nào báo xong (setLoading(false))
-    // sau cùng sẽ đè mất trạng thái loading thật của tab đang xem.
+    // Per-tab loading slots: with one shared boolean, whichever mounted tab finishes last would overwrite the visible tab's state.
     const [loadingByTab, setLoadingByTab] = useState<Record<CategoryTab, boolean>>({
         workshops: false,
         departments: false,
@@ -126,14 +118,11 @@ export default function CategoryManagement() {
     };
 
     const activeRef = refByTab[activeTab];
-    // Fallback rỗng cho trường hợp hiếm: user không giữ permission nào trong 4 permission gate cả 10
-    // tab (vào thẳng URL, không qua sidebar — sidebar đã tự ẩn mục "Danh mục" nếu không đủ quyền).
+    // Empty fallback when the user holds none of the tab permissions (direct URL; the sidebar hides the entry).
     const activeTabMeta = tabs.find((tab) => tab.key === activeTab) ?? tabs[0] ?? { label: "", addLabel: null };
 
-    // onLoadingChange phải giữ nguyên identity qua các lần render — nếu truyền inline
-    // arrow function, effect trong mỗi List (dep [isLoading, onLoadingChange]) sẽ nghĩ prop
-    // đổi mỗi lần CategoryManagement render lại, chạy lại effect, gọi setLoadingByTab, khiến
-    // CategoryManagement render lại... lặp vô hạn ("Maximum update depth exceeded").
+    // Must keep a stable identity: an inline arrow would retrigger each List's effect and loop forever
+    // ("Maximum update depth exceeded").
     const handleWorkshopLoadingChange = useCallback(
         (value: boolean) => setLoadingByTab((current) => ({ ...current, workshops: value })),
         []
@@ -223,12 +212,7 @@ export default function CategoryManagement() {
                 })}
             </div>
 
-            {/*
-                Mount theo kiểu "lazy, rồi giữ luôn" — tab nào chưa từng bấm vào thì chưa mount (chưa gọi
-                API), tab nào đã ghé qua thì giữ mounted (ẩn bằng "hidden", không unmount) để chuyển qua
-                lại tức thì, không tải lại. Khác với mount cả 5 song song ngay từ đầu (bản cũ): tránh gọi
-                5 API cùng lúc khi phần lớn lượt vào màn "Danh mục" chỉ cần xem 1-2 tab.
-            */}
+            {/* Lazy mount, then keep mounted (hidden) so switching back is instant without refetching. */}
             {isMounted("workshops") && (
                 <div className={activeTab === "workshops" ? "" : "hidden"}>
                     <WorkshopList ref={workshopRef} onLoadingChange={handleWorkshopLoadingChange} />

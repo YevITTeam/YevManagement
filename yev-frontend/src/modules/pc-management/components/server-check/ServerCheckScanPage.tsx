@@ -27,8 +27,7 @@ export default function ServerCheckScanPage() {
 
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Xưởng KHÔNG cho người quét tự chọn (dễ chọn nhầm) — lấy từ phân công của Admin
-    // (asset-module.md §1.21); chưa được phân công thì chặn hẳn, không gọi tiếp getToday/start.
+    // Branch comes from the admin assignment (scanners can't pick, too error-prone); unassigned users are blocked.
     const { isLoading, error } = useFetchEffect(
         async () => {
             const mine = await ServerCheckAssignmentApi.getMine();
@@ -120,7 +119,7 @@ export default function ServerCheckScanPage() {
         </div>
     );
 
-    // Chưa bắt đầu phiên hôm nay.
+    // Today's session not started yet.
     if (!session) {
         return (
             <div className="mx-auto max-w-md space-y-6 py-12 text-center">
@@ -141,7 +140,7 @@ export default function ServerCheckScanPage() {
         );
     }
 
-    // Đã hoàn thành hôm nay — khóa, không quét/kết thúc thêm được.
+    // Completed today: locked.
     if (session.status === 1) {
         return (
             <div className="mx-auto max-w-md space-y-4 py-12 text-center">

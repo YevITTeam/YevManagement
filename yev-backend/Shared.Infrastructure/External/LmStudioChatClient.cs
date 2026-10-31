@@ -10,32 +10,11 @@ using Shared.Core.Exceptions;
 
 namespace Shared.Infrastructure.External
 {
-    // Talks to LM Studio's OpenAI-compatible /v1/chat/completions (docs/docs-be/asset-module.md §1.18).
-    // HttpClient is a typed client registered via AddHttpClient<ILlmChatClient, LmStudioChatClient>()
-    // in CompanySystem.HostApi/Configurations/DependencyInjection.cs (BaseAddress/Timeout configured
-    // there from appsettings AiChatSettings) — this class only knows the request/response shape.
-    //
-    // Was OllamaChatClient (talking to Ollama's /api/chat) before the internal AI server moved to LM
-    // Studio (2026-08-24, verified against the real server at 10.45.6.70:1234 — model id discovered
-    // via GET /v1/models is "google/gemma-4-e4b"). The 2 protocols differ in ways that matter here:
-    //   - Ollama sent 1 complete NDJSON line per chunk with `message.tool_calls` fully formed the
-    //     moment the model decided to call a tool. LM Studio streams OpenAI-style SSE ("data: {...}"
-    //     lines, terminated by a literal "data: [DONE]") where tool call `arguments` arrive as
-    //     fragments of a JSON-encoded STRING spread across multiple chunks, keyed by an `index` within
-    //     the delta — they must be accumulated before they're valid JSON.
-    //   - Ollama had no language-model-agnostic "thinking" toggle; LM Studio's llama.cpp server
-    //     exposes reasoning depth via a `reasoning_effort` request field instead. Measured against
-    //     gemma-4-e4b (2026-08-24): "none" ~50s / 0 reasoning tokens vs "high" ~86s / 317 reasoning
-    //     tokens for the same prompt — same ~7x tradeoff docs §3 measured for Ollama's `think`, so
-    //     `think` maps 1:1 onto "high"/"none" here.
-    // This class hides both differences: it still exposes StreamChatAsync -> IAsyncEnumerable<ChatChunkWire>
-    // with Message.Content per fragment and (at most) 1 final Message.ToolCalls once a round's tool
-    // calls are fully accumulated — exactly what the Ollama-era client handed the orchestrator, so
-    // AiChatService/AttendanceAiChatService needed no change to their streaming loop.
+    // LM Studio streams OpenAI-style SSE where tool-call arguments arrive as string fragments keyed by index;
+    // they are accumulated and surfaced as one final Message.ToolCalls so callers see complete calls only.
     public class LmStudioChatClient : ILlmChatClient
     {
-        // Thấp để model bám sát tool schema hơn — xem giải thích gốc ở OllamaChatClient (lịch sử git),
-        // vẫn đúng với LM Studio: nhiệt độ cao làm quyết định "có nên gọi tool không" kém nhất quán.
+        // Low temperature keeps the model's "call a tool or not" decision consistent with the tool schema.
         private const double DefaultTemperature = 0.3;
 
         private readonly HttpClient _httpClient;
@@ -59,20 +38,14 @@ namespace Shared.Infrastructure.External
             {
                 ["model"] = _model,
                 ["messages"] = JsonSerializer.SerializeToNode(messages, ChatWireJson.Options),
-                // Caller-supplied catalogue — must already be a node the caller owns (see
-                // ILlmChatClient's remark on DeepClone()), since a JsonNode can only ever be attached
-                // to 1 parent at a time.
+                // Must be a node the caller owns: a JsonNode can only be attached to one parent.
                 ["tools"] = tools,
                 ["stream"] = true,
                 ["temperature"] = _temperature,
-                // See the class remark above for the "none"/"high" ~ Ollama's think false/true mapping.
                 ["reasoning_effort"] = think ? "high" : "none"
             };
 
-            // Relative, NO leading slash — the typed HttpClient's BaseAddress already carries LM
-            // Studio's "/v1/" path (DependencyInjection.cs normalizes it to end with "/"). A leading
-            // slash here would make .NET's URI combining DROP the "/v1" segment instead of appending
-            // to it (classic HttpClient BaseAddress gotcha) and hit the wrong path entirely.
+                // No leading slash: it would make URI combining drop the "/v1/" segment of BaseAddress.
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
             {
                 Content = new StringContent(requestBody.ToJsonString(), Encoding.UTF8, "application/json")
@@ -85,21 +58,11 @@ namespace Shared.Infrastructure.External
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var reader = new StreamReader(stream);
 
-            // index (within this response's single choice) -> accumulated tool call so far. OpenAI
-            // streams a tool call's `id`/`function.name` once (on its first fragment) and its
-            // `function.arguments` progressively across many fragments — only a completed set is ever
-            // surfaced to the caller, never a partial one.
+            // Tool-call id/name arrive on the first fragment, arguments across many; only completed calls are surfaced.
             var toolCallAccumulators = new SortedDictionary<int, ToolCallAccumulator>();
 
-            // NDJSON-style loop (docs §3 kept the same shape on purpose): loop on ReadLineAsync's own
-            // null-at-EOF signal instead of checking `reader.EndOfStream` first (CA2024) — EndOfStream
-            // blocks the calling thread synchronously waiting on the network, tying up thread-pool
-            // threads instead of releasing them under concurrent chat requests.
-            // Tracks the most recent "event:" line — LM Studio uses named SSE events for
-            // out-of-band failures (verified 2026-08-24: a huge prompt made its internal engine call
-            // fail after ~5 minutes, arriving as "event: error" + a "data:" line with the error detail,
-            // NOT as a normal chat.completion.chunk). Reset on every blank line per the SSE spec (a
-            // blank line ends the current event).
+            // ReadLineAsync's null-at-EOF instead of EndOfStream, which blocks synchronously on the network (CA2024).
+            // LM Studio reports engine failures as a named "event: error" SSE event; reset on blank line per SSE spec.
             string? pendingEvent = null;
 
             string? line;
@@ -192,8 +155,7 @@ namespace Shared.Infrastructure.External
             public readonly StringBuilder Arguments = new();
         }
 
-        // Raw SSE line shape ("choices[0].delta...") — purely a parsing internal, never surfaced
-        // outside this class. Only the fields the client actually reads are mapped.
+        // Only the fields this client reads are mapped.
         private class SseLineWire
         {
             [JsonPropertyName("choices")]

@@ -8,35 +8,24 @@ import type { LoginRequestDto, UserDto } from "@/modules/auth/types/auth.dto";
 interface AuthContextValue {
     user: UserDto | null;
     isLoading: boolean;
-    // Lấy lại JWT + user/permissions mới nhất — dùng khi Admin vừa đổi permission của Role mình.
-    // Đi qua `/Auth/me` (Bearer) nên KHÔNG kéo theo handshake Negotiate: BE dựng lại Role/Permission từ DB
-    // ở mọi request nên dữ liệu trả về vẫn là bản mới nhất (docs/identity-module.md §6).
+    // Goes through /Auth/me (Bearer) to avoid a Negotiate handshake; BE rebuilds permissions from DB per request.
     refreshUser: () => Promise<void>;
-    // Đăng nhập bằng form username/password ở trang /login (docs/identity-module.md §6) — set user
-    // trực tiếp từ response, không cần gọi thêm `/Auth/me`. Ném lỗi lên cho form tự bắt + hiện toast.
+    // Sets the user from the response; throws so the form can show the toast.
     loginWithPassword: (credentials: LoginRequestDto) => Promise<void>;
-    // Đăng nhập bằng tài khoản Windows hiện tại (Negotiate) — nút phụ trên trang /login cho máy đã có SSO.
+    // Negotiate login with the current Windows account, for SSO-enabled machines.
     loginWithWindows: () => Promise<void>;
-    // Xoá JWT + reset user về null. KHÔNG tự điều hướng — nơi gọi (Header/route guard) tự quyết định
-    // chuyển sang /login.
+    // Does not navigate; callers (Header/guards) decide on redirecting to /login.
     logout: () => void;
 }
 
-// Chu kỳ tự gia hạn JWT khi tab vẫn đang mở. Token sống 120 phút (`JwtSettings:ExpiryMinutes` ở BE);
-// nếu để hết hạn giữa chừng, request nghiệp vụ kế tiếp sẽ 401 → `client.ts` buộc phải đăng nhập lại bằng
-// Negotiate, và trên máy chưa bật SSO cho origin của BE thì đó là một popup hỏi mật khẩu domain ngay
-// giữa giờ làm. `/Auth/me` gia hạn được âm thầm bằng chính token cũ nên chỉ cần gọi định kỳ là đủ.
+// Token lives 120 min; silent renewal via /Auth/me avoids a mid-shift 401 that would pop a
+// domain password prompt on machines without SSO for the BE origin.
 const TOKEN_RENEW_INTERVAL_MS = 30 * 60 * 1000;
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Nơi lưu profile user (fullName, roles, permissions...) duy nhất của FE — CHỈ trong bộ nhớ JS của tab
-// hiện tại (React state), KHÔNG persist xuống localStorage/sessionStorage. Lý do: đây là dữ liệu nhạy cảm
-// hơn token thuần (lộ ra roles/permissions cụ thể của user), nên không nên nằm ở nơi mọi script/extension
-// trên trang có thể đọc được và tồn tại vô thời hạn qua nhiều phiên. Reload trang (F5) sẽ mất state này
-// và tự nạp lại qua `/Auth/me` (âm thầm, Bearer) NẾU còn token hợp lệ; hết token thì set `user = null`
-// và guard (`AuthGuard`) tự chuyển hướng sang `/login` — không tự bật Negotiate nữa (xem
-// docs/identity-module.md §6, §5.4).
+// Profile is kept in memory only (never storage) since roles/permissions are more sensitive than the token;
+// F5 restores it via /Auth/me while a token exists, otherwise AuthGuard sends the user to /login.
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<UserDto | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -71,14 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         let isCancelled = false;
 
-        // CHỈ tự nạp phiên khi đã có JWT (qua `/Auth/me`, âm thầm) — KHÔNG tự gọi windows-login khi
-        // chưa có token. Trước đây gọi `AuthApi.getCurrentUser()` vô điều kiện ở đây khiến MỌI trang
-        // chưa đăng nhập tự bật 1 handshake Negotiate mới (popup "Windows Security" của trình duyệt,
-        // lặp lại ở mỗi lần mount/điều hướng khi chưa có token) — nguồn gốc lỗi "bị hỏi đăng nhập
-        // nhiều lần". Giờ trang /login là nơi DUY NHẤT chủ động gọi loginWithWindows()/loginWithPassword().
-        // Nhánh "chưa có token" cũng phải đi qua Promise.resolve() rồi setState trong `.then()` — không
-        // được setState thẳng trong thân effect — vì rule `react-hooks/set-state-in-effect` của React
-        // Compiler chỉ cho phép setState trong `.then()/.catch()/.finally()` (frontend-conventions.md §3).
+        // Restore only when a JWT exists: calling windows-login without one pops repeated Negotiate prompts.
+        // The no-token branch still goes through .then() because react-hooks/set-state-in-effect forbids direct setState.
         const load = getAuthToken() ? AuthApi.me() : Promise.resolve(null);
 
         load
@@ -99,9 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
-    // Gia hạn token định kỳ (xem TOKEN_RENEW_INTERVAL_MS). Không đụng tới state — hồ sơ user hiển thị
-    // trên Header không đổi, chỉ có JWT trong localStorage được thay bằng bản còn hạn; gia hạn hỏng thì
-    // im lặng bỏ qua, request nghiệp vụ kế tiếp gặp 401 sẽ tự xử lý như trước.
+    // Only the JWT is swapped; failures are ignored since the next 401 is handled by client.ts.
     useEffect(() => {
         const timer = setInterval(() => {
             if (!getAuthToken()) return;

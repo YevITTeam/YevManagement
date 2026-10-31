@@ -54,9 +54,7 @@ interface ApprovalStepView {
     history: OtFormDto["approvalHistories"][number] | null;
 }
 
-// Chuỗi bước duyệt của 1 đơn ĐÃ được snapshot sẵn ở form.approvalSteps (sắp theo stepOrder, xem
-// docs §Cây chức vụ) — không còn suy từ requiredApprovalLevel/danh sách cấp cố định như trước
-// (2026-08-07, Giai đoạn 3.1). Trạng thái từng bước lấy TRỰC TIẾP từ step.status.
+// The chain is the snapshot in form.approvalSteps (sorted by stepOrder); each step's state comes from step.status.
 function buildApprovalSteps(form: OtFormDto): ApprovalStepView[] {
     const firstPendingOrder = form.approvalSteps.find((s) => s.status === 0)?.stepOrder;
     return form.approvalSteps.map((step): ApprovalStepView => {
@@ -68,15 +66,13 @@ function buildApprovalSteps(form: OtFormDto): ApprovalStepView[] {
     });
 }
 
-// employee.removedAtLevel giờ lưu StepOrder (đổi ý nghĩa 2026-08-07, xem ot-form.dto.ts) — tra lại
-// tên Chức vụ của bước đó trong chuỗi đã snapshot của CHÍNH đơn này.
+// removedAtLevel holds a StepOrder; resolve the job title name from this form's own snapshot chain.
 function stepNameByOrder(form: OtFormDto, stepOrder: number | null): string {
     if (stepOrder === null) return "";
     return form.approvalSteps.find((s) => s.stepOrder === stepOrder)?.jobTitleNameSnapshot ?? `#${stepOrder}`;
 }
 
-// Ô hiển thị 1 mục trong "Yêu cầu hỗ trợ khác" (ăn uống/xe đưa đón/phòng copy) — badge màu xanh lá khi
-// Có, xám khi Không (mặc định khi form.processPart null), thay vì chuỗi text phẳng như trước.
+// Process-part items default to "No" when form.processPart is null.
 function ProcessPartTile({
     icon,
     label,
@@ -105,7 +101,7 @@ function ProcessPartTile({
     );
 }
 
-// 1 cặp nhãn/giá trị trong khối thông tin đơn (cột trái, lưới 2 cột) — `wide` chiếm cả 2 cột.
+// `wide` spans both grid columns.
 function InfoField({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
     return (
         <div className={wide ? "col-span-2" : undefined}>
@@ -124,7 +120,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
     const [form, setForm] = useState<OtFormDto | null>(null);
     const [hasMySignature, setHasMySignature] = useState<boolean | null>(null);
     const [hasSecondaryPassword, setHasSecondaryPassword] = useState<boolean | null>(null);
-    // Ngưỡng cảnh báo lũy kế lấy từ cấu hình (Admin sửa được), không còn hardcode 25/300.
+    // Thresholds come from Admin-editable settings.
     const { setting } = useAttendanceSetting();
 
     const [actionOpen, setActionOpen] = useState<"approve" | "reject" | null>(null);
@@ -132,20 +128,16 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
     const [secondaryPassword, setSecondaryPassword] = useState("");
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
-    // Admin xoá đơn kẹt vĩnh viễn trong chuỗi duyệt (2026-08-08) — xem docs/attendance-module.md
-    // §Cây chức vụ. BE chặn Completed (đã cộng lũy kế thật); FE ẩn luôn nút cho gọn thay vì để user
-    // bấm rồi mới nhận lỗi 400.
+    // BE blocks deleting Completed forms (accumulation already counted); hide the button instead of letting it 400.
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isPrintOpen, setIsPrintOpen] = useState(false);
     const [deleteReason, setDeleteReason] = useState("");
     const [isDeletingForm, setIsDeletingForm] = useState(false);
 
-    // Xem lịch sử lũy kế theo tháng/năm của 1 nhân viên trong đơn (2026-08-11d) — chỉ người có quyền
-    // duyệt mới thấy nút này (xem canApprove bên dưới), modal dùng chung với EmployeeList.tsx.
+    // Approvers only; modal shared with EmployeeList.tsx.
     const [historyEmployee, setHistoryEmployee] = useState<OtFormEmployeeDto | null>(null);
 
-    // "Loại khỏi đơn" ngay trên màn Duyệt (khôi phục 2026-09-30) — KHÔNG cần mật khẩu cấp 2, cùng
-    // quyết định 2026-07-31 áp dụng cho kênh email (xem RemoveOtFormEmployeeDto).
+    // No secondary password needed, same as the email channel (see RemoveOtFormEmployeeDto).
     const [removeTarget, setRemoveTarget] = useState<OtFormEmployeeDto | null>(null);
     const [removeReason, setRemoveReason] = useState("");
     const [isRemovingEmployee, setIsRemovingEmployee] = useState(false);
@@ -160,25 +152,16 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
     );
 
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
-    // Nút "Loại khỏi đơn" ngay trên màn Duyệt (khôi phục 2026-09-30, xem docs/attendance-module.md
-    // §Loại nhân viên khỏi đơn) — permission riêng, KHÔNG dùng chung canEdit
-    // (canEdit đơn theo Nhóm chỉ đúng cho người tạo; loại người ở đây đi qua endpoint riêng dùng luật
-    // "candidate bước Pending hiện tại" cho CẢ 2 loại đơn, BE là nguồn chặn thật nếu bấm sai lượt).
+    // Separate permission from canEdit (which is creator-only for group forms): the endpoint uses the
+    // "current pending step candidate" rule for both form types, and BE is the real gate.
     const canRemoveEmployee = !readOnly && hasPermission(user, "Attendance.OTForm.RemoveEmployee");
-    // Bước đang chờ xử lý — StepOrder nhỏ nhất còn Pending trong chuỗi đã snapshot (xem docs §Cây
-    // chức vụ). null khi đơn đã Hoàn tất/Từ chối hoặc chuỗi rỗng (đơn tự Hoàn tất ngay lúc tạo).
+    // Lowest pending StepOrder; null when Completed/Rejected or the chain is empty (auto-completed on create).
     const currentStep = form?.approvalSteps.find((s) => s.status === 0) ?? null;
     const showApprovalActions = !readOnly && canApprove && form?.status === 0 && currentStep !== null;
     const requireSignatureToApprove = currentStep?.requiresSignatureSnapshot ?? false;
 
-    // Nút "Sửa" (docs §1.2): isEditable=true + có quyền tạo đơn. Đơn theo Nhóm còn phải là chính người
-    // tạo; đơn "theo chuyền" (Giai đoạn 5, 2026-08-27) sửa được theo TỪNG BƯỚC — giống cách nút Duyệt/
-    // Từ chối bên dưới cũng không tự lọc theo candidate ở FE, để BE là nguồn chặn thật (trả lỗi rõ ràng
-    // nếu bấm Sửa mà không phải candidate của bước hiện tại).
-    // Create/CreateProduction tách rời (2026-09-28) — đơn "theo chuyền" đúng quyền là CreateProduction
-    // (Line Leader chỉ có quyền này vẫn phải sửa được đơn theo chuyền của họ, khớp OtFormService.
-    // UpdateAsync tự check lại theo candidate bước hiện tại), đơn "theo Nhóm" vẫn đúng quyền Create +
-    // phải là chính người tạo — không dùng chung 1 điều kiện `Create` cho cả 2 như trước nữa.
+    // Group forms: Create + must be the creator. Production-line forms: CreateProduction, editable per step;
+    // candidate checks are left to BE (OtFormService.UpdateAsync) like Approve/Reject.
     // Account names differ only in case between login ("YEV\x") and imported data ("yev\x").
     const myUserName = user?.userName.toLowerCase();
     const canEdit =
@@ -194,13 +177,10 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
         form?.resubmitKind != null &&
         (form.resubmitUserNames.some((n) => n.toLowerCase() === myUserName) || (form.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
 
-    // Nút "Xoá đơn" (Admin only, mới 2026-08-08) — chặn khi đã Completed (status=1, đã cộng lũy kế thật).
+    // Admin only; blocked once Completed (status=1, accumulation already counted).
     const canDelete = !readOnly && hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;
 
-    // Đơn "theo chuyền": hiện Line/Team/Nhóm ca ở cả khối "Thông tin đơn" (giá trị phân biệt gộp từ
-    // toàn bộ nhân viên còn active) lẫn từng dòng trong bảng danh sách — trước đó màn Chi tiết đơn
-    // format y hệt đơn "theo Nhóm" dù dữ liệu snapshot đã có sẵn trên OtFormEmployeeDto, không hiện gì
-    // cho biết đây là đơn dưới chuyền (2026-08-29, theo phản hồi người dùng).
+    // Production-line forms show Line/Team/shift both in the info block (distinct values of active employees) and per row.
     const productionSummary = useMemo(() => {
         if (!form?.isProductionForm) return null;
         const distinct = (values: (string | null)[]) => Array.from(new Set(values.filter((v): v is string => Boolean(v))));
@@ -221,8 +201,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                 .then((data) => setHasMySignature(Boolean(data)))
                 .catch(() => setHasMySignature(false));
         }
-        // Mật khẩu cấp 2 áp dụng cho CẢ 2 hành động (approve/reject) — xem
-        // docs/docs-be/attendance-module.md — Mật khẩu cấp 2.
+        // The secondary password applies to both approve and reject.
         SecondaryPasswordApi.getMyStatus()
             .then((data) => setHasSecondaryPassword(data.isRegistered))
             .catch(() => setHasSecondaryPassword(false));
@@ -383,13 +362,12 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
     }
 
     const approvalStepViews = buildApprovalSteps(form);
-    // Người đã bị loại khỏi đơn KHÔNG tính vào tổng giờ OT — họ không còn nằm trong đơn được duyệt
-    // (docs §4.5a). Vẫn hiện dòng của họ trong bảng bên dưới để giữ dấu vết ai loại/khi nào/vì sao.
+    // Removed employees are excluded from totals but their rows stay visible as an audit trail.
     const activeEmployees = form.employees.filter((employee) => !employee.isRemoved);
     const totalWorkedHours = activeEmployees.reduce((sum, employee) => sum + employee.actualHours, 0);
-    // Cột Ghi chú chỉ hiện khi có ít nhất 1 người còn trong đơn có ghi chú — toàn "-" chỉ tốn chỗ.
+    // Notes column only when at least one active employee has a note.
     const hasNotes = activeEmployees.some((employee) => Boolean(employee.noteVn || employee.noteJp));
-    // Số cột phía sau Mã NV + Họ tên (dòng "đã bị loại" gộp ô cho hết phần còn lại).
+    // Columns after code + name (the "removed" row spans the rest).
     const removedColSpan = 5 + (hasNotes ? 1 : 0) + (form.isProductionForm ? 3 : 0) + (canRemoveEmployee ? 1 : 0);
 
     return (
@@ -442,8 +420,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
             </div>
 
             <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
-                {/* Cột trái: thông tin đơn + hỗ trợ + tiến trình duyệt (gộp luôn "Lịch sử phê duyệt" cũ — 2 khối
-                    trước đây hiển thị cùng 3 người/thời điểm, nay mỗi bước có đủ tên, giờ, ý kiến và chữ ký). */}
+                {/* Left column: form info, support items and approval progress. */}
                 <div className="space-y-4">
                     <section className="space-y-3.5 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                         <div className="grid grid-cols-2 gap-x-3 gap-y-3">
@@ -474,9 +451,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                             )}
                         </div>
 
-                        {/* Luôn hiện khối này, kể cả khi form.processPart null (đơn không yêu cầu hỗ trợ gì thêm) —
-                            mặc định "Không" cho 3 mục, cùng cách OtFormPrintView.tsx đã xử lý từ trước
-                            (processPart?.isEat ?? false). Ẩn hẳn sẽ khiến người dùng tưởng thiếu thông tin. */}
+                        {/* Always shown even when processPart is null (defaults to "No"), otherwise users assume info is missing. */}
                         <div className="space-y-2 border-t border-[#e0e3e5] pt-3.5">
                             <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
                             <div className="flex flex-nowrap gap-1.5">
@@ -531,6 +506,30 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                             </div>
                         )}
                         <ol>
+                            {/* Steps at or below the creator's rank are dropped from the chain, so the creator heads the timeline to show who sent it up. */}
+                            <li className="relative flex gap-3 pb-4 last:pb-0">
+                                {approvalStepViews.length > 0 && <span className="absolute bottom-0 left-3.5 top-7 w-px bg-emerald-500" aria-hidden />}
+                                <span className="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-emerald-500 bg-emerald-500 text-white">
+                                    <Check size={14} />
+                                </span>
+                                <div className="min-w-0 flex-1 space-y-0.5 pt-0.5">
+                                    <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                                        <span className="text-sm font-semibold text-[#191c1e]">{t("requesterStep")}</span>
+                                        <span className="text-[11px] text-[#8a8f94]">{formatDateTime(form.createdAt)}</span>
+                                    </div>
+                                    <div className="text-xs text-[#5e3f3a]">
+                                        {form.createdByFullName ?? form.createdByUserName} · {t("createdAction")}
+                                    </div>
+                                    {form.creatorSignatureImage && (
+                                        // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image can't optimize it
+                                        <img
+                                            src={`data:image/png;base64,${form.creatorSignatureImage}`}
+                                            alt={t("signatureAlt", { name: form.createdByFullName ?? form.createdByUserName })}
+                                            className="mt-1 h-10 w-28 rounded border border-[#e0e3e5] bg-white object-contain"
+                                        />
+                                    )}
+                                </div>
+                            </li>
                             {approvalStepViews.map((view, index) => {
                                 const history = view.history;
                                 const isMuted = view.state === "upcoming" || view.state === "skipped";
@@ -542,7 +541,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                 aria-hidden
                                             />
                                         )}
-                                        {/* relative z-10: đường nối là absolute nên nếu không có z-index sẽ vẽ đè lên vòng tròn */}
+                                        {/* relative z-10: the connector line is absolute and would draw over the circle */}
                                         <span
                                             className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
                                                 view.state === "done"
@@ -580,7 +579,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                         <div className="text-xs italic text-[#191c1e]">&quot;{history.comment}&quot;</div>
                                                     )}
                                                     {history.hasSignature && history.signatureImage && (
-                                                        // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image không tối ưu được
+                                                        // eslint-disable-next-line @next/next/no-img-element -- base64 data URI, next/image can't optimize it
                                                         <img
                                                             src={`data:image/png;base64,${history.signatureImage}`}
                                                             alt={t("signatureAlt", { name: history.approverFullName ?? history.approverUserName })}
@@ -608,8 +607,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                             ) : (
                                                 <div className="text-xs text-[#9aa0a6]">{t("notProcessedYet")}</div>
                                             )}
-                                            {/* Ai sẽ duyệt bước này: candidates[] snapshot lúc tạo đơn — chỉ hiện cho bước CHƯA xử lý
-                                                (bước đã xử lý đã có tên người duyệt thật ở trên). */}
+                                            {/* Candidates snapshotted at creation; only for unprocessed steps (processed ones show the real approver). */}
                                             {!history && (view.state === "current" || view.state === "upcoming") && view.step.candidates.length > 0 && (
                                                 <div className="flex flex-wrap gap-1 pt-1">
                                                     {view.step.candidates.slice(0, 3).map((candidate) => (
@@ -661,7 +659,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                     </section>
                 </div>
 
-                {/* Cột phải: danh sách nhân viên + lịch sử chỉnh sửa (thu gọn). */}
+                {/* Right column: employees and edit log. */}
                 <div className="min-w-0 space-y-6">
                     <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3">
@@ -672,9 +670,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                 {t("totalWorkedHoursLabel", { hours: formatHours(totalWorkedHours) })}
                             </span>
                         </div>
-                        {/* Danh sách nhân viên có thể rất dài (cả trăm dòng) — cuộn NGAY TRONG khung bảng
-                            thay vì đẩy cả trang dài ra, header dính lại (sticky) khi cuộn (2026-09-28,
-                            theo yêu cầu người dùng). */}
+                        {/* The list can be hundreds of rows: scroll inside the table with a sticky header instead of stretching the page. */}
                         <div className="max-h-[560px] overflow-auto">
                             <table className="min-w-full border-collapse text-left [&_td]:border-r [&_td]:border-[#eef1f3] [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-[#e0e3e5]">
                                 <thead className="sticky top-0 z-10">
@@ -706,8 +702,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                         const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
                                         const isOverLimit = isMonthOverLimit || isYearOverLimit;
                                         const hours = employee.actualHours;
-                                        // Đã bị loại khỏi đơn (docs §4.5a) — vẫn hiện dòng để giữ dấu vết, nhưng
-                                        // làm mờ + gạch ngang, thay toàn bộ cột số liệu bằng lý do/người loại.
+                                        // Removed: keep the row as an audit trail, dimmed and struck through, with the reason instead of the numbers.
                                         if (employee.isRemoved) {
                                             return (
                                                 <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#f8fafc] opacity-60">
@@ -777,10 +772,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                         )}
                                                     </span>
                                                 </td>
-                                                {/* Gộp cột "Có ăn" cũ vào đây: luôn hiện loại phiếu, kèm nhãn "không ăn" khi người này
-                                                    không ăn (trước là cột ✓/✗ riêng, lặp ý với loại phiếu). Đơn Theo chuyền không có
-                                                    khái niệm "ăn sau" (Ăn uống bắt buộc, DidEat luôn true — xem CreateOtFormPage), nên
-                                                    chỉ hiện loại phiếu, không hiện nhãn này (2026-09-28, theo yêu cầu người dùng). */}
+                                                {/* Meal ticket type plus a "didn't eat" label; production-line forms always eat (DidEat true), so no label there. */}
                                                 <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm">
                                                     <span className="inline-flex items-center justify-center gap-1.5">
                                                         <MealTicketTypeBadge type={employee.mealTicketType} t={t} />

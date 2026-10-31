@@ -25,13 +25,12 @@ namespace Workflow.Application.Interfaces.Service
         Task<WorkflowRequestDto> AddApproverAsync(int id, AddApproverRequestDto request, int? currentUserId);
         Task<WorkflowRequestDto> CancelAsync(int id, CancelRequestDto request, int? currentUserId);
 
-        // Pha 4B: đính kèm file (workflow-module.md §6) — chủ đơn thêm/xoá xuyên suốt tới khi đơn kết
-        // thúc, người khác chỉ tải xuống nếu xem được đơn (§7 luật "Ai xem được đơn này?").
+        // Owner may add/remove until the request ends; others may only download if they can view the request.
         Task<WorkflowRequestDto> UploadAttachmentAsync(int workflowRequestId, Stream content, string originalFileName, string contentType, long fileSizeBytes, int? currentUserId);
         Task<WorkflowRequestDto> DeleteAttachmentAsync(int attachmentId, int? currentUserId);
         Task<WorkflowAttachmentDownloadDto> DownloadAttachmentAsync(int attachmentId, int? currentUserId, bool hasViewAll);
 
-        // Pha 4C: duyệt qua email, [AllowAnonymous] — token là credential duy nhất.
+        // [AllowAnonymous] email approval: the token is the only credential.
         Task<WorkflowRequestDto> GetByEmailTokenAsync(string token);
         Task<WorkflowRequestDto> ApproveByEmailTokenAsync(string token, EmailApproveRequestDto request);
         Task<WorkflowRequestDto> RejectByEmailTokenAsync(string token, EmailRejectRequestDto request);

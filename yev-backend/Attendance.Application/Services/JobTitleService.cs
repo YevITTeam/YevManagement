@@ -54,9 +54,7 @@ namespace Attendance.Application.Services
             return ToDto(jobTitle);
         }
 
-        // At most 1 active JobTitle may hold each non-None TerminalLevel (Trưởng phòng/Trưởng
-        // Xưởng/Tổng Giám Đốc phải là duy nhất — chuỗi duyệt tự động cần biết chính xác cấp nào là
-        // điểm dừng cuối). excludeId dùng khi Update để loại chính bản ghi đang sửa.
+        // Each non-None TerminalLevel must be unique so the auto chain knows exactly where it stops.
         private async Task ThrowIfTerminalLevelTaken(int terminalLevel, int? excludeId)
         {
             if (terminalLevel == (int)JobTitleTerminalLevel.None) return;
@@ -74,9 +72,7 @@ namespace Attendance.Application.Services
 
             await ThrowIfTerminalLevelTaken(request.TerminalLevel, null);
 
-            // Cấp độ (RankOrder) không còn nhập tay — chức vụ mới luôn xếp cuối danh sách hiện có, vị
-            // trí thật được chỉnh sau đó bằng kéo-thả (ReorderAsync) để tránh phải tự tay dồn số các
-            // chức vụ khác khi cần chèn vào giữa.
+            // New titles go last; position is set later via drag-and-drop to avoid renumbering others on insert.
             var activeJobTitles = await _unitOfWork.JobTitles.SelectAsync(x => !x.IsDeleted, x => x);
             var nextRankOrder = activeJobTitles.Count == 0 ? 1 : activeJobTitles.Max(x => x.RankOrder) + 1;
 
@@ -104,7 +100,7 @@ namespace Attendance.Application.Services
 
             await ThrowIfTerminalLevelTaken(request.TerminalLevel, request.Id);
 
-            // RankOrder KHÔNG đụng tới ở đây nữa — chỉ đổi qua ReorderAsync (kéo-thả).
+            // RankOrder changes only via ReorderAsync.
             jobTitle.Code = request.Code;
             jobTitle.Name = request.Name;
             jobTitle.TerminalLevel = request.TerminalLevel;
@@ -113,9 +109,7 @@ namespace Attendance.Application.Services
             await _unitOfWork.SaveChangesAsync();
         }
 
-        // Kéo-thả xong FE gửi lên TOÀN BỘ Id chức vụ active theo đúng thứ tự mới — validate khớp đúng
-        // tập hợp đang có (tránh lệch dữ liệu nếu 1 người khác vừa thêm/xoá chức vụ trong lúc kéo),
-        // rồi gán lại RankOrder = 1..N tuần tự theo thứ tự đó.
+        // Must match the current active set exactly, guarding against concurrent add/delete during the drag.
         public async Task<List<JobTitleDto>> ReorderAsync(List<int> jobTitleIds)
         {
             var activeJobTitles = await _unitOfWork.JobTitles.SelectAsync(x => !x.IsDeleted, x => x);

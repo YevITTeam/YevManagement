@@ -3,13 +3,7 @@ import { toUnicode } from "vietnamese-conversion";
 
 const WORDML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
-// vietnamese-conversion's toUnicode('vni') correctly decodes the legacy
-// VNI-Times/VNI-Helve-Condense 8-bit Vietnamese font encoding EXCEPT for one
-// characterized bug: horn vowels (ơ/ư) combined with any tone mark fail to
-// fully compose (e.g. raw bytes for "giờ" decode to "giơø" instead of "giờ").
-// This table was derived and verified empirically against the library's own
-// toVNI() as ground truth, and cross-checked against real sentences from a
-// sample document — every one of these 20 entries is a confirmed fix.
+// toUnicode('vni') fails to compose horn vowels with tone marks; each entry was verified against toVNI().
 const VNI_HORN_TONE_FIXUPS: Record<string, string> = {
     "ơù": "ớ", "ơø": "ờ", "ơû": "ở", "ơõ": "ỡ", "ơï": "ợ",
     "ƠÙ": "Ớ", "ƠØ": "Ờ", "ƠÛ": "Ở", "ƠÕ": "Ỡ", "ƠÏ": "Ợ",
@@ -25,14 +19,8 @@ export function applyVniFix(text: string): string {
     return result;
 }
 
-// Real YEV OT_Form.docx (docs/OT_Form.docx) has no embedded font file for VNI-Times/
-// VNI-Helve-Condense (word/fontTable.xml declares them by name only, w:family="auto") — the
-// document only ever rendered correctly on a machine that had these legacy 8-bit fonts installed
-// locally. A browser never has them, so even AFTER the text bytes are fixed to real Unicode,
-// docx-preview still emits `font-family: 'VNI-Times'`/`'VNI-Helve-Condense'` for that run and the
-// browser falls back to an unpredictable substitute — this is the actual "font lỗi" users see on
-// dense sections (e.g. the employee list table), not a text-decoding bug. Map to a normal
-// Unicode-safe font every browser has, matching serif/sans-serif family of the original.
+// VNI fonts aren't embedded in the .docx and browsers don't have them, so swap to a common font of the
+// same family; otherwise the browser picks an unpredictable fallback.
 function replacementFontFor(vniFontName: string): string {
     if (/^VNI-Helve/i.test(vniFontName)) return "Arial";
     return "Times New Roman";
@@ -51,10 +39,7 @@ export interface FixVniDocxResult {
     convertedCount: number;
 }
 
-// Fixes legacy VNI-Times/VNI-Helve-Condense encoded Vietnamese text found in
-// an uploaded .docx, scoped to only the runs that actually declare one of
-// those fonts (some documents mix genuinely-correct Unicode runs alongside
-// legacy-encoded ones, so a document-wide pass would corrupt the good text).
+// Scoped to runs declaring a VNI font: documents can mix correct Unicode runs that a global pass would corrupt.
 export async function fixVniDocx(file: File): Promise<FixVniDocxResult> {
     const buffer = await file.arrayBuffer();
 
@@ -101,9 +86,7 @@ export async function fixVniDocx(file: File): Promise<FixVniDocxResult> {
             }
         }
 
-        // Text is fixed above, but the font NAME itself must also stop pointing at a legacy font
-        // no browser has — otherwise the browser's own fallback choice is what actually renders,
-        // not a real decision we made (see comment on replacementFontFor above).
+        // Also rename the font, otherwise the browser's own fallback is what renders.
         if (ascii && /^VNI-/i.test(ascii)) {
             setFontAttr(rFonts, "ascii", replacementFontFor(ascii));
             didMutateFonts = true;

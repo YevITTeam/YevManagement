@@ -7,23 +7,19 @@ namespace Attendance.Application.Interfaces.Service
 {
     public interface IEmployeeService
     {
-        // Không phải Admin: kết quả tự giới hạn theo phạm vi Cây chức vụ của CHÍNH người gọi (giống
-        // GetInScopeAsync bên dưới — Employee.View cấp qua Chức vụ vốn TOÀN CÔNG TY, không tự scope,
-        // nên phải chặn lại ở đây để 1 Staff bất kỳ không xem được lũy kế/giới hạn OT của cả công ty).
+        // Non-Admins are limited to their own job-title scope: Employee.View is company-wide, so scoping must happen here.
         Task<PagedResponse<EmployeeDto>> GetPagedAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId, int? workshopId);
 
         // Same employees as the grid for that filter (caller scope applied); hours are for year/month, default today.
         Task<List<EmployeeExportRowDto>> GetForExportAsync(string callerUserName, bool isAdmin, EmployeeExportFilterDto filter, int? year = null, int? month = null);
 
-        // Nhân viên trong phạm vi quản lý của người GIỮ QUYỀN DUYỆT (không nhất thiết có Employee.View)
-        // — dùng cho màn "Lũy kế nhân viên" tra cứu. Xem chi tiết phạm vi ở EmployeeService.ResolveCallerScopeAsync.
+        // For approvers who may lack Employee.View; scope rules live in EmployeeService.ResolveCallerScopeAsync.
         Task<PagedResponse<EmployeeDto>> GetInScopeAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword);
 
-        // Lịch sử lũy kế 12 tháng của 1 năm — cùng phạm vi truy cập với GetInScopeAsync.
+        // Same access scope as GetInScopeAsync.
         Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, int year);
 
-        // Xem + SỬA TAY lũy kế 1 năm — Admin hoặc Người phụ trách đúng Bộ phận/Nhóm của nhân viên
-        // (quyền Attendance.EmployeeAccumulation.Update, scope kiểm ở service).
+        // Admin or the employee's department/group coordinator; scope is enforced in the service.
         Task<EmployeeAccumulationHistoryYearDto> GetAccumulationHistoryForManageAsync(string callerUserName, bool isAdmin, int employeeId, int year);
 
         // Overview dashboard: Admin or any title above plain staff (TerminalLevel != None).
@@ -33,66 +29,39 @@ namespace Attendance.Application.Interfaces.Service
         // callers compose it as a subquery so no id list is ever loaded.
         Task<IQueryable<Employee>> GetOverviewEmployeeQueryAsync(string callerUserName, bool isAdmin, int? workshopId);
 
-        // Giờ OT từng ngày của 1 tháng (chỉ các ngày có đơn Hoàn tất), cùng phạm vi với 2 hàm lịch sử ở trên.
+        // Completed forms only; same scope as the history methods above.
         Task<List<EmployeeAccumulationDayDto>> GetAccumulationDaysAsync(string callerUserName, bool isAdmin, int employeeId, int year, int month);
         Task<List<EmployeeAccumulationDayDto>> GetAccumulationDaysForManageAsync(string callerUserName, bool isAdmin, int employeeId, int year, int month);
 
         Task<EmployeeAccumulationHistoryYearDto> UpdateAccumulationHistoryAsync(string callerUserName, bool isAdmin, int employeeId, UpdateEmployeeAccumulationDto request);
 
-        // Phạm vi xem nhân viên của người gọi (Admin/company-wide hay giới hạn theo Phòng ban/Nhóm nào)
-        // — FE dùng để thu hẹp dropdown lọc ở EmployeeList.tsx, KHÔNG dùng để enforce bảo mật (đã enforce
-        // ở GetPagedAsync rồi, đây chỉ phục vụ UX).
+        // UX only (narrows filter dropdowns); security is enforced in GetPagedAsync.
         Task<EmployeeScopeDto> GetMyScopeAsync(string callerUserName, bool isAdmin);
 
-        // targetDate = ngày trên đơn OT đang tạo — Dự kiến (ProjectedMonthToDate/YearToDate) scope theo
-        // đúng tháng/năm của targetDate, không phải hôm nay thực tế (mặc định hôm nay nếu bỏ trống).
+        // Projected totals use targetDate's month/year, not today.
         Task<List<EmployeeDto>> GetByGroupIdAsync(int groupId, DateOnly? targetDate = null);
-        // Toàn bộ nhân viên active thuộc Phòng ban (mọi Group con) — dùng cho màn "Cây duyệt Phòng ban"
-        // để xem ai đang giữ Chức vụ nào và gán nhanh Chức vụ ngay tại đó.
+        // Used by the department approval tree to see and assign job titles in place.
         Task<List<EmployeeDto>> GetByDepartmentIdAsync(int departmentId, int? workshopId = null, string? keyword = null, bool jobTitledOnly = false, int? take = null);
         Task<EmployeeDto> GetByIdAsync(int id);
         Task<EmployeeDto> GetByUserNameAsync(string userName);
-        // callerUserName/isAdmin dùng để SCOPE theo Bộ phận/Nhóm phụ trách (2026-09-28, theo yêu cầu
-        // người dùng — Coordinator được cấp quyền y hệt Admin nhưng chỉ trong đúng phạm vi mình quản):
-        // Create chỉ tạo được vào đúng Bộ phận/Nhóm phụ trách; Update/Delete chỉ tác động được nhân
-        // viên hiện thuộc đúng phạm vi, và Update đổi Group/Chức vụ thì phạm vi MỚI cũng phải hợp lệ
-        // (không cho "chuyển" nhân viên ra ngoài phạm vi mình quản) — xem
-        // EmployeeService.EnsureCanManageDeptOrGroupScopeAsync/EnsureAssignmentInCallerScopeAsync.
+        // Coordinators act like Admin within their own department/group only; an update may not move an employee
+        // outside the caller's scope.
         Task<EmployeeDto> CreateAsync(string callerUserName, bool isAdmin, CreateEmployeeDto request);
         Task UpdateAsync(string callerUserName, bool isAdmin, UpdateEmployeeDto request);
         Task DeleteAsync(string callerUserName, bool isAdmin, int id);
 
-        // Tính lại TOÀN BỘ permission tự động cấp (theo Chức vụ + theo vai trò "Người phụ trách Cây
-        // duyệt") cho 1 Employee rồi đồng bộ vào Identity — gọi từ DepartmentApprovalStepCoordinatorService/
-        // GroupApprovalStepCoordinatorService.ReplaceAsync mỗi khi danh sách người phụ trách đổi, để
-        // permission có hiệu lực NGAY (nếu Employee đã liên kết UserName) mà không đụng tới phần đồng
-        // bộ theo Chức vụ đang có. No-op nếu Employee chưa liên kết UserName — lần UpdateAsync liên
-        // kết UserName sau này sẽ tự cấp đúng bộ quyền hiện hành.
+        // Called whenever coordinators change so permissions apply immediately; no-op until the employee has a UserName.
         Task SyncAutoGrantedPermissionsForEmployeeAsync(int employeeId);
 
-        // Chạy lại đúng logic trên cho MỌI Employee đang là Coordinator (Bộ phận hoặc Nhóm) hiện có
-        // (2026-09-28) — cần thiết mỗi khi ĐỔI LUẬT cấp tự động trong code (thêm/bớt permission ở
-        // SyncAutoGrantedPermissionsCoreAsync), vì cơ chế sync chỉ chạy theo SỰ KIỆN (gán/gỡ Coordinator,
-        // sửa quyền theo Chức vụ, liên kết UserName...) — đổi RULE trong code không tự kích hoạt lại cho
-        // các Coordinator đã gán từ trước. Trả về số Employee đã đồng bộ lại.
+        // Needed after changing grant rules in code, since sync otherwise only runs on events (assign, link, ...).
         Task<int> ResyncAllCoordinatorPermissionsAsync();
 
-        // Gán/gỡ Chức vụ CÓ PHẠM VI (2026-08-11c) — khác PUT /{id} (UpdateAsync, sửa toàn bộ hồ sơ,
-        // chỉ Admin qua Attendance.Employee.Update): 2 hàm này gọi bởi CẢ Admin lẫn Người phụ trách Cây
-        // duyệt (Attendance.DepartmentApprovalStep.Update/GroupApprovalStep.Update — đã tự động cấp
-        // cho họ, xem SyncAutoGrantedPermissionsCoreAsync), nhưng non-Admin CHỈ gán được cho Employee
-        // đang thuộc ĐÚNG Bộ phận/Nhóm mình phụ trách, và KHÔNG được thăng lên Trưởng Xưởng/Giám đốc
-        // (2 chức vụ dùng chung toàn công ty, vượt phạm vi 1 Bộ phận). Tự tính lại GroupId/DepartmentId
-        // theo TerminalLevel của Chức vụ mới (không nhận trực tiếp từ client) — mirror
-        // ApprovalStepManager.tsx.handleAssignDeptJobTitle/handleAssignGroupJobTitle nhưng validate lại
-        // ở BE, không tin client.
+        // Coordinators may only assign within their own department/group and never Factory Manager/Director.
+        // Group/Department are derived from the new title's TerminalLevel server-side; the client is not trusted.
         Task<EmployeeDto> AssignDepartmentJobTitleAsync(string userName, bool isAdmin, int employeeId, int departmentId, int? jobTitleId, int? workshopId = null);
         Task<EmployeeDto> AssignGroupJobTitleAsync(string userName, bool isAdmin, int employeeId, int groupId, int? jobTitleId);
 
-        // Sửa RIÊNG giới hạn OT/tháng/năm (2026-08-29) — permission hẹp Attendance.Employee.UpdateOtLimit,
-        // KHÁC Attendance.Employee.Update (UpdateAsync ở trên không còn đụng 2 field này nữa). Non-Admin
-        // chỉ sửa được nhân viên thuộc ĐÚNG Phòng ban mình phụ trách (IDepartmentAccessGuard, resolve
-        // qua employee.DepartmentId ?? employee.Group.DepartmentId).
+        // Narrow permission Attendance.Employee.UpdateOtLimit; non-Admins are limited to departments they coordinate.
         Task<EmployeeDto> UpdateOtLimitAsync(string userName, bool isAdmin, int employeeId, UpdateEmployeeOtLimitDto request);
     }
 }

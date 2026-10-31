@@ -15,9 +15,7 @@ namespace Asset.Application.Services
         {
             var query = _unitOfWork.AppReleases.GetQueryable(false).Where(x => !x.IsDeleted);
 
-            // Selector phải là Expression<Func<>> để EF dịch sang SQL — không được truyền method group/
-            // helper gọi lồng (vd `x => ToDto(x)`), sẽ ném "could not be translated" lúc chạy. Inline
-            // projection trực tiếp, cùng pattern mọi service khác trong Asset (vd BranchService).
+            // Selector must be an inline expression; calling a helper (x => ToDto(x)) can't be translated by EF.
             var latest = await _unitOfWork.AppReleases.ToListAsync(
                 query.OrderByDescending(x => x.VersionCode).Take(1),
                 x => new AppReleaseDto

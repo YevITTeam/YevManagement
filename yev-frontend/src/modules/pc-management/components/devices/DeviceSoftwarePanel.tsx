@@ -20,9 +20,8 @@ interface DeviceSoftwarePanelProps {
     onChanged: () => void;
 }
 
-// Trạng thái Device không cho cài thêm phần mềm — khớp DeviceStatusExtensions.IsLiquidationStatus ở BE
-// (2 = PendingLiquidation, 3 = Liquidated). Máy ở 2 trạng thái này bị DeviceService tự gỡ hết phần
-// mềm mỗi lần Save, nên chặn thêm mới ngay từ đây để tránh cài xong lại mất.
+// Mirrors BE DeviceStatusExtensions.IsLiquidationStatus (2, 3); DeviceService strips software from these
+// devices on every save, so adding is blocked up front.
 const LIQUIDATION_STATUSES = new Set([2, 3]);
 
 const PRIORITY_FILTER_ALL = "all";
@@ -55,7 +54,7 @@ export default function DeviceSoftwarePanel({ deviceId, deviceStatus, softwares,
     const [deletingItem, setDeletingItem] = useState<DeviceSoftwareDeviceDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    // DeviceSoftware/device/{deviceId} không trả softwarePriority — join thêm từ danh mục phần mềm để lọc/sắp xếp theo ưu tiên.
+    // This endpoint omits softwarePriority, so it's joined from the software catalog for filtering/sorting.
     const [priorityMap, setPriorityMap] = useState<Map<number, number | null>>(new Map());
     const [priorityFilter, setPriorityFilter] = useState<string>(PRIORITY_FILTER_ALL);
     const [prioritySort, setPrioritySort] = useState<PrioritySort>("none");

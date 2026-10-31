@@ -128,7 +128,7 @@ namespace Attendance.Application.Services
         private void QueueBackfill(int delegationId)
         {
             _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
-                await sp.GetRequiredService<IOtFormService>().SendDelegationBackfillNotificationsAsync(delegationId));
+                await sp.GetRequiredService<IOtFormNotificationService>().SendDelegationBackfillNotificationsAsync(delegationId));
         }
 
         public async Task DeleteAsync(int id, string currentUserName)

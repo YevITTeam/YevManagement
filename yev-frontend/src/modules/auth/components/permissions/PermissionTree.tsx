@@ -9,7 +9,7 @@ interface PermissionTreeProps {
     isChecked: (permissionId: number) => boolean;
     onToggle: (permissions: PermissionDto[], checked: boolean) => void;
     disabled?: boolean;
-    /** Nhãn nhỏ hiện cạnh từng quyền (vd "Cấp thêm", "Thu hồi"). */
+    /** Small badge next to each permission (e.g. granted/revoked). */
     renderBadge?: (permission: PermissionDto) => ReactNode;
 }
 
@@ -31,8 +31,7 @@ function CountBar({ granted, total }: { granted: number; total: number }) {
     );
 }
 
-// Cây quyền Module > Entity > Permission dùng chung cho màn Phân quyền theo vai trò và Phân quyền riêng
-// theo người dùng. Đang gõ tìm kiếm thì tự mở hết các nhánh có kết quả.
+// Shared by the role and per-user permission screens; searching auto-expands matching branches.
 export default function PermissionTree({ moduleGroups, isChecked, onToggle, disabled = false, renderBadge }: PermissionTreeProps) {
     const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
     const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());

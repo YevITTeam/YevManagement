@@ -13,13 +13,12 @@ namespace Asset.Application.Dtos.DeviceTypes
         [Required(ErrorMessage = "Tên loại thiết bị không được để trống")]
         public string TypeName { get; set; } = null!;
 
-        // Null = không thuộc phạm vi kiểm tra hằng ngày (quét QR). Giá trị = Asset.Domain.Enums.ServerCheckCategory.
+        // Null = not part of the daily QR check. Values: Asset.Domain.Enums.ServerCheckCategory.
         public int? ServerCheckCategory { get; set; }
 
-        // True = thiết bị loại này phải quét QR khi kiểm tra hằng ngày; false = hệ thống tự ping lúc kết thúc phiên.
+        // False = the system pings the device at session end instead of requiring a QR scan.
         public bool RequiresQrScan { get; set; }
 
-        // True = loại này được đưa vào đợt kiểm kê thiết bị (asset-module.md §1.22).
         public bool IncludedInInventory { get; set; } = true;
     }
 }

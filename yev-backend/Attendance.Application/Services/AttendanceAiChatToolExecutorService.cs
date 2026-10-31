@@ -8,28 +8,19 @@ using Attendance.Application.Interfaces.Service;
 
 namespace Attendance.Application.Services
 {
-    // Implements the 6 read-only lookup tools + 1 write tool from
-    // docs/docs-be/attendance-module.md §AttendanceAiChat by calling straight into the existing
-    // Attendance Application services — no repository access of its own, no duplicated business rules.
-    // The only write path (create_ot_form_draft) calls the exact same IOtFormService.CreateAsync the
-    // manual "Tạo đơn tăng ca" screen uses, so every validation rule there (scope check, employee/group
-    // match, EndTime bounds...) applies identically regardless of who/what calls it.
+    // Delegates to existing Attendance services only; the write tool calls the same IOtFormService.CreateAsync
+    // as the manual screen so every validation applies identically.
     public class AttendanceAiChatToolExecutorService : IAttendanceAiChatToolExecutorService
     {
-        // Master-data lists here (Department/Group/Reason/OtCase) are naturally small; Employee lists
-        // per Group can be bigger than Asset's per-tool cap, so this is a bit more generous than
-        // Asset's MaxResults=10.
+        // Per-group employee lists can be larger than Asset's cap of 10.
         private const int MaxResults = 30;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-            // Same reasoning as Asset's AiChatToolExecutorService: the default encoder escapes all
-            // non-ASCII as \uXXXX, which a small local model then mimics literally in its own free
-            // text afterwards (Vietnamese diacritics showing up as raw escape codes on the FE). This
-            // JSON only ever becomes a "tool" message's plain-text content sent back to Ollama, never
-            // embedded in HTML, so the extra escaping protection is pure downside here.
+            // The default encoder escapes diacritics as \uXXXX, which the model then copies into its replies;
+            // this JSON never reaches HTML so relaxed escaping is safe.
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
@@ -86,10 +77,7 @@ namespace Attendance.Application.Services
             }
             catch (Exception ex)
             {
-                // Catches DomainException/NotFoundException thrown deep inside OtFormService.CreateAsync
-                // (scope check, employee/group mismatch, EndTime bounds...) the same way Asset's
-                // executor does — a validation failure becomes a normal tool-error the model can relay
-                // and act on, not a crash of the whole stream.
+                // Turn validation failures into a tool error the model can relay instead of crashing the stream.
                 result = new { error = ex.Message };
             }
 
@@ -100,9 +88,7 @@ namespace Attendance.Application.Services
             };
         }
 
-        // See IAttendanceAiChatToolExecutorService.BuildReferenceContextAsync for WHY this exists
-        // (production failure modes) — docs §16. Plain text, not JSON: the model reproduces "id 1 = TH1"
-        // far more reliably from a flat labelled line than from nested JSON, and it costs fewer tokens.
+        // Plain text, not JSON: the model reproduces "id 1 = TH1" more reliably from flat lines and it costs fewer tokens.
         public async Task<string> BuildReferenceContextAsync(AttendanceAiChatCallerContext caller, CancellationToken cancellationToken)
         {
             var builder = new StringBuilder();
@@ -116,8 +102,7 @@ namespace Attendance.Application.Services
 
                 if (scopes.Count == 0)
                 {
-                    // Admin: unrestricted, so there is no bounded group list to pre-fetch. Lookup tools
-                    // stay available for exactly this case.
+                    // Admin scope is unbounded, so nothing to pre-fetch; lookup tools cover it.
                     builder.Append(caller.IsAdmin
                         ? "- Phạm vi tạo đơn: bạn là Admin nên KHÔNG bị giới hạn Nhóm/Bộ phận. Vì vậy PHẢI dùng tool search_departments/search_groups để tìm Nhóm/Bộ phận người dùng nêu, rồi search_employees_by_group để lấy nhân viên.\n"
                         : "- Phạm vi tạo đơn: KHÔNG có Nhóm/Bộ phận nào. Người dùng này không được phép tạo đơn tăng ca — hãy nói rõ điều đó và không tạo đơn.\n");
@@ -134,9 +119,7 @@ namespace Attendance.Application.Services
                                .Append($"thuộc departmentId={scope.DepartmentId} \"{scope.DepartmentNameVn}\"\n");
                     }
 
-                    // Only pre-fetch employees when the group is unambiguous — with several scopes we
-                    // don't know which one the form will use, and dumping every group's roster would
-                    // bloat the prompt for no gain.
+                    // With several scopes the target group is unknown, and dumping every roster would bloat the prompt.
                     if (scopes.Count == 1)
                     {
                         var employees = await _employeeService.GetByGroupIdAsync(scopes[0].GroupId);
@@ -165,9 +148,7 @@ namespace Attendance.Application.Services
             }
             catch (Exception ex)
             {
-                // Degraded mode: keep whatever was gathered and tell the model to fall back to tools
-                // rather than trusting a half-built list (a truncated list is exactly what it would
-                // otherwise "helpfully" complete by inventing entries).
+                // Tell the model to use tools instead of trusting a partial list it would otherwise "complete" by inventing entries.
                 builder.Append($"- CẢNH BÁO: không tra cứu được đầy đủ dữ liệu tham chiếu ({ex.Message}). ")
                        .Append("Danh sách phía trên có thể THIẾU — với những mục còn thiếu PHẢI gọi tool tra cứu tương ứng, TUYỆT ĐỐI không tự bịa.\n");
             }
@@ -225,8 +206,7 @@ namespace Attendance.Application.Services
             return employees.Take(MaxResults).ToList();
         }
 
-        // Returns (tool-result-object, created-OtForm-id-or-null) — the id is only used by
-        // AttendanceAiChatService to emit the "otform" deep-link stream event, never sent to the model.
+        // CreatedOtFormId is only for the FE deep-link event, never sent to the model.
         private async Task<(object Result, int? CreatedOtFormId)> CreateOtFormDraftAsync(JsonElement args, AttendanceAiChatCallerContext caller)
         {
             var groupId = GetIntArg(args, "groupId");
@@ -307,8 +287,7 @@ namespace Attendance.Application.Services
 
             var created = await _otFormService.CreateAsync(caller.UserName, caller.FullName, caller.IsAdmin, dto);
 
-            // Trimmed summary, not the full OtFormDto (avoids flooding context with the nested
-            // employee/approval-history payload the model doesn't need to reference again).
+            // Trimmed summary keeps the nested employee/history payload out of the model context.
             var summary = new
             {
                 success = true,

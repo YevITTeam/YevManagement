@@ -64,30 +64,15 @@ namespace Identity.Infrastructure.Authentication
             }
 
             string? ipAddress = GetClientIp();
-            // DeviceName is now only for reference/display purposes (2026-07-11, changed back —
-            // see the note below), no longer used to match a User, so it could be resolved later,
-            // but it's still resolved here to set/refresh it on the User found below.
+            // DeviceName is display-only (not used to match a User), resolved here just to refresh it.
             string? deviceName = await GetClientDeviceNameAsync(ipAddress);
 
             using (var scope = _serviceProvider.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
 
-                // Matches User by plain UserName (2026-07-11, changed back from the (UserName,
-                // DeviceName) pair applied on 2026-07-10). Reason for the change: DeviceName resolved
-                // via reverse-DNS on the client IP is unstable (NAT, multiple PTR records...) —
-                // the same person could get resolved to 2 different hostnames within a few seconds,
-                // making the system think it's an "unknown machine" and auto-create a duplicate User
-                // on every login. Trade-off: lost the "per-machine Role" feature of
-                // UserService.CreateUserAsync — now one UserName maps to exactly one User row.
-                // AsSplitQuery(): 3 collection Include riêng biệt (Roles.Permissions, LoginUserIPs,
-                // UserPermissions.Permission) trên CÙNG 1 query mặc định sinh ra 1 câu SQL JOIN nhân chéo
-                // (cartesian explosion) — số dòng trả về = tích số phần tử của cả 3 collection, càng
-                // phình to theo thời gian vì LoginUserIPs tích luỹ vĩnh viễn mỗi IP mới user từng đăng
-                // nhập. Vì hàm này chạy trên MỌI request có Bearer token (xem RolesLoaded ở trên), phần
-                // này từng là nguồn chậm chính còn sót lại sau khi đã cache reverse-DNS (2026-08-08, quan
-                // sát GET /Auth/me mất 1.5s dù DNS đã cache). AsSplitQuery tách thành 3 câu SQL riêng,
-                // đúng khuyến nghị chính thức của EF Core khi Include nhiều collection cùng lúc.
+                // Match by UserName only: reverse-DNS DeviceName is unstable (NAT, multiple PTRs) and caused duplicate Users.
+                // Split query because three collection Includes would explode into a cartesian JOIN on every request.
                 var user = await dbContext.Users
                     .AsSplitQuery()
                     .Include(x => x.Roles).ThenInclude(r => r.Permissions)
@@ -188,9 +173,7 @@ namespace Identity.Infrastructure.Authentication
                 var permissionCodes = new List<string>();
                 if (user.Roles != null)
                 {
-                    // Effective permission = Role-based permissions, plus individually granted
-                    // permissions (UserPermission.IsGranted=true), minus individually revoked
-                    // permissions (IsGranted=false) — a deny override always wins over a Role grant.
+                    // Role grants plus individual grants minus individual denies; deny wins.
                     var basePermissionCodes = user.Roles.SelectMany(r => r.Permissions).Select(p => p.Code);
 
                     var userPermissions = user.UserPermissions ?? new List<UserPermission>();
@@ -289,10 +272,7 @@ namespace Identity.Infrastructure.Authentication
             return windowsUsername;
         }
 
-        // Resolves email from the AD "mail" attribute via UserPrincipal.EmailAddress — the same
-        // System.DirectoryServices.AccountManagement mechanism as GetActualFullName above (PrincipalContext
-        // + UserPrincipal.FindByIdentity by SamAccountName), kept as a separate function instead of
-        // merging them, to avoid touching the already-stable GetActualFullName logic.
+        // Kept separate from GetActualFullName to avoid touching that stable logic.
         private string? GetActualEmail(string windowsUsername)
         {
             var parts = windowsUsername.Split('\\');
@@ -342,14 +322,8 @@ namespace Identity.Infrastructure.Authentication
             catch { return null; }
         }
 
-        // Reverse DNS cache key prefix + durations. This lookup used to run synchronously and unbounded
-        // on EVERY authenticated request (TransformAsync re-runs on every Bearer call, see the
-        // RolesLoaded check above — the JWT deliberately excludes that claim so permissions stay fresh).
-        // On a client IP with no PTR record (common on an internal network), Dns.GetHostEntry can hang
-        // for several seconds waiting on the OS resolver timeout, single-handedly making EVERY API call
-        // slow (2026-08-08, observed ~4s stall on GET /Auth/me in DevTools Network). Cache the result per
-        // IP so only the first request per cache window pays the DNS round trip, and bound the lookup
-        // itself so a slow/unreachable DNS server can't stall the request past DnsLookupTimeout.
+        // Runs on every authenticated request, and Dns.GetHostEntry can hang for seconds on IPs without a PTR record,
+        // so results are cached per IP and the lookup is bounded by DnsLookupTimeout.
         private const string DeviceNameCacheKeyPrefix = "ClaimsTransform:DeviceName:";
         private static readonly TimeSpan DnsLookupTimeout = TimeSpan.FromMilliseconds(500);
         private static readonly TimeSpan ResolvedNameCacheDuration = TimeSpan.FromHours(6);

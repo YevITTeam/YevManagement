@@ -2,10 +2,7 @@ using System;
 
 namespace Asset.Domain.Entities;
 
-// Snapshot 1 Device thuộc xưởng của phiên tại thời điểm start (asset-module.md §1.22). Quét mã không
-// khớp bản ghi nào ở đây (mã không tồn tại, hoặc thiết bị thuộc xưởng khác/phát sinh sau khi snapshot)
-// bị từ chối thẳng ở Service, KHÔNG tạo bản ghi mới — quyết định người dùng, không có khái niệm
-// "quét thừa/lạ".
+// Snapshot taken at session start; scans matching no item here are rejected, never added as new rows.
 public partial class InventorySessionItem
 {
     public int Id { get; set; }

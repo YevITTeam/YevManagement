@@ -7,8 +7,6 @@ using Workflow.Application.Interfaces.Service;
 
 namespace Workflow.Api.Controllers
 {
-    // Chữ ký đăng ký sẵn — Pha 4 (workflow-module.md §3.4, §10). Mỗi người tự quản lý chữ ký của CHÍNH
-    // mình, dùng để tự điền lúc duyệt đơn thay vì phải tải ảnh lên mỗi lần.
     public class EmployeeSignatureController : WorkflowBaseController
     {
         private readonly IEmployeeSignatureService _employeeSignatureService;
@@ -26,9 +24,7 @@ namespace Workflow.Api.Controllers
             return Success(result);
         }
 
-        // Đăng ký/cập nhật chữ ký của CHÍNH mình — KHÔNG áp dụng ngay: gửi email xác nhận cho chính
-        // người gọi, chữ ký chỉ có hiệu lực sau khi bấm xác nhận (xem 2 action "confirm" bên dưới) —
-        // chống trường hợp ai đó chiếm phiên đăng nhập rồi đổi chữ ký hộ người khác.
+        // Not applied immediately: a confirmation email goes to the caller, so a hijacked session can't swap signatures.
         [RequirePermission("Workflow.Signature.Update")]
         [HttpPut("me")]
         public async Task<ActionResult<ApiResponse<bool>>> RequestUpsertMine([FromBody] UpsertEmployeeSignatureDto request)
@@ -37,9 +33,7 @@ namespace Workflow.Api.Controllers
             return Success(true, "Đã gửi email xác nhận cập nhật chữ ký — vui lòng kiểm tra hộp thư trong 30 phút.");
         }
 
-        // 2 action công khai bên dưới phục vụ trang xác nhận nhỏ mà FE mở khi người dùng bấm link
-        // trong email (KHÔNG cần đăng nhập SPA) — token tự nó là thông tin xác thực duy nhất, mirror
-        // Attendance.UserSignatureController.
+        // Public endpoints for the email-link confirmation page; the token is the only credential.
         [AllowAnonymous]
         [HttpGet("confirm/{token}")]
         public async Task<ActionResult<ApiResponse<SignatureConfirmationPreviewDto>>> GetPendingConfirmation(string token)

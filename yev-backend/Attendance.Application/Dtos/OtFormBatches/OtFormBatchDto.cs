@@ -4,15 +4,12 @@ namespace Attendance.Application.Dtos.OtFormBatches
     {
         public int Id { get; set; }
 
-        // Enum Attendance.Domain.Enums.JobTitleTerminalLevel — cấp duyệt của batch này.
         public int TerminalLevel { get; set; }
 
-        // Chỉ có giá trị khi TerminalLevel=DepartmentManager — WorkshopManager/GeneralDirector là
-        // batch toàn công ty (DepartmentId=null), xem OtFormBatch.
+        // Only for DepartmentManager; other levels are company-wide (DepartmentId = null).
         public int? DepartmentId { get; set; }
 
-        // Tên hiển thị phạm vi batch — Department (bilingual) nếu TerminalLevel=DepartmentManager,
-        // ngược lại là tên JobTitle ứng với TerminalLevel đó (JobTitle không có bản Jp).
+        // Department name for DepartmentManager, otherwise the JobTitle name (JobTitle has no Jp name).
         public string ScopeNameVn { get; set; } = null!;
         public string? ScopeNameJp { get; set; }
 
@@ -26,8 +23,7 @@ namespace Attendance.Application.Dtos.OtFormBatches
         public string? ProcessedByUserName { get; set; }
         public string? ProcessedByFullName { get; set; }
 
-        // Chỉ gồm các đơn nhỏ VẪN CÒN Status==Pending (còn hiệu lực xử lý) — đơn đã bị duyệt/từ chối
-        // lẻ tay ngoài luồng batch (hiếm) sẽ không xuất hiện ở đây nữa.
+        // Only forms still Pending; ones resolved individually outside the batch are excluded.
         public List<OtFormBatchItemDto> OtForms { get; set; } = new();
     }
 }

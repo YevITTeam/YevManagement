@@ -1,5 +1,4 @@
-// Khớp asset-module.md §4 Category: 0=Server, 1=Network, 2=Ups.
-// ItemStatus: 0=Pending (chưa quét), 1=Ok, 2=Ng. SessionStatus: 0=InProgress, 1=Completed.
+// Category: 0=Server, 1=Network, 2=Ups. ItemStatus: 0=Pending, 1=Ok, 2=Ng. SessionStatus: 0=InProgress, 1=Completed.
 export interface ServerCheckItemDto {
     id: number;
     deviceId: number;
@@ -12,7 +11,7 @@ export interface ServerCheckItemDto {
     status: number;
     statusText: string;
     note: string | null;
-    // true = phải quét QR; false = BE tự ping (NG nếu không có IP) khi kết thúc phiên.
+    // false = BE pings it at session end (NG when there is no IP).
     requiresScan: boolean;
 }
 
@@ -49,12 +48,12 @@ export interface ServerCheckManualItemDto {
     name: string;
     displayOrder: number;
     usesNetworkPing: boolean;
-    // true = mục "Máy lạnh" (nhân viên tự tick OK/NG); báo cáo hiển thị ở cột Máy lạnh riêng.
+    // Air-conditioner item (ticked by hand); the report shows it in its own column.
     isAirConditioner: boolean;
 }
 
 // GET /api/ServerCheck/network-ping — pings the IP of every Server/Network/UPS device in scope
-// (asset-module.md §1.20) so the "Network - Factory"/"Network - Server" items can be verified
+// so the "Network - Factory"/"Network - Server" items can be verified
 // on the spot instead of by hand. Scope (branch) is configured via AssetSetting.
 export interface NetworkPingItemDto {
     ipAddress: string;
@@ -109,7 +108,7 @@ export interface ServerCheckReportRowDto {
     checkedBy: string | null;
 }
 
-// GET /api/ServerCheckAssignment — mỗi user đúng 1 xưởng (asset-module.md §1.21).
+// One branch per user.
 export interface ServerCheckAssignmentDto {
     id: number;
     userId: number;

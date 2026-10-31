@@ -7,19 +7,12 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Quản lý cây duyệt cấu hình tay cho đơn OT "theo chuyền" (Chế tạo, 2026-08-24) — 1 danh sách
-    // DUY NHẤT theo từng Bộ phận, gộp cả cấp trung gian (Line Leader/Group Leader/Team Leader) lẫn
-    // cấp cuối (Manager/Factory Manager/Director) trong CÙNG 1 chuỗi — khác DepartmentApprovalStep +
-    // GroupApprovalStep của đơn "theo Nhóm" (2 tầng riêng). Lý do gộp: Chế tạo có 137 Group, cấu hình
-    // riêng từng Group theo kiểu GroupApprovalStep là không khả thi — xem ProductionApprovalStep.
-    // Không có Create/Update/Delete từng dòng riêng lẻ, chỉ thay NGUYÊN danh sách 1 lần.
+    // One flat chain per department (intermediate + terminal levels together); managed by whole-list replace.
     public class ProductionApprovalStepService : BaseService<IAttendanceUnitOfWork>, IProductionApprovalStepService
     {
         public ProductionApprovalStepService(IAttendanceUnitOfWork unitOfWork) : base(unitOfWork) { }
 
-        // Tái dùng DepartmentApprovalStepCoordinator (không tạo bảng phụ trách riêng) — người được
-        // Admin phân công phụ trách Cây duyệt của 1 Bộ phận thì phụ trách CẢ 2 loại cây duyệt
-        // (theo Nhóm lẫn theo chuyền) của Bộ phận đó.
+        // Reuses department coordinators: they manage both the group and the production tree of their department.
         private async Task EnsureCanManageDepartmentAsync(string userName, bool isAdmin, int departmentId)
         {
             if (isAdmin) return;
@@ -74,9 +67,7 @@ namespace Attendance.Application.Services
             if (request.Steps.Count(x => x.IsResponsible) > 1)
                 throw new DomainException("Chỉ được đánh dấu tối đa 1 bước là \"người chịu trách nhiệm\".");
 
-            // Không giới hạn TerminalLevel như DepartmentApprovalStep — danh sách này nhận CẢ cấp
-            // trung gian (Line Leader/Group Leader/Team Leader) lẫn cấp cuối (Manager/Factory
-            // Manager/Director) trong cùng 1 chuỗi.
+            // Unlike DepartmentApprovalStep, intermediate and terminal levels are both allowed here.
             var jobTitleIds = request.Steps.Select(x => x.JobTitleId).ToHashSet();
             var jobTitlesById = (await _unitOfWork.JobTitles.FindAsync(x => jobTitleIds.Contains(x.Id) && !x.IsDeleted))
                 .ToDictionary(x => x.Id);
@@ -94,10 +85,7 @@ namespace Attendance.Application.Services
                 }
             }
 
-            // Đúng 2 ô "Người đề nghị" cố định trên giấy in YEV-22-024 — CHỈ tính cấp trung gian (Line
-            // Leader/Group Leader/Team Leader, TerminalLevel=None), vì 3 cấp cuối (Manager/Factory
-            // Manager/Director) đã có 3 ô chữ ký RIÊNG trên giấy, không dùng chung 2 ô này — mirror
-            // GroupApprovalStepService.ReplaceAsync (2026-08-25).
+            // The printout has exactly 2 fixed requester boxes for intermediate levels; terminal levels have their own boxes.
             if (intermediateStepCount > 0 && (intermediateSigningCount < 1 || intermediateSigningCount > 2))
                 throw new DomainException("Phải có từ 1 đến 2 bước CẤP TRUNG GIAN (Line Leader/Group Leader/Team Leader) được đánh dấu \"Bắt buộc ký\" (khớp 2 ô \"Người đề nghị\" cố định trên giấy in) — các bước khác (kể cả cấp cuối) để \"Chỉ xác nhận\"/dùng ô chữ ký riêng, không giới hạn số lượng.");
 

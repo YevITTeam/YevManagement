@@ -6,8 +6,7 @@ interface EmptyStateProps {
     description?: string;
 }
 
-// Richer replacement for the plain "Không có dữ liệu." text row (DESIGN_SYSTEM.md §4.4) — put
-// inside a <td colSpan> for tables, or directly inside a card/list body.
+// Put inside a <td colSpan> for tables, or directly inside a card/list body.
 export function EmptyState({ icon: Icon, title, description }: EmptyStateProps) {
     return (
         <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">

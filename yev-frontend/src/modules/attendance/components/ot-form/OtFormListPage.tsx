@@ -37,8 +37,7 @@ function toDateStr(d: Date): string {
     return `${year}-${month}-${day}`;
 }
 
-// [ngày-đầu-tháng, ngày-cuối-tháng] của (year, month 0-indexed) — dùng cho lịch mini + gọi
-// GET /pending-approvals/dates.
+// [first, last] day of (year, 0-indexed month).
 function monthRange(year: number, month: number): { from: string; to: string } {
     return { from: toDateStr(new Date(year, month, 1)), to: toDateStr(new Date(year, month + 1, 0)) };
 }
@@ -47,8 +46,7 @@ type OtFormListMode = "my-forms" | "pending-approvals" | "my-actions" | "my-part
 
 interface OtFormListPageProps {
     mode: OtFormListMode;
-    // true khi nhúng trong tab container (OtFormTabsPage) — ẩn hẳn tiêu đề/mô tả riêng của từng mode,
-    // chỉ còn bảng + phân trang, vì tab container đã có 1 tiêu đề chung ở ngoài.
+    // Embedded in OtFormTabsPage, which already has the heading.
     hideHeading?: boolean;
 }
 
@@ -57,13 +55,8 @@ function formatDate(value: string) {
     return new Date(value).toLocaleDateString("en-GB");
 }
 
-// "Tiến độ duyệt" (approvalSummary) — mỗi phần tử 1 dòng đã Ký/Duyệt/Từ chối theo bước Chức vụ
-// (StepOrder + jobTitleNameSnapshot, xem docs §Cây chức vụ), nối thêm dòng "Đang chờ duyệt" chung
-// chung nếu đơn chưa Completed/Rejected — tên Chức vụ đang chờ nằm ở OtFormDto.approvalSteps (chỉ
-// xem được khi mở chi tiết đơn, danh sách không có field này) — có ở cả 5 tab danh sách (§4.2).
-// currentStepCandidateCount > 1 nghĩa là bước đang chờ có NHIỀU người cùng giữ Chức vụ đó — hiện rõ
-// "đang chờ 1 trong N người" để người xem hiểu đây không phải riêng họ phải xử lý (2026-08-08, Giai
-// đoạn 3.2 — polish UX "Chờ tôi duyệt", trước đây không có chỉ báo gì).
+// The list has no approvalSteps, so the pending job title isn't shown; only "waiting for 1 of N" when
+// several people hold the pending step, so viewers know it isn't theirs alone.
 function ApprovalSummaryCell({
     summary,
     status,
@@ -77,8 +70,7 @@ function ApprovalSummaryCell({
     const isWaiting = status === 0; // OtFormStatus.InApproval
     const showWaitingCount = isWaiting && currentStepCandidateCount > 1;
     if (summary.length === 0 && !showWaitingCount) return null;
-    // Gọn: mỗi bước đã xử lý chỉ còn icon ✓/✗ + tên Chức vụ (tên người nằm trong tooltip); trạng thái "đang
-    // chờ" đã có pill Trạng thái nên chỉ hiện thêm số người cùng giữ bước đang chờ khi > 1.
+    // Processed steps show only an icon + job title (name in tooltip); the status pill already covers "waiting".
     return (
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
             {summary.map((item, index) => {
@@ -107,8 +99,6 @@ function ApprovalSummaryCell({
     );
 }
 
-// docs/attendance-module.md §API — my-forms (đơn do chính mình tạo) và pending-approvals (đơn chờ chính
-// mình duyệt, BE tự lọc theo cấp/scope) dùng chung shape OtFormListItemDto + phân trang.
 type FormTypeFilter = "" | "office" | "production";
 
 export default function OtFormListPage({ mode, hideHeading = false }: OtFormListPageProps) {
@@ -118,15 +108,12 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const router = useRouter();
     const locale = useLocale();
     const { user } = useAuth();
-    // Create/CreateProduction tách rời — Line Leader chỉ có CreateProduction vẫn cần thấy nút "Tạo đơn"
-    // (2026-09-28, đồng bộ với otRoutePermissions.ts).
+    // Create and CreateProduction are separate: Line Leaders with only CreateProduction still need the create button.
     const canCreate = hasAnyPermission(user, ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"]);
     const canBulkApprove = mode === "pending-approvals" && hasPermission(user, "Attendance.OTForm.Approve");
     const [forms, setForms] = useState<OtFormListItemDto[]>([]);
 
-    // Ký/Từ chối hàng loạt (2026-08-27) — chỉ ở tab "Chờ tôi duyệt". Comment: FE KHÔNG tự lọc theo
-    // candidate của bước hiện tại (giống nút Duyệt/Từ chối đơn lẻ) — BE là nguồn chặn thật, trả lỗi
-    // riêng từng đơn nếu người bấm không phải candidate hợp lệ.
+    // FE doesn't filter by current-step candidate (same as single approve); BE rejects per form.
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [bulkAction, setBulkAction] = useState<"approve" | "reject" | null>(null);
     const [previewFormId, setPreviewFormId] = useState<number | null>(null);
@@ -140,15 +127,13 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
     const [hasNextPage, setHasNextPage] = useState(false);
     const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
-    // Ô nhập bộ lọc (chưa áp dụng) — tách khỏi appliedFilters để gõ/chọn xong mới bấm "Tìm kiếm" mới
-    // gọi API, giống khuôn AuditTrailList.tsx.
-    // Bộ lọc nâng cao (Bộ phận/Nhóm/Team/Line/Nhóm ca) mặc định thu gọn — đa số lượt chỉ lọc theo ngày/trạng thái.
+    // Draft filters, applied only on "Search".
+    // Advanced filters collapsed by default; most searches only use date/status.
     const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
     const [fromDateInput, setFromDateInput] = useState("");
     const [toDateInput, setToDateInput] = useState("");
     const [statusInput, setStatusInput] = useState("");
-    // Lọc theo Bộ phận/Nhóm (đơn văn phòng) và Line/Team/Nhóm ca (đơn dưới chuyền) — 2026-09-04, BE hỗ
-    // trợ cả 5 param ở MỌI endpoint danh sách (xem GetOtFormListParams), nên hiện cùng lúc ở mọi tab.
+    // BE supports these filters on every list endpoint, so they show on all tabs.
     // "" = all; "production" = floor forms (by line), "office" = office forms (by group).
     const [formTypeInput, setFormTypeInput] = useState<FormTypeFilter>("");
     const [workshopId, setWorkshopId] = useState<number | "">("");
@@ -183,8 +168,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         }
     }
 
-    // Đổi mode (chuyển menu) → về trang 1 + xoá bộ lọc, phát hiện bằng so sánh snapshot ngay trong
-    // render (React khuyến khích thay effect chỉ để "phản ứng" theo prop/state khác đổi).
+    // Mode change resets page and filters via render-time snapshot compare instead of an effect.
     const [prevMode, setPrevMode] = useState(mode);
     if (prevMode !== mode) {
         setPrevMode(mode);
@@ -228,8 +212,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         productionShiftTeamId: appliedFilters.productionShiftTeamId !== "" ? appliedFilters.productionShiftTeamId : undefined,
     };
 
-    // ── Chọn Phòng ban → Nhóm đang chọn (nếu có) có thể không còn thuộc Phòng ban mới, reset —
-    // snapshot render (frontend-conventions.md §3), cùng pattern Team→Line bên dưới. ──
+    // Department change may orphan the selected group; reset via render-time snapshot (frontend-conventions.md §3).
     const [departmentOptions, setDepartmentOptions] = useState<DepartmentDto[]>([]);
     const [groupOptions, setGroupOptions] = useState<GroupDto[]>([]);
 
@@ -252,12 +235,11 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         t("officeFilterLoadError")
     );
 
-    // ── Chọn Team → Line đang chọn (nếu có) có thể không còn thuộc Team mới, reset — snapshot render
-    // (frontend-conventions.md §3), cùng pattern CreateOtFormPage.tsx. ──
+    // Team change may orphan the selected Line; reset via render-time snapshot.
     const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
     const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
     const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
-    // Team/Line/Nhóm ca chỉ có nghĩa với đơn xưởng; chọn loại khác thì không hiện và không tải options.
+    // Team/Line/shift only apply to floor forms; other types don't show or load them.
     const showProductionFilter = formTypeInput === "production";
     const showOfficeGroupFilter = formTypeInput !== "production";
 
@@ -301,7 +283,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         t("productionFilterLoadError")
     );
 
-    // ── Lịch mini "ngày nào có đơn chưa duyệt" (2026-09-04) — chỉ tab "Chờ tôi duyệt". ──
+    // Mini calendar of dates with pending forms (pending-approvals tab only).
     const today = new Date();
     const [calendarYear, setCalendarYear] = useState(today.getFullYear());
     const [calendarMonthIndex, setCalendarMonthIndex] = useState(today.getMonth());
@@ -409,8 +391,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         });
     };
 
-    // Xoá lựa chọn khi danh sách đổi (đổi trang/lọc/mode, hoặc sau khi xử lý xong) — so sánh snapshot
-    // ngay trong render thay vì effect (frontend-conventions.md §3).
+    // Clear the selection when the list changes, via render-time snapshot compare.
     const formsKey = forms.map((form) => form.id).join(",");
     const [prevFormsKey, setPrevFormsKey] = useState(formsKey);
     if (prevFormsKey !== formsKey) {
@@ -499,7 +480,7 @@ export default function OtFormListPage({ mode, hideHeading = false }: OtFormList
         appliedFilters.productionLineId,
         appliedFilters.productionShiftTeamId,
     ].filter((value) => value !== "").length;
-    // The Line / Nhóm ca column only applies to floor forms, so it is hidden for the office-only view.
+    // The Line / shift column only applies to floor forms, so it is hidden for the office-only view.
     const showLineColumn = appliedFilters.formType !== "office";
     const columnCount = (mode === "my-forms" ? 9 : 8) + (canBulkApprove ? 1 : 0) - (showLineColumn ? 0 : 1);
 

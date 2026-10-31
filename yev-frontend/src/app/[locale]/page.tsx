@@ -14,8 +14,7 @@ interface ModuleCard {
   icon: ReactNode;
   visible: boolean;
   isExternal?: boolean;
-  // Màu nhận diện riêng của từng module (chữ/icon/viền khi rê chuột) + màu nền nhạt của ô icon — để nhìn
-  // thoáng qua là phân biệt được module, không còn 6 thẻ cùng đỏ như nhau.
+  // Per-module accent colour so modules are distinguishable at a glance.
   accent: string;
   tint: string;
 }
@@ -23,11 +22,8 @@ interface ModuleCard {
 export default function Home() {
   const t = useTranslations("Home");
   const { user, isLoading } = useAuth();
-  // Chỉ hiện mục "Quản lý thiết bị" nếu user có ít nhất 1 permission module Asset
   const canManagePc = !isLoading && hasModuleAccess(user, "Asset");
-  // Chỉ hiện mục "Quản lý tăng ca" nếu user có ít nhất 1 permission module Attendance
   const canManageOt = !isLoading && hasModuleAccess(user, "Attendance");
-  // Chỉ hiện mục "Workflow" nếu user có ít nhất 1 permission module Workflow (Pha 1: tổ chức + nhân sự)
   const canManageWorkflow = !isLoading && hasModuleAccess(user, "Workflow");
 
   const menuItems: ModuleCard[] = [
@@ -109,7 +105,6 @@ export default function Home() {
 
     const content = (
       <>
-        {/* Vạch màu nhận diện ở mép trên thẻ */}
         <span className="absolute inset-x-0 top-0 h-1 bg-[var(--accent)]" aria-hidden />
         <div className="mb-3 flex items-start justify-between">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--tint)] text-[var(--accent)]">
@@ -131,7 +126,7 @@ export default function Home() {
       </>
     );
 
-    // Link ngoài dùng thẻ <a> mở tab mới, tránh bị next-intl thêm tiền tố ngôn ngữ.
+    // Plain <a> in a new tab so next-intl doesn't add the locale prefix.
     if (item.isExternal) {
       return (
         <a key={item.link} href={item.link} target="_blank" rel="noopener noreferrer" className={cardClasses} style={style}>
@@ -143,8 +138,7 @@ export default function Home() {
       <Link
         key={item.link}
         href={item.link}
-        // KHÔNG bật prefetch — xem comment ở PcManagerSidebar.tsx (2026-08-11): output
-        // "export" + routing [locale] làm URL RSC payload prefetch luôn 404.
+        // Prefetch off: with static export + [locale] routing the RSC prefetch URL always 404s.
         prefetch={false}
         className={cardClasses}
         style={style}

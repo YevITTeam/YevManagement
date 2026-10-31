@@ -6,7 +6,7 @@ namespace Asset.Application.Interfaces.Service
     {
         Task<List<ServerCheckAssignmentDto>> GetAllAsync();
 
-        // Xưởng của user đang đăng nhập; null = chưa được phân công.
+        // Null = not assigned.
         Task<ServerCheckAssignmentDto?> GetMyAssignmentAsync();
 
         Task<ServerCheckAssignmentDto> SaveAsync(SaveServerCheckAssignmentDto request);

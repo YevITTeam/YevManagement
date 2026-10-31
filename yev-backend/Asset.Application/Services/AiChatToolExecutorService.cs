@@ -11,10 +11,8 @@ using Shared.Application.Wrapper;
 
 namespace Asset.Application.Services
 {
-    // Implements the 17 read-only tools from docs/docs-be/asset-module.md §1.18 by calling straight into
-    // the existing Asset Application services — no repository access of its own, no duplicated
-    // business rules (soft-delete filtering, status text, etc. all come from those services as-is).
-    // Every tool caps results at MaxResults so a chatty tool doesn't flood the model's context.
+    // Read-only tools that call existing Asset services directly, so business rules are not duplicated.
+    // Every tool caps results at MaxResults so it doesn't flood the model's context.
     public class AiChatToolExecutorService : IAiChatToolExecutorService
     {
         private const int MaxResults = 10;
@@ -26,13 +24,7 @@ namespace Asset.Application.Services
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-            // Default encoder escapes all non-ASCII as \uXXXX (safe-by-default for HTML embedding),
-            // but this JSON only ever becomes a "tool" message's plain-text content sent back to
-            // Ollama — never embedded in HTML — so that protection is pure downside here: the model
-            // (gemma4:e2b) sees Vietnamese text arrive pre-escaped ("Mỹ PHƯỚC") and,
-            // being small, mimics that literal \uXXXX surface form even in the free text it generates
-            // itself afterwards, so the FE ends up displaying raw escape codes instead of diacritics
-            // (2026-07-27 fix).
+            // This JSON is only fed back to the model, never HTML; escaped non-ASCII makes the small model echo raw \uXXXX in its own text.
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
@@ -82,8 +74,7 @@ namespace Asset.Application.Services
 
         public async Task<AiChatToolExecutionResult> ExecuteAsync(string toolName, JsonElement arguments, CancellationToken cancellationToken)
         {
-            // Populated only by the device-related tools below — used to emit {"type":"device"} stream
-            // events for the FE's deep-link buttons (docs §11). Never sent to the model.
+            // Only filled by device tools; used for FE deep-link stream events, never sent to the model.
             var deviceReferences = new List<AiChatDeviceReferenceDto>();
 
             object result;
@@ -125,10 +116,7 @@ namespace Asset.Application.Services
 
         private async Task<object> SearchDevicesAsync(JsonElement args, List<AiChatDeviceReferenceDto> deviceReferences)
         {
-            // Every filter field the Device grid UI offers is exposed here (2026-07-30) — previously only
-            // 5 of them were, so a question the user could answer on screen ("máy nào có serial X", "máy
-            // thuê ngoài của bộ phận Y") simply could not be answered in chat. Mirrors
-            // DeviceFilterRequest 1:1 so the two stay comparable.
+            // Mirrors DeviceFilterRequest 1:1 so anything filterable on the grid is answerable in chat.
             var request = new DeviceFilterRequest
             {
                 PageIndex = 1,
@@ -146,8 +134,7 @@ namespace Asset.Application.Services
                 IsOutsourced = GetBoolArg(args, "isOutsourced"),
                 IsUseUsb = GetBoolArg(args, "isUseUsb"),
                 SortDeviceCodeAscending = GetBoolArg(args, "sortDeviceCodeAscending"),
-                // Name-based filters — let the model pass what the user actually said instead of forcing
-                // a name→id lookup round first (see DeviceFilterRequest, 2026-07-30).
+                // Pass names straight through to avoid a name->id lookup round.
                 BranchName = GetStringArg(args, "branchName"),
                 GroupName = GetStringArg(args, "groupName"),
                 DepartmentName = GetStringArg(args, "departmentName"),
@@ -208,12 +195,7 @@ namespace Asset.Application.Services
                 deviceId = resolved.Value.Id;
             }
 
-            // `status`/`isInUse` added 2026-07-30 so the 3 IP questions users actually ask are answerable:
-            // "IP nào còn trống" (isInUse=false), "IP này dùng được không / ai đang dùng" (keyword=<ip>,
-            // no status filter → StatusText + DeviceCode in the result answers both), "trong dải X cái nào
-            // trống" (keyword="10.45.1." + isInUse=false — Keyword does a Contains on the IP string).
-            // Note these are deliberately null-checked, never truthy-checked: Status=0 IS "Available" and
-            // isInUse=false IS "còn trống", so a truthy test would silently drop the most useful values.
+            // Null-checked, never truthy-checked: Status=0 is Available and isInUse=false means free, both useful values.
             var request = new IpAddressFilterRequest
             {
                 PageIndex = 1,
@@ -225,9 +207,7 @@ namespace Asset.Application.Services
             };
             var result = await _ipAddressService.GetPagedAsync(request);
 
-            // Return the total alongside the (capped) list — asking "còn IP nào trống" without knowing
-            // there are 45 matches and only 10 shown makes the answer actively misleading. Same reasoning
-            // as GetIpPrefixUsageAsync below, which already counts before truncating.
+            // Return the total with the capped list, otherwise "any free IPs?" answers are misleading.
             return new
             {
                 totalCount = result.TotalCount,
@@ -244,10 +224,7 @@ namespace Asset.Application.Services
             var usage = await _ipAddressService.GetPrefixUsageAsync(prefix);
             if (usage == null) return new { error = $"Không tìm thấy dải mạng '{prefix}'." };
 
-            // Same MaxResults cap as every other list tool (§5) — counts are computed from the full
-            // set BEFORE truncation so the model can still state the real totals even when the list
-            // itself is cut short (a /24 can have 200+ free IPs, far more than is worth spending
-            // tokens on).
+            // Counts are taken BEFORE truncation so the model can state real totals even when the list is cut.
             return new
             {
                 usage.Prefix,
@@ -309,10 +286,8 @@ namespace Asset.Application.Services
             return result.Data;
         }
 
-        // Model/user only knows the DeviceCode — resolve to an Id the same way the import services do
-        // (Contains match, prefer an exact case-insensitive hit, else the first result). Returns the
-        // canonical DeviceCode alongside the Id so callers can build a device reference for the FE's
-        // deep-link button (docs §11) without a second query.
+        // Same resolution as the import services (Contains, prefer exact case-insensitive hit); returns the canonical
+        // DeviceCode so callers can build the FE deep-link without a second query.
         private async Task<(int Id, string DeviceCode)?> ResolveDeviceIdByCodeAsync(string deviceCode)
         {
             var result = await _deviceService.GetDevicesForGridAsync(new DeviceFilterRequest
@@ -359,10 +334,8 @@ namespace Asset.Application.Services
             return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
         }
 
-        // Small local models frequently emit numbers/booleans as JSON strings ("6", "true") instead of
-        // real JSON scalars, so both shapes are accepted. Returning null (not 0/false) for a missing arg
-        // matters: every caller treats null as "no filter", and 0/false are meaningful filter values
-        // here (Status=0 means Available, IsOutsourced=false means in-house).
+        // Small models send numbers/booleans as strings, so accept both; null (not 0/false) means "no filter"
+        // because 0/false are meaningful values (Status=0 = Available, IsOutsourced=false = in-house).
         private static int? GetIntArg(JsonElement args, string name)
         {
             if (args.ValueKind != JsonValueKind.Object) return null;
@@ -394,14 +367,8 @@ namespace Asset.Application.Services
                 : null;
         }
 
-        // Every real DeviceCode in this system is "letters-digits" (e.g. "ydc-9875") — but users typing
-        // into chat (and the model itself) routinely drop/mangle the dash: "ydc 9875", "ydc_9875",
-        // "ydc9875". The system prompt already tells the model to normalize this itself, but that is
-        // not reliable with a small local model (docs/docs-be/asset-module.md §1.18) — this is the
-        // deterministic fix, applied to every tool argument that resolves a device by code (2026-07-27).
-        // Anchored end-to-end (^...$) on purpose: only a plain "letters then digits, nothing else"
-        // string gets rewritten, so a code that doesn't fit that 2-part shape is left untouched rather
-        // than risking a wrong rewrite (DeviceCode has no format validation — see CreateDeviceDto).
+        // Users and the model mangle the dash in codes ("ydc 9875", "ydc9875"); normalize deterministically.
+        // Anchored so only a plain "letters+digits" string is rewritten (DeviceCode has no format validation).
         private static readonly Regex DeviceCodeSeparatorPattern = new(@"^([A-Za-z]+)[\s_-]*([0-9]+)$", RegexOptions.Compiled);
 
         private static string? NormalizeDeviceCode(string? raw)

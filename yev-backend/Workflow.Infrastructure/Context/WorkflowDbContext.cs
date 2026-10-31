@@ -3,8 +3,7 @@ using Workflow.Domain.Entities;
 
 namespace Workflow.Infrastructure.Context;
 
-// DB: YevWorkflowManagement — hoàn toàn mới, KHÔNG scaffold từ hệ cũ, nên dùng tên constraint tiếng
-// Anh chuẩn EF Core (workflow-module.md §5.10), khác quy ước tên tiếng Việt của Asset/Attendance.
+// New DB (not scaffolded from a legacy system), so it uses standard EF Core English constraint names.
 public partial class WorkflowDbContext : DbContext
 {
     public WorkflowDbContext()
@@ -84,7 +83,7 @@ public partial class WorkflowDbContext : DbContext
         modelBuilder.Entity<Employee>(entity =>
         {
             entity.HasIndex(e => e.EmployeeCode, "IX_Employees_EmployeeCode").IsUnique();
-            // Cross-DB pointer sang Identity.Users.Id — KHÔNG FK thật (workflow-module.md §1.4).
+            // Cross-DB pointer to Identity.Users.Id, no real FK.
             entity.HasIndex(e => e.UserId, "IX_Employees_UserId").IsUnique().HasFilter("[UserId] IS NOT NULL");
 
             entity.Property(e => e.EmployeeCode).HasMaxLength(50);
@@ -97,13 +96,10 @@ public partial class WorkflowDbContext : DbContext
 
         modelBuilder.Entity<EmployeeOrgUnit>(entity =>
         {
-            // .HasFilter(null) ép EF Core bỏ filter "WHERE JobTitleId IS NOT NULL" mà nó tự thêm theo
-            // convention mặc định — giữ đúng hành vi gốc của SQL Server (coi NULL = NULL khi so composite
-            // unique index, workflow-module.md §3.2 FormAccesses) để 1 Employee không bị gán trùng vào
-            // cùng 1 OrgUnit khi JobTitleId đều NULL.
+            // HasFilter(null) drops EF's default "IS NOT NULL" filter so NULL JobTitleIds still collide,
+            // preventing duplicate Employee+OrgUnit assignments.
             entity.HasIndex(e => new { e.EmployeeId, e.OrgUnitId, e.JobTitleId }, "IX_EmployeeOrgUnits_EmployeeId_OrgUnitId_JobTitleId").IsUnique().HasFilter(null);
-            // Resolve người duyệt theo chức danh tại 1 node (workflow-module.md §5.9) — chạy cho mọi
-            // bước, mọi lần nộp đơn, nên cần index riêng ngoài UNIQUE ở trên.
+            // Approver resolution by job title runs on every submit, hence a dedicated index.
             entity.HasIndex(e => new { e.OrgUnitId, e.JobTitleId }, "IX_EmployeeOrgUnits_OrgUnitId_JobTitleId");
             entity.HasIndex(e => e.EmployeeId, "IX_EmployeeOrgUnits_EmployeeId");
 
@@ -247,8 +243,7 @@ public partial class WorkflowDbContext : DbContext
             entity.Property(e => e.CompareValue2).HasMaxLength(500);
             entity.Property(e => e.LogicGroup).HasDefaultValue(1);
 
-            // TargetFieldId Cascade / SourceFieldId Restrict (workflow-module.md §3.2) — 2 FK cùng
-            // trỏ FormFields nên EF không tự suy được, phải khai rõ cả navigation lẫn OnDelete.
+            // Two FKs to FormFields, so navigation and OnDelete must be declared explicitly.
             entity.HasOne(d => d.TargetField).WithMany(p => p.TargetOfConditions)
                 .HasForeignKey(d => d.TargetFieldId)
                 .OnDelete(DeleteBehavior.Cascade)
@@ -262,9 +257,7 @@ public partial class WorkflowDbContext : DbContext
 
         modelBuilder.Entity<FormAccess>(entity =>
         {
-            // .HasFilter(null) giữ đúng hành vi SQL Server "NULL = NULL" khi so composite unique index
-            // (cùng lý do với EmployeeOrgUnits ở trên) — mỗi dòng chỉ có đúng 1 trong 3 cột đích khác
-            // NULL theo TargetType, 2 cột còn lại NULL (workflow-module.md §3.2 FormAccesses).
+            // HasFilter(null): NULLs must collide in the composite unique index (only one target column is set per row).
             entity.HasIndex(e => new { e.FormDefinitionId, e.TargetType, e.RoleId, e.OrgUnitId, e.EmployeeId },
                 "IX_FormAccesses_FormDefinitionId_TargetType_RoleId_OrgUnitId_EmployeeId").IsUnique().HasFilter(null);
 
@@ -286,7 +279,7 @@ public partial class WorkflowDbContext : DbContext
 
         modelBuilder.Entity<FormRoute>(entity =>
         {
-            // Unique filtered: mỗi form tối đa 1 nhánh IsDefault=1 (workflow-module.md §3.2).
+            // At most one IsDefault route per form.
             entity.HasIndex(e => e.FormDefinitionId, "IX_FormRoutes_FormDefinitionId_IsDefault_Filtered")
                 .IsUnique()
                 .HasFilter("[IsDefault] = 1");
@@ -324,9 +317,7 @@ public partial class WorkflowDbContext : DbContext
 
         modelBuilder.Entity<FormApprovalStepParticipant>(entity =>
         {
-            // .HasFilter(null) giữ đúng NULL=NULL của SQL Server (cùng lý do EmployeeOrgUnits/
-            // FormAccesses ở trên) — mỗi dòng chỉ có đúng 1 trong 2 cột đích khác NULL theo
-            // ParticipantSource.
+            // HasFilter(null): NULLs must collide (only one of EmployeeId/JobTitleId is set per row).
             entity.HasIndex(e => new { e.FormApprovalStepId, e.EmployeeId, e.JobTitleId },
                 "IX_FormApprovalStepParticipants_FormApprovalStepId_EmployeeId_JobTitleId").IsUnique().HasFilter(null);
 
@@ -348,8 +339,7 @@ public partial class WorkflowDbContext : DbContext
 
         modelBuilder.Entity<WorkflowRequest>(entity =>
         {
-            // Unique filtered: RequestCode NULL cho tới lúc Submit (Pha 3B-1 quyết định #1), nhiều
-            // Draft cùng NULL không đụng độ vì SQL Server coi NULL <> NULL trong unique filtered index.
+            // Filtered so many Drafts with a null RequestCode don't collide.
             entity.HasIndex(e => e.RequestCode, "IX_WorkflowRequests_RequestCode").IsUnique().HasFilter("[RequestCode] IS NOT NULL");
             entity.HasIndex(e => new { e.CreatedByEmployeeId, e.Status, e.CreatedAt }, "IX_WorkflowRequests_CreatedByEmployeeId_Status_CreatedAt");
             entity.HasIndex(e => new { e.FormDefinitionId, e.Status }, "IX_WorkflowRequests_FormDefinitionId_Status");
@@ -517,7 +507,7 @@ public partial class WorkflowDbContext : DbContext
 
         modelBuilder.Entity<WorkflowSetting>(entity =>
         {
-            // Luôn 1 dòng (Id = 1, seed trong migration) — không cần index nào khác ngoài PK.
+            // Single row (Id = 1, seeded by migration).
             entity.Property(e => e.AllowedFileExtensions).HasMaxLength(500);
         });
 

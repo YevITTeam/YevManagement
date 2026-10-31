@@ -51,11 +51,7 @@ namespace Asset.Api.Controllers
             return Success(missing, $"Có {missing.Count} thiết bị đang sử dụng nhưng không có trong file Tanium.");
         }
 
-        // Đối chiếu Device Status=InUse trong hệ thống với danh sách máy có mặt trong chính file
-        // Tanium vừa chọn — trả về file .xlsx để tải xuống, KHÔNG phải ApiResponse<T> như 2 action
-        // trên (giống lý do AiChatController.Stream không dùng Success()/Fail(): body ở đây là 1
-        // file binary, không phải 1 envelope JSON). Vẫn dùng ApiResponse<object> cho nhánh lỗi vì
-        // lỗi đó xảy ra TRƯỚC khi bắt đầu ghi file, không có gì ngăn trả JSON bình thường.
+        // Returns an .xlsx file, not ApiResponse; errors still use JSON since they occur before any file is written.
         [RequirePermission("Asset.DeviceConfiguration.Update")]
         [HttpPost("missing-devices-report")]
         public async Task<IActionResult> GetMissingDevicesReport(IFormFile file, [FromForm] string? prefixes)
@@ -66,9 +62,7 @@ namespace Asset.Api.Controllers
             await using var stream = file.OpenReadStream();
             var report = await _deviceConfigurationImportService.BuildMissingDevicesReportAsync(stream, file.FileName, ParsePrefixes(prefixes));
 
-            // Header riêng cho số lượng — FE đọc để hiện toast tóm tắt mà không phải mở file ra đếm.
-            // Phải khai báo trong CORS "AllowNextJs".WithExposedHeaders(...) (Program.cs) thì trình
-            // duyệt mới cho JS đọc được header tùy biến này ở request khác origin.
+            // Must be listed in CORS WithExposedHeaders (Program.cs) or cross-origin JS cannot read it.
             Response.Headers["X-Missing-Device-Count"] = report.MissingCount.ToString();
 
             return File(

@@ -1,6 +1,4 @@
-// Dấu (*) đỏ đặt cạnh label của field bắt buộc nhập — dùng chung cho mọi form Asset/Attendance.
-// Màu #930006 khớp đúng convention đã có sẵn ở SecondaryPasswordDialog.tsx (màu "lỗi" trong bảng màu
-// thương hiệu, frontend-conventions.md §5) — không dùng đỏ nhấn #e3000f vì đó là màu hành động (nút/link).
+// #930006 is the brand "error" red; #e3000f is reserved for actions (buttons/links).
 export function RequiredMark() {
     return (
         <span className="text-[#930006]" aria-hidden="true">

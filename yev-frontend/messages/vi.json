@@ -1002,6 +1002,8 @@
       "dateLabel": "Ngày",
       "timeLabel": "Thời gian",
       "createdByLabel": "Người tạo",
+      "requesterStep": "Người đề nghị",
+      "createdAction": "Tạo đơn",
       "subReasonLabel": "Lý do chi tiết",
       "processPartTitle": "Yêu cầu hỗ trợ khác",
       "eatFieldLabel": "Ăn uống",

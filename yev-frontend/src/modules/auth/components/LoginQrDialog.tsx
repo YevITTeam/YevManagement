@@ -14,10 +14,10 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 interface Props {
     isOpen: boolean;
     user: UserDto | null;
-    // Mã QR đang hoạt động của user (nếu có) — cha lấy từ GET /api/LoginQr.
+    // Active QR code of the user, null if none.
     status: LoginQrStatusDto | null;
     onClose: () => void;
-    // Gọi sau khi tạo/thu hồi để cha tải lại trạng thái.
+    // Called after create/revoke so the parent reloads the status.
     onChanged: () => void;
 }
 
@@ -44,7 +44,7 @@ export default function LoginQrDialog({ isOpen, user, status, onClose, onChanged
     const [isGenerating, setIsGenerating] = useState(false);
     const [isRevoking, setIsRevoking] = useState(false);
 
-    // Mã thô chỉ có ngay sau khi tạo — mở lại dialog thì ảnh QR cũ không còn.
+    // The raw code exists only right after creation, so reopening drops the old QR image.
     useDialogReset(isOpen, user, () => {
         setQrDataUrl(null);
         setLogs([]);

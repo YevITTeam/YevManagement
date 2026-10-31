@@ -3,9 +3,7 @@ using Workflow.Domain.Enums;
 
 namespace Workflow.Application.Dtos.FormFieldConditions
 {
-    // Thay NGUYÊN danh sách điều kiện của 1 FormDefinition (workflow-module.md §6
-    // PUT /FormDefinition/{id}/conditions) — không bảng nào tham chiếu Id của FormFieldConditions
-    // nên dùng đúng pattern xoá-tất-tạo-lại như FormCategoryCoordinators/EmployeeOrgUnits.
+    // Delete-all-and-recreate is safe: no table references FormFieldConditions.Id.
     public class ReplaceFormFieldConditionsDto
     {
         [Required]

@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import UsbMachineDetail from "@/modules/pc-management/components/usb-log/UsbMachineDetail";
 import UsbMachineList from "@/modules/pc-management/components/usb-log/UsbMachineList";
 
-// Query string (?machine=) thay cho route động: static export không biết trước tên máy (xem pc/devices/page.tsx).
+// ?machine= instead of a dynamic route: static export can't know machine names in advance.
 function UsbLogContent() {
     const searchParams = useSearchParams();
     const machine = searchParams.get("machine");

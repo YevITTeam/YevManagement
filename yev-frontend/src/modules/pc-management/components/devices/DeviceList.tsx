@@ -56,8 +56,8 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleDateString("vi-VN");
 }
 
-// Tăng số cuối của mã thiết bị (vd "YDC-1877" -> "YDC-1878") để gợi ý mã cho máy nhân bản,
-// giữ nguyên số chữ số đệm 0. Mã không có đuôi số thì trả nguyên văn — người dùng tự sửa.
+// Suggests the next code for a duplicated device (e.g. "YDC-1877" -> "YDC-1878"), keeping zero padding;
+// codes without a numeric tail are returned unchanged.
 function incrementDeviceCode(code: string): string {
   const match = code.match(/^(.*?)(\d+)$/);
   if (!match) return code;
@@ -81,8 +81,7 @@ export default function DeviceList() {
   const [isLiquidationImportOpen, setIsLiquidationImportOpen] = useState(false);
   const router = useRouter();
 
-  // Gom các thao tác phụ (báo cáo, đồng bộ, nhập Excel...) vào 1 nút "Thao tác" để đỡ chiếm
-  // diện tích thanh công cụ; "+ Thêm mới" vẫn tách riêng vì là hành động chính.
+  // Secondary actions are grouped under one menu to save toolbar space; "+ Add" stays separate as the primary action.
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
 
@@ -110,25 +109,23 @@ export default function DeviceList() {
   const [deletingDevice, setDeletingDevice] = useState<DeviceDto | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Map (id -> mã thiết bị) thay vì mảng id đơn thuần: giữ được nhãn để hiển thị lại thiết bị đã
-  // chọn ngay cả khi nó không còn nằm trong trang/kết quả tìm kiếm hiện tại (xem selectedIds bên dưới
-  // — cố ý KHÔNG reset khi `devices` đổi, để search nhiều lần rồi in gộp 1 lần theo yêu cầu người dùng).
+  // Map keeps labels for selected devices that left the current page/search; intentionally not reset when
+  // `devices` changes so users can search several times and print once.
   const [selectedDevices, setSelectedDevices] = useState<Map<number, string>>(new Map());
   const selectedIds = useMemo(() => Array.from(selectedDevices.keys()), [selectedDevices]);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
-  // undefined = mặc định sort theo purchaseDate giảm dần (BE mặc định); true/false = theo deviceCode tăng/giảm dần.
+  // undefined = BE default (purchaseDate desc); true/false = deviceCode asc/desc.
   const [sortDeviceCodeAscending, setSortDeviceCodeAscending] = useState<boolean | undefined>(undefined);
-  // Sắp xếp theo IP (số học); chỉ một trong hai kiểu sort được bật tại một thời điểm.
+  // Numeric IP sort; only one sort mode is active at a time.
   const [sortIpAddressAscending, setSortIpAddressAscending] = useState<boolean | undefined>(undefined);
   const [transferringDevice, setTransferringDevice] = useState<{ id: number; deviceCode: string; deviceName: string } | null>(null);
-  // docs/asset-module.md §4 — điền sẵn máy mới khi mở "Chuyển máy" từ gợi ý pendingTransfers của Import Excel.
+  // Prefills the new device when opening Transfer from an Excel import's pendingTransfers.
   const [transferPresetNewDeviceId, setTransferPresetNewDeviceId] = useState<number | null>(null);
-  // Hỏi in nhãn ngay sau khi tạo thiết bị thủ công thành công, giống luồng "Nhập từ Excel".
+  // Offer label printing right after a manual create, like the Excel import flow.
   const [printPromptDevice, setPrintPromptDevice] = useState<{ id: number; deviceCode: string } | null>(null);
-  // In tem QR (docs/asset-module.md §4) — dùng chung cho cả in hàng loạt (chọn trên grid) lẫn in
-  // ngay sau khi tạo 1 thiết bị thủ công; null = đóng dialog.
+  // Shared by bulk printing (grid selection) and printing right after a manual create; null = closed.
   const [qrPrintDeviceIds, setQrPrintDeviceIds] = useState<number[] | null>(null);
 
   const toggleSortDeviceCode = () => {
@@ -141,8 +138,7 @@ export default function DeviceList() {
     setSortIpAddressAscending((current) => (current === undefined ? true : current === true ? false : undefined));
   };
 
-  // Bảng có nhiều cột (IP/email nhiều dòng) nên thường rộng hơn màn hình — cho phép
-  // giữ chuột kéo ngang để xem hết cột thay vì chỉ trông chờ vào thanh cuộn ở đáy bảng.
+  // The table is usually wider than the screen (multi-line IP/email), so allow mouse drag to scroll horizontally.
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isDragScrolling, setIsDragScrolling] = useState(false);
   const dragStateRef = useRef({ startX: 0, scrollLeft: 0 });
@@ -150,7 +146,7 @@ export default function DeviceList() {
   const handleDragStart = (event: React.MouseEvent<HTMLDivElement>) => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    // Không bắt kéo khi bấm vào nút/menu hành động bên trong bảng.
+    // Don't start dragging from interactive elements inside the table.
     if ((event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
     setIsDragScrolling(true);
     dragStateRef.current = { startX: event.pageX - container.offsetLeft, scrollLeft: container.scrollLeft };
@@ -168,8 +164,7 @@ export default function DeviceList() {
 
   const handleDragEnd = () => setIsDragScrolling(false);
 
-  // Reset về trang 1 mỗi khi điều kiện lọc thay đổi, để phân trang khớp với tập kết quả mới — so sánh
-  // snapshot ngay trong render thay effect (đây là "adjust state when a prop/state khác changes").
+  // Reset to page 1 on filter change; snapshot compared during render instead of an effect.
   const filtersKey = JSON.stringify([
     filters.deviceCode,
     filters.manager,
@@ -195,8 +190,7 @@ export default function DeviceList() {
     setPageIndex(1);
   }
 
-  // Tất cả field lọc đều có query param tương ứng ở BE (Device/grid-list, docs/asset-module.md §4)
-  // nên FE chỉ cần truyền thẳng — không còn nhánh tải nguyên bảng rồi tự lọc/tự phân trang ở client.
+  // Every filter maps to a Device/grid-list query param, so filtering and paging stay server-side.
   const { isLoading, error, refetch: refetchDevices } = useFetchEffect(
     () =>
       DeviceApi.getDevicePageNation({
@@ -215,8 +209,7 @@ export default function DeviceList() {
         departmentId: filters.departmentId === "" ? undefined : Number(filters.departmentId),
         branchId: filters.branch === "" ? undefined : Number(filters.branch),
         deviceTypeId: filters.deviceType === "" ? undefined : Number(filters.deviceType),
-        // "outsourced" là sentinel riêng của dropdown Trạng thái, ánh xạ sang filter IsOutsourced
-        // (Device.Status chỉ có 0-3, không có giá trị "thuê ngoài" — xem DeviceFilterBar.tsx).
+        // "outsourced" is a dropdown-only sentinel mapped to IsOutsourced (Device.Status is only 0-3).
         status: filters.status === "" || filters.status === "outsourced" ? undefined : Number(filters.status),
         isOutsourced: filters.status === "outsourced" ? true : undefined,
         expiryDate: filters.expiryDate || undefined,
@@ -245,8 +238,7 @@ export default function DeviceList() {
     });
   };
 
-  // Chỉ chọn/bỏ chọn các thiết bị đang hiển thị ở trang hiện tại — không đụng tới lựa chọn đã tích
-  // từ những lần search/trang trước đó.
+  // Only toggles devices on the current page; selections from earlier searches/pages are kept.
   const toggleSelectAll = () => {
     const allVisibleSelected = devices.length > 0 && devices.every((device) => selectedDevices.has(device.id));
     setSelectedDevices((current) => {
@@ -313,9 +305,8 @@ export default function DeviceList() {
     }
   };
 
-  // Nhân bản: mở form tạo mới, điền sẵn toàn bộ thông tin máy nguồn TRỪ IP/số serial/người quản
-  // lý/email (theo yêu cầu nghiệp vụ — các field này đặc thù riêng cho từng máy vật lý), mã thiết
-  // bị gợi ý tự tăng để người dùng dễ chỉnh.
+  // Duplicate copies everything except IP/serial/manager/email, which are unique per physical machine;
+  // the device code is auto-incremented as a suggestion.
   const openDuplicateForm = async (device: DeviceDto) => {
     setIsLoadingEditTarget(true);
     try {
@@ -502,9 +493,7 @@ export default function DeviceList() {
           )}
         </div>
 
-        {/* Danh sách mã đã chọn được giữ lại xuyên suốt nhiều lần tìm kiếm/đổi trang (xem
-            selectedDevices) — hiển thị dạng badge kèm nút bỏ chọn để người dùng biết đang chọn những
-            mã nào kể cả khi chúng không còn nằm trong kết quả tìm kiếm hiện tại. */}
+        {/* Selection persists across searches/pages, so show it as removable badges even when off-screen. */}
         {selectedIds.length > 0 && (
           <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto border-b border-[#e0e3e5] bg-[#fff8f6] px-3 py-1.5">
             {Array.from(selectedDevices.entries()).map(([id, code]) => (

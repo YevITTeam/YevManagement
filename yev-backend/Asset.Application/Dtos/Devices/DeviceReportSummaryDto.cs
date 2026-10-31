@@ -1,19 +1,17 @@
 namespace Asset.Application.Dtos.Devices
 {
-    // Thống kê cho màn "Báo cáo thiết bị" (yev-frontend DeviceReport.tsx) — tính sẵn ở SQL
-    // (COUNT/GROUP BY) thay vì trả nguyên bảng Device để FE tự cộng dồn (2026-07-30, xem
-    // docs/docs-be/asset-module.md).
+    // Computed in SQL (COUNT/GROUP BY) instead of shipping the whole Device table for the FE to aggregate.
     public class DeviceReportSummaryDto
     {
-        // Chỉ tính thiết bị PendingUse/InUse (không tính Chờ thanh lý/Đã thanh lý), giống GetReportListAsync.
+        // Only PendingUse/InUse devices, consistent with GetReportListAsync.
         public int TotalCount { get; set; }
         public int InUseCount { get; set; }
         public int PendingUseCount { get; set; }
-        // Số thiết bị trong ExpiringDevices có DaysRemaining >= 0 (chưa quá hạn, còn trong cửa sổ cảnh báo).
+        // Devices in ExpiringDevices with DaysRemaining >= 0 (not yet expired).
         public int ExpiringSoonCount { get; set; }
         public List<DeviceReportDistributionItemDto> BranchDistribution { get; set; } = new();
         public List<DeviceReportDistributionItemDto> DeviceTypeDistribution { get; set; } = new();
-        // Toàn bộ thiết bị hết hạn trong vòng ExpiryWindowDays hoặc đã quá hạn (DaysRemaining có thể âm).
+        // Expiring within ExpiryWindowDays or already expired (DaysRemaining may be negative).
         public List<DeviceReportExpiringItemDto> ExpiringDevices { get; set; } = new();
     }
 

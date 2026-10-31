@@ -37,11 +37,8 @@ const ENDPOINTS = {
     },
 } as const;
 
-// Phạm vi xem nhân viên của người gọi (2026-09-03, đổi sang danh sách 2026-09-28) — Admin/company-wide
-// hay danh sách Phòng ban/Nhóm (có thể NHIỀU hơn 1 — vị trí thật + mọi nơi đang là Coordinator, xem
-// EmployeeService.ResolveCallerScopeAsync). FE dùng để thu hẹp dropdown lọc ở EmployeeList.tsx, KHÔNG
-// dùng để enforce (BE đã tự scope GetPagedAsync/GetAllActiveAsync rồi, đây chỉ phục vụ UX — chọn ngoài
-// phạm vi trước đây ra bảng rỗng không rõ lý do).
+// Caller's viewing scope (may span several departments/groups); UX only to narrow EmployeeList filters,
+// BE already scopes the queries itself.
 export interface EmployeeScopeDto {
     companyWide: boolean;
     departments: DepartmentDto[];
@@ -66,16 +63,14 @@ export interface EmployeesByDepartmentOptions {
     take?: number;
 }
 
-// Params cho GET /in-my-scope — không có departmentId/groupId (phạm vi tự suy theo Cây chức vụ của
-// người gọi ở BE, không phải filter tự chọn như GetEmployeePageNationParams).
+// No departmentId/groupId: BE derives the scope from the caller's position in the job-title tree.
 export interface GetEmployeeInMyScopeParams {
     pageIndex?: number;
     pageSize?: number;
     keyword?: string;
 }
 
-// groupId/departmentId (2026-08-08): bắt buộc/cấm tuỳ theo TerminalLevel của jobTitleId — chỉ đúng 1
-// trong 2 field được điền (xem EmployeeForm.tsx + docs/attendance-module.md §API §Cây chức vụ).
+// Exactly one of groupId/departmentId is filled, depending on the job title's TerminalLevel.
 export interface CreateUpdateEmployeeDto {
     code: string;
     firstName: string;
@@ -86,16 +81,13 @@ export interface CreateUpdateEmployeeDto {
     // Department Managers: the (workshop, department) pairs they approve for.
     approvalScopes?: { workshopId: number; departmentId: number }[];
     jobTitleId?: number | null;
-    // Giới hạn giờ OT/tháng/năm RIÊNG cho nhân viên này — null = dùng mặc định chung (2026-08-26, xem
-    // EmployeeForm.tsx).
+    // Per-employee OT limits; null = use the global default.
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
 }
 
-// Sửa RIÊNG giới hạn OT (2026-08-29) — permission hẹp Attendance.Employee.UpdateOtLimit, KHÁC
-// updateEmployee (PUT /{id}, Attendance.Employee.Update — không còn nhận 2 field này nữa). Dùng cho
-// Người phụ trách Bộ phận (không có quyền sửa nhân viên nói chung) — xem docs/attendance-module.md §API
-// §Phân quyền theo Phòng ban.
+// Separate narrow permission (Attendance.Employee.UpdateOtLimit) so department coordinators can edit OT
+// limits without general employee edit rights; updateEmployee no longer accepts these fields.
 export interface UpdateEmployeeOtLimitDto {
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
@@ -120,22 +112,16 @@ export const EmployeeApi = {
         const response = await api.get<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.getEmployeeById(id));
         return response.data;
     },
-    // Chọn nhân viên hàng loạt khi lập đơn OT (docs/attendance-module.md §API). date = ngày trên đơn
-    // đang tạo (YYYY-MM-DD) — để lũy kế Dự kiến (projectedMonthToDate/YearToDate) scope đúng tháng/năm
-    // của đơn đó thay vì hôm nay thực tế (2026-08-19, xem docs §Lũy kế Dự kiến). Bỏ trống = hôm nay.
+    // `date` = the form's date (YYYY-MM-DD) so projected accumulation uses that month/year, not today; omit = today.
     getEmployeesByGroup: async (groupId: number, date?: string) => {
         const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByGroup(groupId, date));
         return response.data;
     },
-    // Toàn bộ nhân viên active thuộc Phòng ban (mọi Bộ phận con) — dùng ở màn "Cây duyệt Phòng ban"
-    // để xem ai đang giữ Chức vụ nào và gán nhanh Chức vụ ngay tại đó.
     getEmployeesByDepartment: async (departmentId: number, workshopId?: number, options?: EmployeesByDepartmentOptions) => {
         const response = await api.get<ApiResponse<EmployeeDto[]>>(ENDPOINTS.EMPLOYEE.getEmployeesByDepartment(departmentId, workshopId, options));
         return response.data;
     },
-    // Tra Group của 1 userName bất kỳ — gợi ý cho Admin ở màn "Phân quyền duyệt" (docs §3.5). 404 là
-    // bình thường (Trưởng phòng/Trưởng xưởng/TGĐ/Trưởng Bộ phận không nhất thiết có hồ sơ Employee),
-    // caller tự bắt lỗi và coi như "không có gợi ý" thay vì báo lỗi.
+    // 404 is normal (managers need not have an Employee record); callers treat it as "no suggestion".
     getEmployeeByUsername: async (userName: string) => {
         const response = await api.get<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.getEmployeeByUsername(userName));
         return response.data;
@@ -156,11 +142,8 @@ export const EmployeeApi = {
         const response = await api.delete<ApiResponse<void>>(ENDPOINTS.EMPLOYEE.deleteEmployee(id));
         return response.data;
     },
-    // Gán/gỡ Chức vụ CÓ PHẠM VI (2026-08-11c) — dùng chung permission với chính cây duyệt của đơn vị đó
-    // (Attendance.DepartmentApprovalStep.Update/GroupApprovalStep.Update), KHÔNG cần Attendance.Employee.Update
-    // — Người phụ trách Cây duyệt (không phải Admin) gọi được, BE tự chặn nếu Employee không thuộc
-    // đúng Bộ phận/Nhóm họ phụ trách. BE tự tính lại groupId/departmentId theo Chức vụ mới, FE chỉ gửi
-    // jobTitleId (null = gỡ chức vụ).
+    // Uses the unit's approval-tree permission, not Employee.Update, so tree coordinators can call it; BE limits
+    // it to their unit and recomputes groupId/departmentId. jobTitleId null = unassign.
     assignDepartmentJobTitle: async (id: number, departmentId: number, jobTitleId: number | null, workshopId?: number) => {
         const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.assignDepartmentJobTitle(id, departmentId), { jobTitleId, workshopId: workshopId ?? null });
         return response.data;
@@ -169,8 +152,7 @@ export const EmployeeApi = {
         const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.assignGroupJobTitle(id, groupId), { jobTitleId });
         return response.data;
     },
-    // Nhân viên trong phạm vi quản lý của người GIỮ QUYỀN DUYỆT (Attendance.OTForm.Approve) — KHÔNG
-    // cần Attendance.Employee.View. Dùng cho màn "Lũy kế nhân viên" tra cứu (2026-08-11d).
+    // Gated by Attendance.OTForm.Approve, not Employee.View, so approvers can look up accumulation.
     getInMyScope: async (params?: GetEmployeeInMyScopeParams) => {
         const query = new URLSearchParams();
         if (params?.pageIndex) query.set("PageIndex", String(params.pageIndex));

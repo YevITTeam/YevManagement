@@ -63,10 +63,8 @@ function getTodayStr(offsetDays = 0): string {
     return `${year}-${month}-${day}`;
 }
 
-// KHÔNG hỗ trợ ca qua đêm (2026-08-26, theo yêu cầu người dùng) — giờ kết thúc phải SAU giờ bắt đầu
-// trong CÙNG ngày, không tự cộng thêm 24h như trước (từng gây tổng giờ dài bất thường, vd 14h→06h ra
-// nhầm 16h, mà hệ thống cũng chưa hỗ trợ đúng ca qua đêm ở các chỗ khác — vd ValidateEmployeesAsync so
-// TimeOnly trực tiếp không tính ngày). Trả 0 khi không hợp lệ, xem isTimeRangeInvalid để hiện lỗi.
+// No overnight shifts: end must be after start on the same day (BE compares TimeOnly without dates).
+// Returns 0 when invalid; isTimeRangeInvalid shows the error.
 function computeTotalHour(startTime: string, endTime: string): number {
     if (!startTime || !endTime) return 0;
     const diffMinutes = toMinutes(endTime) - toMinutes(startTime);
@@ -133,8 +131,7 @@ function OverLimitBadges({ t, overDay, overTh3 }: { t: (key: string) => string; 
 }
 
 const emptyProcessPart: ProcessPartDto = {
-    // Ăn uống bắt buộc cho MỌI đơn (2026-09-28, theo yêu cầu người dùng) — không còn checkbox để tắt,
-    // BE cũng luôn ghi IsEat=true bất kể giá trị gửi lên.
+    // Meals are mandatory for every form; BE always stores IsEat=true regardless.
     isEat: true,
     mainTicketCount: 0,
     secondaryTicketCount: 0,
@@ -149,32 +146,24 @@ interface EmployeeOverride {
     // "" = follow the form's start time; otherwise a per-employee start within the form's time range.
     startTime: string;
     endTime: string;
-    // Field BE thật (true = có ăn TRONG ca, bị trừ MealBreakDeductionHours) — KHÔNG đổi ý nghĩa
-    // (2026-09-28). Đơn Theo chuyền (Sản xuất) không còn cho chọn nữa, luôn hardcode true (xem
-    // defaultDidEatForNewEmployee). Đơn Theo Nhóm (Văn phòng) vẫn cho chọn, nhưng UI hiển thị ĐẢO NGƯỢC
-    // dưới nhãn "Ăn sau": tích "Ăn sau" (mặc định) = didEat false (không trừ giờ) — xem bảng "Theo
-    // Nhóm"/"Sửa đơn" bên dưới.
+    // BE field: true = eats during the shift (MealBreakDeductionHours deducted). Production forms always send true;
+    // office forms show it inverted as "eat later" (ticked = false, no deduction).
     didEat: boolean;
     noteVn: string;
     noteJp: string;
 }
 
-// Kẻ dọc mờ giữa các cột (th đậm hơn td) để dễ dóng dữ liệu theo hàng ngang khi bảng có nhiều cột.
+// Faint vertical rules (th darker than td) to track rows across many columns.
 const tableClassName =
     "min-w-full border-collapse text-left [&_td]:border-r [&_td]:border-[#eef1f3] [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-[#e0e3e5]";
 const compactFieldClassName = fieldClassName.replace("h-10", "h-9");
-// Cột thao tác (Loại khỏi đơn / Hoàn tác / Huỷ thêm) ghim mép phải bảng — luôn thấy khi cuộn ngang. bg-inherit
-// lấy màu nền của dòng (dòng nào cũng phải có nền đặc, xem zebra bên dưới) để che nội dung cuộn phía sau.
+// Pinned right so actions stay visible while scrolling; bg-inherit takes the row's solid background
+// (every row needs one, see zebra) to cover content scrolling underneath.
 const stickyActionCellClassName =
     "sticky right-0 z-10 bg-inherit px-2 py-2 align-middle text-center shadow-[-6px_0_6px_-6px_rgba(0,0,0,0.15)]";
 
-// Ô checkbox dạng chip có icon (thay checkbox+label phẳng) — viền/nền đổi màu khi chọn, cùng ngôn ngữ
-// hình ảnh (icon + badge xanh lá) với ProcessPartTile ở OtFormDetail.tsx/OtFormEmailConfirmPage.tsx.
-// Dùng <button role="checkbox"> thay vì <input type="checkbox" className="sr-only"> trong <label>:
-// input ẩn kiểu sr-only (position: absolute, không có top/left) khi nhận focus (label click luôn focus
-// vào input liên kết) khiến trình duyệt tự scrollIntoView input đó — với các trang có bảng nhân viên dài
-// phía trên, thao tác này làm cả vùng cuộn <main> nhảy lên, để lại khoảng trắng phía dưới. Button thật
-// không có input ẩn nên không gặp side-effect scroll này.
+// <button role="checkbox"> instead of a sr-only input in a label: focusing the hidden input makes the browser
+// scrollIntoView it, jumping the <main> scroll area on pages with long tables.
 function ToggleOptionCard({
     icon,
     label,
@@ -208,7 +197,7 @@ function ToggleOptionCard({
 }
 
 interface CreateOtFormPageProps {
-    // Có giá trị → màn "Sửa đơn" (đổ sẵn dữ liệu, submit gọi PUT thay vì POST) — docs §1.3.A/§4.1b.
+    // Set = edit mode: prefilled, submits PUT instead of POST.
     otFormId?: number;
 }
 
@@ -218,25 +207,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const router = useRouter();
     const { user } = useAuth();
     const isEditMode = otFormId !== undefined;
-    // Admin là role duy nhất có quyền CRUD Danh mục (docs §3, §4.0a) — dùng permission này làm tín hiệu
-    // "không giới hạn phạm vi tạo đơn" khi GET /my-create-scopes trả mảng rỗng (phân biệt với tài
-    // khoản Nhân viên/Trưởng nhóm chưa được cấu hình gì — trường hợp đó phải chặn hẳn màn này).
+    // Admin-only permission used as the "unrestricted" signal when my-create-scopes is empty, to tell Admin apart
+    // from an unconfigured account (which must be blocked).
     const isUnrestrictedAdmin = hasPermission(user, "Attendance.Department.Create");
-    // Tạo đơn THEO CHUYỀN cần quyền riêng (Admin cấu hình theo Chức vụ/từng user) — không có thì ẩn tab "Theo chuyền".
+    // Hide the production tab without its dedicated permission.
     const canCreateProductionForm = hasPermission(user, "Attendance.OTForm.CreateProduction");
-    // Tạo đơn THEO NHÓM cần Attendance.OTForm.Create — tài khoản CHỈ có CreateProduction không được coi
-    // là "có thể dùng chế độ Theo Nhóm" nữa (2026-09-28): ẩn hẳn tab "Theo Nhóm" khỏi bộ chuyển chế độ
-    // thay vì hiện ra rồi chặn bằng banner lỗi, đúng nguyên tắc "quyền không có thì ẩn đi".
+    // CreateProduction alone doesn't grant group mode; hide the tab rather than show it and block it.
     const canUseGroupMode = isUnrestrictedAdmin || hasPermission(user, "Attendance.OTForm.Create");
 
-    // "Theo Nhóm" (mặc định, hiện tại) hay "Theo chuyền" (Chế tạo, 2026-08-24) — chỉ chọn được lúc TẠO
-    // MỚI, đơn đã tạo giữ nguyên chế độ ban đầu (isProductionForm trả về từ BE, không đổi được khi sửa).
-    // Mặc định "group", TRỪ tài khoản CHỈ có quyền "Theo chuyền" (không có Attendance.OTForm.Create,
-    // không phải Admin) — suy được NGAY từ permission có sẵn trong `user` lúc mount, không cần đợi API
-    // my-create-scopes trả lời rồi mới tự chuyển tab như trước (2026-09-28, theo phản hồi người dùng:
-    // để kiểu cũ có 1 nhịp/trường hợp vẫn đứng nguyên ở "Theo Nhóm" kèm màn chặn — "mở thẳng UI tạo đơn
-    // luôn" mới đúng ý). Effect fetch getMyCreateScopes bên dưới vẫn giữ nhánh tự chuyển làm lưới an
-    // toàn thứ 2 cho case hiếm hơn: có Create NHƯNG scope Nhóm thật lại rỗng (chưa gán Employee.GroupId).
+    // Chosen only on create (an existing form keeps isProductionForm). Production-only accounts start in production
+    // mode from `user` permissions directly; the my-create-scopes effect still switches as a fallback for empty group scope.
     const [formMode, setFormMode] = useState<"group" | "production">(() =>
         canCreateProductionForm && !canUseGroupMode ? "production" : "group"
     );
@@ -251,7 +231,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [otCases, setOtCases] = useState<OtCaseDto[]>([]);
     const [groupEmployees, setGroupEmployees] = useState<EmployeeDto[]>([]);
 
-    // ── Theo chuyền: bộ lọc + kết quả tìm kiếm ProductionEmployee ────────────
+    // ── Production mode: filters + ProductionEmployee search ──
     const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
     const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
     const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
@@ -260,15 +240,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [productionShiftTeamId, setProductionShiftTeamId] = useState<number | "">("");
     const [productionKeyword, setProductionKeyword] = useState("");
     const [productionResults, setProductionResults] = useState<ProductionEmployeeSearchItemDto[]>([]);
-    // (Những) tổ hợp Team/Line/Nhóm ca người tạo đang là Line Leader — null = chưa tải xong (2026-09-28,
-    // xem effect fetch bên dưới cạnh createScopes).
+    // Team/Line/shift-group combos where the creator is Line Leader; null = still loading.
     const [productionCreateScopes, setProductionCreateScopes] = useState<MyProductionCreateScopeItemDto[] | null>(null);
     const isProductionScopeRestricted = productionCreateScopes !== null && productionCreateScopes.length > 0;
-    // Đúng 1 tổ hợp (trường hợp phổ biến — 1 Line Leader phụ trách 1 Line) → khoá cứng cả 3 dropdown.
-    // Nhiều hơn 1 tổ hợp (hiếm — Line Leader của nhiều Line) → không khoá cứng, chỉ giới hạn lựa chọn
-    // trong đúng các tổ hợp được phép (xem visibleTeamOptions/visibleLineOptions/visibleShiftTeamOptions
-    // bên dưới). Khai báo ngay cạnh state (thay vì cạnh effect fetch) vì khối reset-on-change của Team/
-    // Line/Nhóm ca ngay bên dưới cần dùng tới trước khi effect fetch được khai báo.
+    // One combo → lock all three dropdowns; several → only restrict the choices. Declared here because the
+    // Team/Line reset blocks below need it before the fetch effect.
     const isProductionScopeLocked = isProductionScopeRestricted && productionCreateScopes!.length === 1;
 
     const [departmentId, setDepartmentId] = useState<number | null>(null);
@@ -300,27 +276,17 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const baseOtCaseCode = date ? (isNonWorkingDay ? "TH2" : "TH1") : null;
     const baseOtCaseId = isEditMode ? loadedOtCaseId : (otCases.find((c) => c.code === baseOtCaseCode)?.id ?? null);
 
-    // Chặn hiện danh sách nhân viên bên dưới (cả 2 chế độ) cho tới khi đã điền đủ thông tin đơn cốt
-    // lõi — trước đây "Theo Nhóm" chỉ cần chọn Nhóm là ra danh sách dù Lý do/Trường hợp OT/Ngày/Giờ
-    // còn trống, dễ khiến người dùng chọn nhân viên trước rồi mới điền nốt phần trên, sai thứ tự thao
-    // tác mong muốn (2026-08-26, yêu cầu người dùng). Không tính groupId ở đây — "Theo Nhóm" còn cần
-    // check riêng groupId (giữ nguyên hint chooseGroupFirstHint), "Theo chuyền" không có groupId.
+    // Hide the employee list until the core fields are filled so users fill the form top-down. groupId is
+    // checked separately (group mode only).
     const isCoreFormInfoFilled = Boolean(departmentId && reasonId && baseOtCaseId && date && startTime && endTime);
 
     const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
     const [employeeOverrides, setEmployeeOverrides] = useState<Record<number, EmployeeOverride>>({});
-    // Chỉ dùng khi Sửa đơn — danh sách nhân viên CỐ ĐỊNH lấy thẳng từ đơn (đã lọc bỏ người bị loại),
-    // KHÔNG phải từ groupEmployees (chọn theo Nhóm, chỉ dùng lúc Tạo mới). Sửa đơn giờ chỉ được đổi
-    // giờ kết thúc thực tế của từng người, không thêm/bớt được ai — xem docs §Sửa đơn: giới hạn chỉ
-    // sửa thực tích.
+    // Edit mode only: the form's own employees (removed ones filtered out), not groupEmployees.
     const [editEmployees, setEditEmployees] = useState<OtFormEmployeeDto[]>([]);
 
-    // Thêm/loại nhân viên trong Sửa đơn (2026-09-04, gộp từ OtFormDetail cũ — xem
-    // docs/attendance-module.md §Cây chức vụ & Cây duyệt (mục Sửa đơn)). Cả 2 đều TẠM — chỉ áp dụng thật khi bấm
-    // Lưu (PUT gộp 1 lần), không gọi API riêng ngay khi bấm. selectedEmployeeIds/employeeOverrides ở
-    // trên tự phản ánh đúng người còn lại (thêm → toggleEmployee thêm vào, loại → lọc bớt khỏi đó) —
-    // employeeAddedMeta chỉ lưu mã/tên để hiển thị (người mới thêm chưa có OtFormEmployeeDto đầy đủ từ
-    // BE, không có lũy kế tháng/năm cho tới khi Lưu thật).
+    // Adds/removals while editing are staged and applied in one PUT on save. employeeAddedMeta only holds
+    // display info, since newly added people have no OtFormEmployeeDto or accumulation until saved.
     const [employeeAddedMeta, setEmployeeAddedMeta] = useState<Record<number, { employeeCode: string; fullName: string }>>({});
     const [addSearchQuery, setAddSearchQuery] = useState("");
     const addSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -332,15 +298,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [isFormCreator, setIsFormCreator] = useState(false);
 
     const [processPart, setProcessPart] = useState<ProcessPartDto>(emptyProcessPart);
-    // true = số phiếu chính/phụ đang do HỆ THỐNG tự tính; chuyển false vĩnh viễn ngay khi người dùng
-    // tự gõ đè 1 trong 2 ô, để không ghi đè lại con số họ vừa chỉnh (yêu cầu "vẫn cho phép user sửa").
+    // Goes false for good once the user overrides either count, so their edit isn't overwritten.
     const [autoMealTicket, setAutoMealTicket] = useState(true);
 
     const { setting } = useAttendanceSetting();
 
-    // Giá trị mặc định của field BE thật DidEat khi thêm 1 người MỚI vào đơn (2026-09-28) — đơn Theo
-    // chuyền (Sản xuất) hardcode true (ăn uống bắt buộc, không cho chọn); đơn Theo Nhóm (Văn phòng)
-    // mặc định false = UI "Ăn sau" tích sẵn (không trừ giờ) — xem EmployeeOverride.didEat.
+    // Production forms: always true (meals mandatory); office forms: false = "eat later" ticked, no deduction.
     const defaultDidEatForNewEmployee = formMode === "production";
 
     const dailyOtHourLimit = isNonWorkingDay ? setting.dailyOtHourLimitHoliday : setting.dailyOtHourLimit;
@@ -382,11 +345,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const otCaseCode = exceedsTh3 ? "TH3" : baseOtCaseCode;
     const otCaseId = isEditMode ? loadedOtCaseId : (otCases.find((c) => c.code === otCaseCode)?.id ?? null);
 
-    // Chữ ký không gắn với bước tạo đơn — POST /api/OtForm vào thẳng chuỗi duyệt Cây chức vụ ngay
-    // (2026-08-07, Giai đoạn 3.1), chữ ký thật (nếu bước nào đó yêu cầu) chỉ bắt buộc lúc Duyệt. Ở đây
-    // chỉ hiện gợi ý mềm, KHÔNG chặn nút Tạo đơn.
+    // Signature is only required at approval, so this is a soft hint that never blocks submit.
     const [hasSignature, setHasSignature] = useState<boolean | null>(null);
-    // Mật khẩu cấp 2 — bắt buộc khi Lưu (Tạo mới lẫn Sửa đơn, 2026-08-28), cùng cơ chế Approve/Reject.
+    // Secondary password is required to save, both create and edit.
     const [hasSecondaryPassword, setHasSecondaryPassword] = useState<boolean | null>(null);
     const [secondaryPassword, setSecondaryPassword] = useState("");
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
@@ -401,9 +362,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     const [overlappingEmployeeIds, setOverlappingEmployeeIds] = useState<number[]>([]);
 
-    // Bộ phận/Phòng ban CHÍNH user được phép tạo đơn — gọi TRƯỚC khi cho chọn Phòng ban/Bộ phận, để tự
-    // điền sẵn (1 phần tử) hoặc thu hẹp dropdown (nhiều phần tử) thay vì bắt chọn từ toàn bộ danh sách
-    // (docs §4.0a/§1.3.A). null = đang tải, [] = Admin (bypass) HOẶC tài khoản chưa cấu hình gì.
+    // Prefill (one item) or narrow (several) the department dropdowns. null = loading, [] = Admin bypass OR unconfigured account.
     const [createScopes, setCreateScopes] = useState<MyCreateScopeItemDto[] | null>(null);
 
     useEffect(() => {
@@ -413,12 +372,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         ProductionEmployeeApi.getTeamOptions().then(setTeamOptions).catch((err) => console.error(err));
     }, []);
 
-    // Chọn lại Team → Line đang chọn (nếu có) có thể không còn thuộc Team mới, reset về rỗng — so
-    // sánh snapshot ngay trong render, không dùng effect để setState (frontend-conventions.md §3). Bỏ qua khi đã
-    // khoá cứng theo Line Leader (isProductionScopeLocked, 2026-09-28) — nếu không, lần tự điền sẵn cả
-    // 3 giá trị Team/Line/Nhóm ca CÙNG LÚC (effect fetch productionCreateScopes bên dưới) sẽ bị chính
-    // khối này xoá mất Line ngay trong cùng 1 lượt render (Team đổi từ "" sang có giá trị vẫn tính là
-    // "đổi Team" dù là gán tự động, không phải người dùng tự bấm).
+    // Reset Line when Team changes, via render-time snapshot instead of an effect. Skipped when locked, otherwise
+    // the auto-prefill of Team/Line/shift group in one render would clear the Line it just set.
     const [prevProductionTeamId, setPrevProductionTeamId] = useState(productionTeamId);
     if (prevProductionTeamId !== productionTeamId) {
         setPrevProductionTeamId(productionTeamId);
@@ -427,9 +382,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }
     }
 
-    // Line = con thật của Team (ProductionLine.TeamId là FK, xem ProductionLine.cs) — tải lại danh
-    // sách Line mỗi khi đổi Team để chỉ hiện đúng các Line thuộc Team đó (2026-08-25). Team đang chọn
-    // rỗng → BE trả về TOÀN BỘ Line (không lọc).
+    // Lines are real children of a Team (FK); an empty Team makes BE return all Lines.
     useFetchEffect(
         () => ProductionEmployeeApi.getLineOptions(productionTeamId === "" ? undefined : productionTeamId),
         [productionTeamId],
@@ -437,12 +390,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         t("lineOptionsLoadError")
     );
 
-    // Nhóm ca KHÔNG phải con của Line/Team (1 Line có thể thuộc nhiều Nhóm ca — xem BE
-    // ProductionShiftTeam.cs) nên không cascade theo FK như Line được — thay vào đó suy ra TỪ DỮ LIỆU
-    // THẬT: chỉ hiện Nhóm ca nào thực sự có người trong đúng Line/Team đang lọc (2026-08-25, yêu cầu
-    // người dùng). Đổi Line/Team → Nhóm ca đang chọn có thể không còn hợp lệ, reset về rỗng — so sánh
-    // snapshot ngay trong render (frontend-conventions.md §3).
-    // Cùng lý do bỏ qua khi khoá cứng như khối reset Line ở trên.
+    // Shift groups aren't FK children of Line/Team, so options are derived from who actually works in the filtered
+    // Line/Team. Reset via render-time snapshot, skipped when locked (same reason as the Line reset).
     const shiftTeamFilterKey = `${productionLineId}|${productionTeamId}`;
     const [prevShiftTeamFilterKey, setPrevShiftTeamFilterKey] = useState(shiftTeamFilterKey);
     if (prevShiftTeamFilterKey !== shiftTeamFilterKey) {
@@ -463,10 +412,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         t("shiftTeamOptionsLoadError")
     );
 
-    // Tìm kiếm ProductionEmployee theo bộ lọc — chỉ chạy khi đang ở chế độ "Theo chuyền" lúc Tạo mới VÀ
-    // đã chọn đủ Team + Line + Nhóm ca (2026-08-25, mở rộng thêm Nhóm ca ngày 2026-09-28 theo yêu cầu
-    // người dùng: chọn lẻ tẻ khiến danh sách quá dài — cả nghìn ProductionEmployee — gây giật lag khi
-    // render bảng). Chưa đủ 3 điều kiện → không gọi API, hiện hint thay vì bảng (chooseTeamLineFirstHint).
+    // Require Team + Line + shift group: partial filters return thousands of rows and make the table lag.
     const canSearchProduction =
         isCoreFormInfoFilled && productionTeamId !== "" && productionLineId !== "" && productionShiftTeamId !== "";
     useFetchEffect(
@@ -475,7 +421,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 ? ProductionEmployeeApi.search({
                       productionLineId,
                       teamId: productionTeamId,
-                      // canSearchProduction đã đảm bảo Nhóm ca luôn có giá trị (number) trong nhánh này.
+                      // canSearchProduction guarantees a number here.
                       shiftTeamId: productionShiftTeamId,
                       keyword: productionKeyword.trim() || undefined,
                       date: date || undefined,
@@ -490,42 +436,32 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         OtFormApi.getMyCreateScopes()
             .then((scopes) => {
                 setCreateScopes(scopes);
-                // Chỉ tự điền sẵn lúc Tạo mới — Sửa đơn đã đổ dữ liệu thật của đơn, không ghi đè (docs §1.3.A).
+                // Prefill only on create; edit mode already holds the form's real data.
                 if (!isEditMode && scopes.length === 1) {
                     setDepartmentId(scopes[0].departmentId);
                     setGroupId(scopes[0].groupId);
                 }
-                // Chức vụ CHỈ có quyền "Theo chuyền" (không có bất kỳ phạm vi Nhóm nào ở "Theo Nhóm") sẽ có
-                // scopes rỗng — trước đây formMode mặc định luôn là "group" nên isBlockedNoScope chặn hẳn
-                // màn trước khi người dùng kịp bấm sang tab "Theo chuyền", dù canCreateProductionForm=true
-                // (2026-09-28, sửa lỗi 2 quyền bị dính nhau). Tự chuyển sang "production" trong đúng trường
-                // hợp này; người dùng vẫn tự bấm lại "Theo Nhóm" được nếu muốn (không khoá tab).
+                // Production-only accounts have empty group scopes and would be blocked in group mode; switch them to
+                // production without locking the tab.
                 if (!isEditMode && scopes.length === 0 && !isUnrestrictedAdmin && canCreateProductionForm) {
                     setFormMode("production");
                 }
             })
             .catch((err) => {
                 console.error(err);
-                setCreateScopes([]); // Lỗi tải → không chặn màn, coi như không có gợi ý (fallback dropdown tự do).
+                setCreateScopes([]); // On error don't block the page; fall back to free dropdowns.
             });
-        // isUnrestrictedAdmin/canCreateProductionForm suy ra từ `user` (ổn định trong vòng đời trang,
-        // AuthGuard đã đảm bảo có user trước khi mount) — không cần refetch createScopes mỗi khi đổi.
+        // Both flags derive from `user`, stable for the page's lifetime.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isEditMode]);
 
-    // (Những) tổ hợp Team/Line/Nhóm ca người tạo đang là Line Leader — cùng cơ chế tự điền sẵn/khoá
-    // cứng với createScopes ở trên, áp cho 3 dropdown "Theo chuyền" (2026-09-28, theo yêu cầu người
-    // dùng: "hiện giờ phải nhập team line nhóm ca ... cũng cố định luôn"). Chỉ gọi khi có quyền
-    // CreateProduction — người không có quyền này gọi sẽ luôn 403.
+    // Same prefill/lock mechanism for the production dropdowns. Only called with CreateProduction, otherwise always 403.
     useEffect(() => {
         if (isEditMode || !canCreateProductionForm) return;
         OtFormApi.getMyProductionCreateScopes()
             .then((scopes) => {
                 setProductionCreateScopes(scopes);
-                // Bộ phận gắn với CHÍNH người gọi — giống nhau ở mọi phần tử, tự điền sẵn + khoá cứng
-                // luôn (xem isProductionDepartmentLocked) dù có 1 hay nhiều tổ hợp Team/Line/Nhóm ca
-                // (2026-09-28, theo yêu cầu người dùng: "các chỗ thuộc Nhóm/thông tin đi kèm người tạo
-                // đơn thì cố định hết").
+                // The department is the caller's own and identical across items, so it is always prefilled and locked.
                 if (scopes.length > 0) {
                     setDepartmentId(scopes[0].departmentId);
                 }
@@ -537,17 +473,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             })
             .catch((err) => {
                 console.error(err);
-                setProductionCreateScopes([]); // Lỗi tải → không chặn màn, coi như không có gợi ý (fallback dropdown tự do).
+                setProductionCreateScopes([]); // On error don't block the page; fall back to free dropdowns.
             });
     }, [isEditMode, canCreateProductionForm]);
 
     const isScopeRestricted = createScopes !== null && createScopes.length > 0;
-    // Chỉ khoá cứng dropdown lúc Tạo mới — Sửa đơn vẫn cho đổi Bộ phận/Phòng ban trong phạm vi (docs §4.1b).
+    // Lock only on create; edit still allows changing within scope.
     const isScopeLocked = !isEditMode && isScopeRestricted && createScopes!.length === 1;
-    // Mảng rỗng mà KHÔNG phải Admin → tài khoản chưa được cấp quyền tạo đơn cho Bộ phận nào — chặn hẳn
-    // màn "Tạo đơn tăng ca" thay vì cho vào form rồi chọn linh tinh rồi nhận lỗi 400 (docs §4.0a). CHỈ
-    // áp dụng cho chế độ "Theo Nhóm" — "Theo chuyền" không cần createScopes (2026-08-24, xem
-    // OtFormService.CreateProductionFormAsync: Admin hoặc chính người có tên trong đơn, không cần Group).
+    // Empty scopes and not Admin → no department to create for; block instead of failing with 400 later.
+    // Group mode only: production forms don't need createScopes.
     const isBlockedNoScope =
         !isEditMode && formMode === "group" && createScopes !== null && createScopes.length === 0 && !isUnrestrictedAdmin;
 
@@ -577,11 +511,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         return options;
     }, [isScopeRestricted, createScopes, groups, departmentId, groupId]);
 
-    // 3 dropdown "Theo chuyền" bị giới hạn trong đúng các tổ hợp Line Leader được phép khi
-    // isProductionScopeRestricted — mirror visibleDepartments/visibleGroups ở trên, nhưng lấy dữ liệu
-    // trực tiếp từ productionCreateScopes thay vì gọi lại API catalog (teamOptions/lineOptions/
-    // shiftTeamOptions vẫn được tải như cũ, chỉ không dùng tới khi bị giới hạn). Line phụ thuộc Team đã
-    // chọn, Nhóm ca phụ thuộc cả Team lẫn Line đã chọn — cùng thứ bậc lọc với 3 dropdown gốc.
+    // When restricted, build options from productionCreateScopes instead of the catalog; Line depends on Team,
+    // shift group on both, same as the unrestricted dropdowns.
     const visibleTeamOptions = useMemo((): ProductionOptionDto[] => {
         if (!isProductionScopeRestricted) return teamOptions;
         const map = new Map<number, ProductionOptionDto>();
@@ -612,21 +543,20 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [isProductionScopeRestricted, productionCreateScopes, shiftTeamOptions, productionTeamId, productionLineId]);
 
     useEffect(() => {
-        if (isEditMode) return; // Sửa đơn không ký lại — không cần kiểm tra chữ ký.
+        if (isEditMode) return; // Edits are not re-signed.
         UserSignatureApi.getMySignature()
             .then((data) => setHasSignature(Boolean(data)))
             .catch(() => setHasSignature(false));
     }, [isEditMode]);
 
-    // Mật khẩu cấp 2 áp dụng CẢ 2 chế độ (Tạo mới lẫn Sửa đơn) — khác chữ ký ở trên.
+    // Unlike the signature, the secondary password applies to both create and edit.
     useEffect(() => {
         SecondaryPasswordApi.getMyStatus()
             .then((data) => setHasSecondaryPassword(data.isRegistered))
             .catch(() => setHasSecondaryPassword(false));
     }, []);
 
-    // Đổ sẵn dữ liệu đơn khi Sửa — set state trực tiếp (không qua handler) để KHÔNG bị 2 effect bên
-    // dưới tự xoá lựa chọn Bộ phận/Nhân viên vừa đổ sẵn.
+    // Set state directly (not via handlers) so the effects below don't clear the prefilled department/employees.
     useEffect(() => {
         if (!isEditMode || !otFormId) return;
         OtFormApi.getOtFormById(otFormId)
@@ -641,11 +571,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     return;
                 }
                 setResubmitKind(data.isEditable ? null : data.resubmitKind);
-                // Đồng bộ lại chế độ hiển thị đúng theo đơn (2026-08-28, sửa lỗi thiếu sót — comment ở
-                // khai báo formMode nói rõ ý định "giữ nguyên chế độ ban đầu" nhưng trước đó chưa từng
-                // set lại state này khi tải đơn để sửa, khiến form luôn hiện lại đúng UI "Theo Nhóm" mặc
-                // định dù đang sửa đơn "theo chuyền" — dropdown Nhóm hiện thừa trống, thiếu hẳn cột
-                // Line/Team/Nhóm ca ở bảng nhân viên bên dưới).
+                // Without this, editing a production form would render the group-mode UI.
                 setFormMode(data.isProductionForm ? "production" : "group");
                 setDepartmentId(data.departmentId);
                 setGroupId(data.groupId);
@@ -656,9 +582,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 setStartTime(data.startTime.slice(0, 5));
                 setEndTime(data.endTime.slice(0, 5));
                 setSubReason(data.subReason ?? "");
-                // Người đã bị 1 cấp duyệt loại khỏi đơn (isRemoved) KHÔNG được đưa vào danh sách sửa —
-                // BE giờ CHỈ chấp nhận đúng tập nhân viên đang active, đưa cả người đã bị loại vào sẽ bị
-                // 400 "danh sách nhân viên đã thay đổi" (xem UpdateAsync).
+                // BE only accepts the currently active employees; including removed ones fails with 400.
                 const activeEmployees = data.employees.filter((e) => !e.isRemoved);
                 setEditEmployees(activeEmployees);
                 setSelectedEmployeeIds(activeEmployees.map((e) => e.employeeId));
@@ -688,9 +612,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isEditMode, otFormId]);
 
-    // Cascading Bộ phận theo Phòng ban — chỉ TẢI danh sách, không tự xoá lựa chọn (việc xoá do handler
-    // người dùng chủ động đổi Phòng ban quyết định, xem handleDepartmentChange) để không phá dữ liệu
-    // vừa đổ sẵn lúc Sửa đơn (docs/attendance-module.md §API/§8).
+    // Only loads the list; clearing the selection is left to handleDepartmentChange so edit-mode prefill survives.
     const [prevDepartmentId, setPrevDepartmentId] = useState(departmentId);
     if (prevDepartmentId !== departmentId) {
         setPrevDepartmentId(departmentId);
@@ -704,7 +626,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             .catch((err) => console.error(err));
     }, [departmentId]);
 
-    // Tải nhân viên theo Bộ phận — không tự xoá lựa chọn (lý do như trên).
+    // Loads only, doesn't clear the selection (same reason as above).
     const [prevGroupId, setPrevGroupId] = useState(groupId);
     if (prevGroupId !== groupId) {
         setPrevGroupId(groupId);
@@ -712,12 +634,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }
 
     useEffect(() => {
-        // Sửa đơn không cần tải toàn bộ nhân viên trong Nhóm — danh sách để sửa lấy thẳng từ đơn
-        // (editEmployees), không cho chọn thêm người mới nữa.
+        // Edit mode takes its list from the form itself.
         if (!groupId || isEditMode) return;
-        // Truyền kèm `date` (ngày trên đơn đang tạo) — Dự kiến hiển thị ở bảng chọn nhân viên phải scope
-        // đúng theo tháng/năm của đơn NÀY, không phải hôm nay thực tế (2026-08-19, xem docs §Lũy kế Dự
-        // kiến); đổi ngày phải tải lại để badge cập nhật đúng tháng mới.
+        // Pass the form's date so projected accumulation uses that month/year; changing the date must reload.
         EmployeeApi.getEmployeesByGroup(groupId, date || undefined)
             .then(setGroupEmployees)
             .catch((err) => console.error(err));
@@ -726,11 +645,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
     const isTimeRangeInvalid = Boolean(startTime && endTime && toMinutes(endTime) <= toMinutes(startTime));
 
-    // Tóm tắt Line/Team/Nhóm ca của đơn "theo chuyền" khi Sửa (theo yêu cầu người dùng, 2026-08-28) —
-    // hiện ngay trong "Thông tin đơn" thay vì phải cuộn xuống bảng nhân viên mới thấy. Gộp theo GIÁ TRỊ
-    // DUY NHẤT trong đơn — thường 1 đơn chỉ có đúng 1 Line/Team/Nhóm ca, nhưng vẫn liệt kê đủ nếu lỡ có
-    // nhiều giá trị khác nhau (đơn thêm người sau, khác Line/Team/Nhóm ca với người tạo ban đầu) thay vì
-    // chỉ hiện 1 giá trị gây hiểu nhầm.
+    // Lists every distinct Line/Team/shift group on the form, since people added later may differ from the creator's.
     const editProductionSummary = useMemo(() => {
         if (!isEditMode || formMode !== "production") return null;
         const distinct = (values: (string | null)[]) => Array.from(new Set(values.filter((v): v is string => Boolean(v))));
@@ -741,10 +656,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         };
     }, [isEditMode, formMode, editEmployees]);
 
-    // Tự tính số phiếu ăn theo giờ OT THỰC TẾ của từng người đang chọn — redesign 3 bậc (2026-08-26,
-    // xem modules/attendance/lib/mealTicket.ts + docs §Phiếu ăn): thực tích < sàn -> không phiếu; sàn..
-    // mốc chính -> Phụ; >= mốc chính -> Chính. Ca khớp đúng khung sớm luôn tính Phụ. Sữa KHÔNG tự tính
-    // — luôn để người lập đơn tự nhập.
+    // Tiers from lib/mealTicket.ts on each person's actual hours; milk is never auto-computed.
     const mealTicketCounts = useMemo(() => {
         let main = 0;
         let secondary = 0;
@@ -759,9 +671,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         return { main, secondary };
     }, [selectedEmployeeIds, employeeOverrides, startTime, endTime, setting, defaultDidEatForNewEmployee]);
 
-    // Đồng bộ kết quả tự tính vào ô nhập — so sánh snapshot NGAY TRONG RENDER thay vì dùng effect
-    // (frontend-conventions.md §3: không setState đồng bộ trong useEffect). Dừng đồng bộ ngay khi người dùng tự gõ
-    // đè (autoMealTicket=false), và không chạy ở màn Sửa đơn vì khối này đã bị khoá.
+    // Sync via render-time snapshot (no setState in effects). Stops once the user overrides; not used in edit mode
+    // where the block is locked.
     const autoMealTicketKey = `${mealTicketCounts.main}/${mealTicketCounts.secondary}`;
     const [prevAutoMealTicketKey, setPrevAutoMealTicketKey] = useState(autoMealTicketKey);
     if (prevAutoMealTicketKey !== autoMealTicketKey) {
@@ -775,7 +686,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }
     }
 
-    // Người dùng bấm "Tính lại" sau khi đã tự sửa tay — bật lại chế độ tự tính và áp ngay con số hiện tại.
     const recalculateMealTickets = () => {
         setAutoMealTicket(true);
         setProcessPart((current) => ({
@@ -785,9 +695,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }));
     };
 
-    // Kiểm tra trùng giờ tăng ca (chỉ chạy khi đã nhập đủ ngày, giờ bắt đầu và có ít nhất 1 nhân viên).
-    // setState CHỈ được gọi trong callback (setTimeout/.then/.catch), không đồng bộ ở thân effect
-    // (frontend-conventions.md §3 — react-hooks/set-state-in-effect).
+    // setState only inside callbacks, never synchronously in the effect body (react-hooks/set-state-in-effect).
     useEffect(() => {
         const timeout = setTimeout(() => {
             if (!date || !startTime || selectedEmployeeIds.length === 0) {
@@ -825,10 +733,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         );
     };
 
-    // Chọn/bỏ chọn HÀNG LOẠT toàn bộ danh sách đang hiện (bảng Theo Nhóm hoặc Theo chuyền) — tích từng
-    // dòng một quá chậm khi danh sách dài (yêu cầu người dùng 2026-08-25). Chỉ tác động tới những người
-    // đang hiển thị theo bộ lọc hiện tại, KHÔNG đụng tới lựa chọn đã có từ bộ lọc khác trước đó (VD đổi
-    // Line/Team giữa chừng vẫn giữ nguyên người đã chọn ở Line/Team trước).
+    // Affects only the rows visible under the current filter, keeping selections made under other filters.
     const setEmployeesSelected = (employeeIds: number[], selected: boolean) => {
         setSelectedEmployeeIds((current) => {
             if (selected) {
@@ -907,7 +812,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         setAddSearchResults((current) => current.filter((r) => r.employeeId !== item.employeeId));
     };
 
-    // Bỏ 1 người vừa thêm TẠM (chưa Lưu) — chỉ là huỷ chọn, không cần lý do vì chưa từng ghi vào đơn.
+    // Never saved to the form, so no reason is needed.
     const cancelAddedEmployee = (employeeId: number) => {
         setSelectedEmployeeIds((current) => current.filter((id) => id !== employeeId));
         setEmployeeAddedMeta((current) => {
@@ -917,8 +822,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         });
     };
 
-    // Loại 1 người ĐÃ CÓ SẴN trong đơn — bắt buộc lý do (đơn là chứng từ), chỉ áp dụng TẠM cho tới khi
-    // Lưu (xem UpdateOtFormDto.removedEmployees).
+    // A reason is required (the form is an official record); staged until save (UpdateOtFormDto.removedEmployees).
     const openRemoveEmployee = (employee: OtFormEmployeeDto) => {
         if (isFormCreator) {
             setPendingRemovals((current) => ({ ...current, [employee.employeeId]: "" }));
@@ -974,9 +878,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
 
-        // Sửa đơn: mọi field khác đã bị khoá disabled từ trước (không đổi được), chỉ còn kiểm tra có
-        // ít nhất 1 người. Tạo mới: vẫn cần đủ các field bắt buộc như cũ — groupId CHỈ bắt buộc ở chế
-        // độ "Theo Nhóm" (2026-08-24, "Theo chuyền" không có Group cố định).
+        // Edit mode locks the other fields, so only require at least one person. groupId is required in group mode only.
         if (
             (!isEditMode || isOfficeEdit) &&
             ((formMode === "group" && !groupId) || !departmentId || !reasonId || !otCaseId || !date || !startTime || !endTime)
@@ -1001,8 +903,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             return;
         }
 
-        // Không hỗ trợ ca qua đêm (2026-08-26) — giờ kết thúc của mỗi người luôn nằm trong CÙNG ngày,
-        // giữa giờ bắt đầu và giờ kết thúc của đơn, không còn cộng thêm 24h như trước.
+        // No overnight shifts: each person's end time lies within the form's time range on the same day.
         const orderStartMinutes = toMinutes(`${startTime}:00`);
         const orderEndMinutes = toMinutes(`${endTime}:00`);
         for (const employeeId of selectedEmployeeIds) {
@@ -1023,8 +924,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             }
         }
 
-        // Mật khẩu cấp 2 nhập trong popup ngay lúc chốt (không còn ô nhập cố định trên trang) —
-        // performSubmit chạy khi bấm "Xác nhận" trong popup.
+        // The secondary password is entered in the popup; performSubmit runs on confirm.
         setSecondaryPassword("");
         setIsPasswordDialogOpen(true);
     };
@@ -1046,9 +946,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
                     noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
                 }));
-                // Thêm/loại nhân viên đã gộp vào đây (2026-09-04) — selectedEmployeeIds đã tự phản ánh
-                // đúng người còn lại (toggleEmployee/pendingRemovals cùng cập nhật nó), removedEmployees
-                // build từ pendingRemovals (lý do bắt buộc, xem openRemoveEmployee/confirmRemoveEmployee).
+                // selectedEmployeeIds already reflects staged adds/removals; removedEmployees carries the required reasons.
                 const removedEmployees = Object.entries(pendingRemovals).map(([employeeId, reason]) => ({
                     employeeId: Number(employeeId),
                     reason,
@@ -1090,8 +988,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     totalHour,
                     date,
                     employees,
-                    // Ăn uống bắt buộc cho MỌI đơn (2026-09-28) — luôn gửi ProcessPart, BE cũng luôn ghi
-                    // IsEat=true dù gửi gì lên (phòng vệ 2 lớp).
+                    // Always sent with isEat=true; BE enforces the same (defense in depth).
                     processPart: { ...processPart, isEat: true },
                     secondaryPassword,
                 });
@@ -1115,10 +1012,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }
 
     if (isBlockedNoScope) {
-        // Vẫn hiện tiêu đề + tab đổi chế độ (nếu có quyền "Theo chuyền") thay vì chặn nguyên trang — trước
-        // đây return sớm 1 khối duy nhất khiến người có CẢ 2 quyền nhưng đang lỡ đứng ở tab "Theo Nhóm"
-        // (không có phạm vi Nhóm nào) bị kẹt luôn, không còn cách nào bấm quay lại tab "Theo chuyền"
-        // (2026-09-28, sửa cùng lỗi 2 quyền bị dính nhau ở trên).
+        // Keep the header and mode tabs instead of returning early, so users with both permissions can still switch to production.
         return (
             <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1151,9 +1045,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     return (
         <div className="space-y-4">
-            {/* Gộp tiêu đề + tab đổi chế độ chung 1 hàng thay vì tách 2 khối riêng (tab cũ là 1 thanh
-                full-width viền dưới, chiếm nguyên 1 hàng cho việc chỉ có 2 lựa chọn) — đổi tab sang dạng
-                segmented control gọn để tiết kiệm chiều cao (2026-09-28, theo yêu cầu người dùng). */}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h1 className="text-xl font-semibold text-[#191c1e]">{isEditMode ? t("titleEdit", { id: otFormId }) : t("titleCreate")}</h1>
                 {!isEditMode && canCreateProductionForm && canUseGroupMode && (
@@ -1176,20 +1067,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 )}
             </div>
 
-            {/* isScopeLocked (chỉ đúng 1 phạm vi) không còn banner riêng nữa — ô "Đơn vị" bên dưới đã bị
-                khoá + tự điền sẵn đúng thông tin này rồi, hiện thêm banner là thừa (2026-09-28, theo yêu
-                cầu người dùng, role Staff). Nhiều phạm vi (isScopeRestricted) vẫn cần banner vì danh sách
-                phạm vi được phép không hiện ở đâu khác trên form. */}
+            {/* A single locked scope needs no banner (the unit field shows it); several scopes aren't shown anywhere else. */}
             {!isEditMode && isScopeRestricted && !isScopeLocked && (
                 <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
                     {t("scopeRestrictedMessage", { groupNames: createScopes!.map((s) => s.groupNameVn).join(", ") })}
                 </div>
             )}
 
-            {/* Cùng nguyên tắc với banner Nhóm ở trên — isProductionScopeLocked (đúng 1 tổ hợp) không cần
-                banner vì 3 dropdown Team/Line/Nhóm ca bên dưới đã tự điền sẵn + khoá cứng rồi. Nhiều tổ
-                hợp (hiếm — Line Leader của nhiều Line) mới cần banner để biết còn được chọn giữa các tổ
-                hợp nào (2026-09-28). */}
+            {/* Same rule: a single combo is already prefilled and locked; several need the banner. */}
             {!isEditMode && formMode === "production" && isProductionScopeRestricted && !isProductionScopeLocked && (
                 <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
                     {t("productionScopeRestrictedMessage", {
@@ -1228,10 +1113,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 value={departmentId ?? ""}
                                 onChange={handleDepartmentChange}
                                 placeholder={t("fieldDepartmentPlaceholder")}
-                                // "Theo Nhóm" khoá theo isScopeLocked (createScopes); "Theo chuyền" khoá theo
-                                // isProductionScopeRestricted (productionCreateScopes) — Bộ phận của Line
-                                // Leader luôn xác định được ngay khi có ít nhất 1 tổ hợp trả về, không cần
-                                // đợi đúng 1 tổ hợp như Team/Line/Nhóm ca (2026-09-28, xem MyProductionCreateScopeItemDto).
+                                // Production mode locks as soon as any scope exists: the Line Leader's department is known from one combo.
                                 disabled={isSubmitting || isEditMode || (formMode === "group" ? isScopeLocked : isProductionScopeRestricted)}
                             />
                         </label>
@@ -1285,10 +1167,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <input value={totalHour} disabled className={fieldClassName} />
                         </label>
 
-                        {/* Gộp Giờ bắt đầu + Giờ kết thúc chung 1 ô lưới (2026-08-26) — ô nhập giờ đã đổi
-                            sang gõ số nên hẹp hơn hẳn dropdown cũ, để riêng mỗi ô 1 cột lưới thừa nhiều
-                            khoảng trắng; gộp lại còn đẩy "Tổng số giờ" trồi lên cùng hàng thay vì rơi
-                            xuống hàng riêng gần như trống (theo yêu cầu người dùng). */}
                         <div className="block sm:col-span-2">
                             <div className="grid grid-cols-2 gap-3">
                                 <label className="block">
@@ -1355,9 +1233,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     </label>
 
                     <div className="space-y-2.5 border-t border-[#e0e3e5] pt-3">
-                    {/* "Yêu cầu hỗ trợ khác" không còn checkbox bật/tắt cả khối (2026-09-28, theo yêu
-                        cầu người dùng) — "Ăn uống" nay bắt buộc cho MỌI đơn nên khối này luôn hiện, chỉ
-                        còn 2 mục Xe đưa đón/Phòng photo là thật sự tuỳ chọn. */}
+                    {/* Always shown: meals are mandatory, only shuttle/photo room are optional. */}
                     <span className="block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                         {t("otherSupportLabel")}
                     </span>
@@ -1381,9 +1257,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </div>
 
                         <div className="space-y-1.5">
-                            {/* Dải trạng thái tự tính. Hệ thống tự điền số phiếu chính/phụ theo giờ OT từng người;
-                                người lập đơn gõ đè được, khi đó hiện nút "Tính lại" để quay về số hệ thống gợi ý.
-                                Quy tắc ngưỡng giờ không còn hiện ở đây (gọn giao diện, theo yêu cầu người dùng). */}
+                            {/* Counts are auto-filled from each person's OT hours; once overridden, "Recalculate" restores them. */}
                             <div className="flex items-center justify-between gap-2 text-xs">
                                 <span className="text-xs font-semibold text-[#5e3f3a]">{t("mealTicketCountsTitle")}</span>
                                 {!isEditMode &&
@@ -1409,11 +1283,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <input
                                     type="number"
                                     min={0}
-                                    // Sửa đơn: khối này bị khoá không gửi lên (BE tự tính lại theo
-                                    // đúng giờ mới sau khi lưu — RecalculateMealTicketCountsAsync),
-                                    // nên LUÔN hiện số tự tính SỐNG theo employeeOverrides hiện tại
-                                    // thay vì số tĩnh lúc tải trang — tránh gây hiểu nhầm "sửa giờ mà
-                                    // không thấy phiếu đổi theo" (2026-08-28, theo phản hồi người dùng).
+                                    // Edit mode doesn't send this block (BE recalculates after save), so show the live computed value
+                                    // rather than the stale loaded one.
                                     value={isEditMode ? mealTicketCounts.main : processPart.mainTicketCount}
                                     onChange={(event) => {
                                         setAutoMealTicket(false);
@@ -1506,11 +1377,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         </div>
                     </div>
                     {isEditMode ? (
-                        // Sửa đơn (2026-09-04, gộp thêm/xóa nhân viên từ OtFormDetail cũ — xem
-                        // docs/attendance-module.md §Cây chức vụ & Cây duyệt (mục Sửa đơn)): editEmployees vẫn là
-                        // danh sách GỐC lúc tải đơn — thêm/loại ở đây chỉ TẠM (selectedEmployeeIds/
-                        // pendingRemovals), áp dụng thật + log lại 1 lần khi bấm "Lưu thay đổi" bên dưới
-                        // (1 lần nhập mật khẩu cấp 2 cho toàn bộ thay đổi trong phiên sửa).
+                        // editEmployees stays the original list; adds/removals are staged and applied in one save (one secondary password).
                         <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                         <div
                             ref={tableScrollRef}
@@ -1532,9 +1399,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <th colSpan={2} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
-                                        {/* Bỏ hẳn cột "Có ăn" khi đang sửa đơn Theo chuyền (2026-09-28) — Ăn
-                                            uống bắt buộc, DidEat luôn true, không còn gì để chọn. Đơn Theo Nhóm
-                                            (Văn phòng) đổi nhãn thành "Ăn sau" (đảo ngược ý nghĩa hiển thị). */}
+                                        {/* Production forms: meals mandatory, nothing to choose. Office forms show it inverted as "eat later". */}
                                         {formMode !== "production" && (
                                             <th rowSpan={2} className="w-px whitespace-normal px-2 py-2 text-center align-bottom leading-tight">{t("colAteLater")}</th>
                                         )}
@@ -1577,9 +1442,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 </tr>
                                             );
                                         }
-                                        // Không có dữ liệu "ngày" ở bảng này (monthToDate/yearToDate là lũy kế
-                                        // THẬT, không phải Dự kiến theo ngày) — chỉ cảnh báo tháng/năm, ưu tiên
-                                        // mốc riêng của nhân viên nếu đã gán (2026-08-26).
+                                        // No daily data here (monthToDate/yearToDate are actuals, not projections), so warn month/year only.
                                         const currentStartTime = employeeOverrides[employee.employeeId]?.startTime || startTime;
                                         const currentEndTime = employeeOverrides[employee.employeeId]?.endTime || endTime;
                                         const currentDidEat = employeeOverrides[employee.employeeId]?.didEat ?? defaultDidEatForNewEmployee;
@@ -1796,12 +1659,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     ) : formMode === "production" ? (
                         <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                                {/* Team PHẢI chọn trước Line — Line là con thật của Team (ProductionLine.TeamId
-                                    là FK), đặt Team lên trước + khoá Line tới khi có Team để không còn ai hiểu
-                                    nhầm Line là bộ lọc chọn đầu tiên (2026-08-26, yêu cầu người dùng). Thêm nhãn
-                                    phía trên mỗi ô (trước đây chỉ có placeholder chìm trong ô) để Team/Line/Nhóm
-                                    ca nổi bật hơn — bảng kết quả bên dưới không còn lặp lại 3 cột này nữa
-                                    (2026-09-28, theo yêu cầu người dùng). */}
+                                {/* Team first: Line is its FK child, so Line stays locked until a Team is picked. */}
                                 <label className="block">
                                     <span className={fieldLabelClassName}>{t("productionFilterTeamLabel")}</span>
                                     <SearchableSelect
@@ -1891,17 +1749,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 </th>
                                                 <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
                                                 <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
-                                                {/* Bỏ cột Block/Nhóm ca — đã chọn ở bộ lọc Team/Line/Nhóm ca phía trên,
-                                                    mọi dòng kết quả đều thuộc đúng 1 giá trị nên lặp lại ở đây thừa
-                                                    (2026-09-28, theo yêu cầu người dùng). Công đoạn giữ lại vì không
-                                                    có bộ lọc tương ứng, mỗi nhân viên có thể khác nhau. */}
+                                                {/* No Block/shift-group columns: every row matches the filter above. Process stays since it isn't filtered. */}
                                                 <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colCongDoan")}</th>
                                                 <th colSpan={3} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
                                                 <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
                                                 <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
-                                                {/* Bỏ hẳn cột "Có ăn" cho đơn Theo chuyền (2026-09-28, theo yêu cầu người
-                                                    dùng) — Ăn uống nay bắt buộc, ai cũng coi như có ăn (DidEat=true), chỉ
-                                                    còn cần hiện loại phiếu. */}
+                                                {/* No "ate" column: meals are mandatory for production forms. */}
                                                 <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
                                                 <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
                                             </tr>
@@ -1914,16 +1767,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <tbody>
                                             {productionResults.map((item) => {
                                                 const checked = selectedEmployeeIds.includes(item.employeeId);
-                                                // Cảnh báo SỚM ngay lúc chọn người (trước khi submit) — mirror bảng "Theo
-                                                // Nhóm" phía dưới, trước đây bảng "Theo chuyền" không có cột này (thiếu
-                                                // sót, xem ProductionEmployeeService.SearchAsync). Ưu tiên mốc riêng của
-                                                // nhân viên (customMonthly/YearlyOtHourLimit) nếu đã gán — "gia hạn" cao
-                                                // hơn mặc định, thường dùng cho công nhân dưới chuyền (2026-08-26). BE
-                                                // luôn là nguồn chặn thật (ValidateOtHourLimitsAsync).
+                                                // Early warning only (per-employee custom limits first); BE ValidateOtHourLimitsAsync is the real guard.
                                                 const currentStartTime = employeeOverrides[item.employeeId]?.startTime || startTime;
                                                 const currentEndTime = employeeOverrides[item.employeeId]?.endTime || endTime;
-                                                // Ăn uống bắt buộc (2026-09-28) — đơn Theo chuyền không còn cho chọn
-                                                // "Có ăn" nữa, loại phiếu luôn tính như có ăn.
+                                                // Meals mandatory: ticket type always computed as having eaten.
                                                 const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, true, setting);
                                                 const monthLimit = item.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit;
                                                 const yearLimit = item.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit;
@@ -2059,16 +1906,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <tbody>
                                     {groupEmployees.map((employee) => {
                                         const checked = selectedEmployeeIds.includes(employee.id);
-                                        // Dùng lũy kế DỰ KIẾN (thực tế + đơn khác đang chờ duyệt) chứ không phải
-                                        // monthToDate/yearToDate (chỉ phản ánh phần đã duyệt xong) — tránh trường
-                                        // hợp tạo 2 đơn cùng lúc mà đơn nào cũng không thấy cảnh báo vượt hạn mức.
-                                        // Chỉ mang tính cảnh báo SỚM — BE luôn là nguồn chân lý chặn thật khi submit
-                                        // (ValidateOtHourLimitsAsync, cộng thêm giờ của chính đơn đang tạo). Ưu tiên
-                                        // mốc riêng của nhân viên nếu đã gán (2026-08-26).
+                                        // Use projected accumulation (actual + other pending forms) so two concurrent forms both see the warning.
+                                        // Early warning only; BE ValidateOtHourLimitsAsync is the real guard.
                                         const currentStartTime = employeeOverrides[employee.id]?.startTime || startTime;
                                         const currentEndTime = employeeOverrides[employee.id]?.endTime || endTime;
-                                        // Field BE thật (true = ăn TRONG ca, bị trừ giờ) — UI hiện dưới nhãn "Ăn
-                                        // sau" ĐẢO NGƯỢC (2026-09-28): tích "Ăn sau" = didEat false = không trừ giờ.
+                                        // BE field (true = eats during the shift, hours deducted); the UI shows it inverted as "eat later".
                                         const currentDidEat = employeeOverrides[employee.id]?.didEat ?? defaultDidEatForNewEmployee;
                                         const currentAteLater = !currentDidEat;
                                         const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);

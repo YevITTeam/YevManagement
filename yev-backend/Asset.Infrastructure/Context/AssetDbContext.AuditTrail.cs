@@ -9,16 +9,8 @@ using Shared.Application.Helper;
 
 namespace Asset.Infrastructure.Context;
 
-// Automatically records an AuditTrail for every Create/Update/Delete that goes through AssetDbContext,
-// intercepted at a single point (SaveChangesAsync) instead of manually editing each Service — any new
-// entity added later is audited automatically, no need to remember to call anything extra (2026-07-16).
-//
-// 2026-07-23 revision:
-//   - every row now carries RecordName (device code, IP address, prefix...) so the log tells WHICH
-//     object was touched without joining back to the source table;
-//   - entries of the same table + action inside one SaveChanges are collapsed into a single row with
-//     AffectedCount (e.g. generating a /24 prefix = 1 row "192.168.1.1 -> 192.168.1.255 (255 records)"
-//     instead of 255 rows).
+// Audits every Create/Update/Delete in one place (SaveChangesAsync) so new entities are covered automatically.
+// Same table + action within one SaveChanges is collapsed into one row with AffectedCount.
 public partial class AssetDbContext
 {
     private readonly IHttpContextAccessor? _auditHttpContextAccessor;
@@ -30,9 +22,7 @@ public partial class AssetDbContext
         typeof(AuditTrail),
         typeof(DeviceConfigurationHistory),
         typeof(DeviceConfigurationInitial),
-        // ServerCheckSession/Item/ManualResult ARE the daily check's own log (1 row per scan/session) —
-        // auditing them too would just duplicate every scan as a second, noisier log (same rationale as
-        // DeviceConfigurationHistory above). ServerCheckManualItem (rarely-edited master data) stays audited.
+        // These are the daily check's own log; auditing them would duplicate every scan.
         typeof(ServerCheckSession),
         typeof(ServerCheckItem),
         typeof(ServerCheckManualResult),
@@ -55,9 +45,7 @@ public partial class AssetDbContext
         _auditLogger = logger;
     }
 
-    // Snapshot of a tracked change, captured BEFORE base.SaveChangesAsync (original values are gone
-    // afterwards) and turned into the final AuditTrail rows only after the main data is persisted
-    // (identity keys of Added rows are only known at that point).
+    // Captured before SaveChanges (original values are lost after) and finalized after it (Added keys are known only then).
     private sealed class PendingAudit
     {
         public required EntityEntry Entry { get; init; }
@@ -158,9 +146,7 @@ public partial class AssetDbContext
 
     private static int? ReadPrimaryKey(EntityEntry entry, bool useOriginalValue)
     {
-        // Entities with a composite key (e.g. DeviceSoftware: DeviceId+SoftwareId) only get 1 int
-        // column represented in AuditTrail.RecordId -> take the first key column; the rest still
-        // remains in Old/NewValues + RecordName so no information is lost.
+        // AuditTrail.RecordId holds one int, so composite keys use the first column; the rest stays in values/RecordName.
         var pkProperty = entry.Metadata.FindPrimaryKey()?.Properties[0];
         if (pkProperty is null) return null;
 
@@ -184,9 +170,7 @@ public partial class AssetDbContext
         return (oldValues, newValues);
     }
 
-    // Soft delete (IsDeleted false->true) and restore (true->false) both go through the Modified state
-    // just like a regular Update — the correct Action must be inferred from the IsDeleted field
-    // instead of just calling it "Update".
+    // Soft delete and restore are both Modified; infer the action from IsDeleted.
     private static string DetectModifiedAction(EntityEntry entry)
     {
         var isDeletedProperty = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "IsDeleted");
@@ -200,9 +184,7 @@ public partial class AssetDbContext
         return "Update";
     }
 
-    // Child entities (DeviceConfiguration, DeviceEmail, DeviceSoftware, TransferHistory, IpAddress...)
-    // only know a DeviceId — resolve it to the device code the user actually recognises, with a single
-    // extra query per SaveChanges (and only when such an entity was touched).
+    // Child entities only know DeviceId; resolve to the device code users recognize with one extra query.
     private async Task<Dictionary<int, string>> LoadDeviceCodesAsync(List<PendingAudit> pendings, CancellationToken cancellationToken)
     {
         var deviceIds = pendings
@@ -312,7 +294,7 @@ public partial class AssetDbContext
     private static string? Serialize(Dictionary<string, object?>? values)
         => values is { Count: > 0 } ? JsonSerializer.Serialize(values) : null;
 
-    // Friendly label per entity so the log reads "PC-001 - Máy kế toán" instead of just "Device #12".
+    // Friendly label so the log reads "PC-001 - <name>" rather than "Device #12".
     private static string? ResolveRecordName(object entity, Dictionary<int, string> deviceCodes)
     {
         var name = entity switch
