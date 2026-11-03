@@ -18,15 +18,22 @@ namespace Attendance.Application.Interfaces.Service
         Task<ProductionEmployeeAccumulationResultDto> ImportMonthlyAccumulationAsync(
             Stream excelFileStream, int year, int month, string userName, bool isAdmin);
 
+        // T1..T12 columns found by header; a blank month cell leaves that month untouched.
+        Task<ProductionEmployeeAccumulationResultDto> ImportYearlyAccumulationAsync(
+            Stream excelFileStream, int year, string userName, bool isAdmin);
+
         Task<(byte[] Content, string FileName)> GenerateTemplateAsync();
 
         (byte[] Content, string FileName) GenerateOtHourLimitTemplate();
 
         (byte[] Content, string FileName) GenerateMonthlyAccumulationTemplate();
 
+        (byte[] Content, string FileName) GenerateYearlyAccumulationTemplate();
+
         // Current data of the filtered employees in the matching template, to edit and re-import.
         Task<(byte[] Content, string FileName)> ExportEmployeesAsync(EmployeeExportFilterDto filter, string userName, bool isAdmin);
         Task<(byte[] Content, string FileName)> ExportOtHourLimitsAsync(EmployeeExportFilterDto filter, string userName, bool isAdmin);
         Task<(byte[] Content, string FileName)> ExportMonthlyAccumulationAsync(EmployeeExportFilterDto filter, int year, int month, string userName, bool isAdmin);
+        Task<(byte[] Content, string FileName)> ExportYearlyAccumulationAsync(EmployeeExportFilterDto filter, int year, string userName, bool isAdmin);
     }
 }

@@ -21,6 +21,9 @@ const ENDPOINTS = {
         export: "/EmployeeImport/export",
         otHourLimitsExport: "/EmployeeImport/ot-hour-limits/export",
         monthlyAccumulationExport: "/EmployeeImport/monthly-accumulation/export",
+        yearlyAccumulation: "/EmployeeImport/yearly-accumulation",
+        yearlyAccumulationTemplate: "/EmployeeImport/yearly-accumulation/template",
+        yearlyAccumulationExport: "/EmployeeImport/yearly-accumulation/export",
     },
 } as const;
 
@@ -71,6 +74,16 @@ export const EmployeeImportApi = {
         );
         return response.data;
     },
+    // T1..T12 columns; a blank month cell leaves that month untouched.
+    importYearlyAccumulation: async (year: number, file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await api.postForm<ApiResponse<ProductionEmployeeAccumulationResultDto>>(
+            `${ENDPOINTS.EMPLOYEE_IMPORT.yearlyAccumulation}?year=${year}`,
+            formData
+        );
+        return response.data;
+    },
     downloadTemplate: async (): Promise<BlobDownloadResult> => {
         return getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.template);
     },
@@ -80,12 +93,17 @@ export const EmployeeImportApi = {
     downloadMonthlyAccumulationTemplate: async (): Promise<BlobDownloadResult> => {
         return getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.monthlyAccumulationTemplate);
     },
+    downloadYearlyAccumulationTemplate: async (): Promise<BlobDownloadResult> => {
+        return getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.yearlyAccumulationTemplate);
+    },
     exportEmployees: (filter: EmployeeExportFilter): Promise<BlobDownloadResult> =>
         getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.export + toExportQuery(filter)),
     exportOtHourLimits: (filter: EmployeeExportFilter): Promise<BlobDownloadResult> =>
         getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.otHourLimitsExport + toExportQuery(filter)),
     exportMonthlyAccumulation: (filter: EmployeeExportFilter, year: number, month: number): Promise<BlobDownloadResult> =>
         getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.monthlyAccumulationExport + toExportQuery(filter, { year, month })),
+    exportYearlyAccumulation: (filter: EmployeeExportFilter, year: number): Promise<BlobDownloadResult> =>
+        getForBlob(ENDPOINTS.EMPLOYEE_IMPORT.yearlyAccumulationExport + toExportQuery(filter, { year })),
 };
 
 export { ENDPOINTS };

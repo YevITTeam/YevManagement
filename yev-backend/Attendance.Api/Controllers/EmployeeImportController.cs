@@ -80,6 +80,23 @@ namespace Attendance.Api.Controllers
             return Success(result, message);
         }
 
+        [RequirePermission("Attendance.EmployeeAccumulation.Import")]
+        [HttpPost("yearly-accumulation")]
+        public async Task<ActionResult<ApiResponse<ProductionEmployeeAccumulationResultDto>>> ImportYearlyAccumulation(
+            IFormFile file, [FromQuery] int year)
+        {
+            if (file == null || file.Length == 0)
+                return Fail<ProductionEmployeeAccumulationResultDto>("Vui lòng chọn file Excel để import.");
+            if (year < 2000 || year > 2100)
+                return Fail<ProductionEmployeeAccumulationResultDto>("Năm không hợp lệ.");
+
+            await using var stream = file.OpenReadStream();
+            var result = await _employeeImportService.ImportYearlyAccumulationAsync(stream, year, CurrentUserName, User.IsInRole(AdminRole));
+            var message = $"Đã điều chỉnh lũy kế năm {year} cho {result.AdjustedCount} nhân viên" +
+                (result.SkippedCount > 0 ? $", bỏ qua {result.SkippedCount} dòng." : ".");
+            return Success(result, message);
+        }
+
         // Returns the .xlsx directly, not ApiResponse<T>.
         [RequirePermission("Attendance.Employee.Create")]
         [HttpGet("export")]
@@ -107,6 +124,16 @@ namespace Attendance.Api.Controllers
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
+        [RequirePermission("Attendance.EmployeeAccumulation.Import")]
+        [HttpGet("yearly-accumulation/export")]
+        public async Task<IActionResult> ExportYearlyAccumulation([FromQuery] EmployeeExportFilterDto filter, [FromQuery] int year)
+        {
+            if (year < 2000 || year > 2100)
+                return BadRequest("Năm không hợp lệ.");
+            var (content, fileName) = await _employeeImportService.ExportYearlyAccumulationAsync(filter, year, CurrentUserName, User.IsInRole(AdminRole));
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
         [RequirePermission("Attendance.Employee.Create")]
         [HttpGet("template")]
         public async Task<IActionResult> DownloadTemplate()
@@ -120,6 +147,14 @@ namespace Attendance.Api.Controllers
         public IActionResult DownloadOtHourLimitTemplate()
         {
             var (content, fileName) = _employeeImportService.GenerateOtHourLimitTemplate();
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        [RequirePermission("Attendance.EmployeeAccumulation.Import")]
+        [HttpGet("yearly-accumulation/template")]
+        public IActionResult DownloadYearlyAccumulationTemplate()
+        {
+            var (content, fileName) = _employeeImportService.GenerateYearlyAccumulationTemplate();
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 

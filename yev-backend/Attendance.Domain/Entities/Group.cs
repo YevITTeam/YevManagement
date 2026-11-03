@@ -16,6 +16,9 @@ public partial class Group
 
     public int WorkshopId { get; set; }
 
+    // false = office forms of this group always eat during the shift (meal break deducted).
+    public bool AllowEatLater { get; set; } = true;
+
     public bool IsDeleted { get; set; }
 
     public virtual Department Department { get; set; } = null!;

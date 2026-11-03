@@ -84,6 +84,7 @@ Nút header trang cỡ nhỏ `px-3 py-1.5 text-xs`. Tự viết class (không c�
 ### 4.4. Bảng
 Mẫu `BranchList.tsx`: `overflow-x-auto` > `table.min-w-full.text-left.text-sm`; thead `bg-[#f8fafc]` overline; hàng `border-b border-[#f1f5f9] hover:bg-[#f8fafc]`; cột chính `font-semibold text-[#191c1e]`, cột phụ `text-[#5e3f3a]`; thao tác dạng text/icon (`Sửa` xám, `Xoá` `#930006`).
 - Rỗng: `EmptyState` trong `<td colSpan>`; đang tải: `TableSkeletonRows rows columns` (khối lẻ: `Skeleton`).
+- Bảng chọn nhiều dòng (vd. chọn nhân viên tạo đơn): bấm **cả dòng** để tick (`cursor-pointer`, bỏ qua click từ `input/button/select/textarea/a/label`); checkbox phụ trong ô và ô "chọn tất cả" ở tiêu đề thì bọc `<label>` phủ cả ô (`td/th h-px p-0` > `label h-full px-3 py-2`); dòng tiêu đề nhóm (chọn nhiều Nhóm) bấm cả dòng để chọn/bỏ cả nhóm. Danh sách dài thêm ô tìm (`normalizeText` từ `@/lib/normalizeText`, không phân biệt dấu); tìm chỉ lọc hiển thị, không bỏ chọn dòng bị ẩn, chọn tất cả chỉ áp cho dòng đang hiện. Bảng kéo-cuộn bằng `useDragScroll` đã tự nuốt click sau khi kéo.
 
 ### 4.5. Phân trang
 Dùng `ui/Pagination.tsx` (`pageIndex totalPages onPageChange summary compactSummary`): đếm bên trái, `‹ 1 2 3 … ›` bên phải (7 ô, dưới `sm` còn `‹ 2 / 9 ›`), ẩn khi 1 trang. Mẫu `WorkflowRequestList`, `AppReleaseList`. Luôn phân trang server-side.

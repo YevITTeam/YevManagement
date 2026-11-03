@@ -174,6 +174,7 @@ namespace Asset.Application.Services
                 : d.Status == (int)DeviceStatus.InUse ? "Đang sử dụng"
                 : d.Status == (int)DeviceStatus.PendingLiquidation ? "Chờ thanh lý"
                 : d.Status == (int)DeviceStatus.Liquidated ? "Đã thanh lý"
+                : d.Status == (int)DeviceStatus.UnderRepair ? "Đang sửa chữa"
                 : "Không xác định"
         };
 
@@ -298,6 +299,8 @@ namespace Asset.Application.Services
                         : d.Status == (int)DeviceStatus.InUse ? "Đang sử dụng"
                         : d.Status == (int)DeviceStatus.PendingLiquidation ? "Chờ thanh lý"
                         : d.Status == (int)DeviceStatus.Liquidated ? "Đã thanh lý"
+                        : d.Status == (int)DeviceStatus.UnderRepair ? "Đang sửa chữa"
+                : d.Status == (int)DeviceStatus.UnderRepair ? "Đang sửa chữa"
                         : "Không xác định"
                 });
         }

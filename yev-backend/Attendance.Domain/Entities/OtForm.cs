@@ -7,6 +7,8 @@ public partial class OtForm
 {
     public int Id { get; set; }
 
+    public byte[] RowVersion { get; set; } = null!;
+
     // Null for production forms (participants may come from different groups); required for office forms.
     public int? GroupId { get; set; }
 

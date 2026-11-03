@@ -45,6 +45,8 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<DepartmentApprovalStepCoordinator> DepartmentApprovalStepCoordinators { get; set; }
     public virtual DbSet<GroupApprovalStepCoordinator> GroupApprovalStepCoordinators { get; set; }
     public virtual DbSet<GroupBorrowedApprover> GroupBorrowedApprovers { get; set; }
+
+    public virtual DbSet<GroupOtFormCreator> GroupOtFormCreators { get; set; }
     public virtual DbSet<EmployeeAccumulationHistory> EmployeeAccumulationHistories { get; set; }
     public virtual DbSet<ProductionLine> ProductionLines { get; set; }
     public virtual DbSet<ProductionShiftTeam> ProductionShiftTeams { get; set; }
@@ -258,12 +260,30 @@ public partial class AttendanceDbContext : DbContext
                 .HasConstraintName("FK_GroupBorrowedApprovers_Employees_EmployeeId");
         });
 
+        modelBuilder.Entity<GroupOtFormCreator>(entity =>
+        {
+            entity.HasIndex(e => new { e.GroupId, e.EmployeeId }, "IX_GroupOtFormCreators_GroupId_EmployeeId").IsUnique();
+            entity.HasIndex(e => e.EmployeeId, "IX_GroupOtFormCreators_EmployeeId");
+
+            entity.HasOne(d => d.Group).WithMany()
+                .HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_GroupOtFormCreators_Groups_GroupId");
+
+            entity.HasOne(d => d.Employee).WithMany()
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_GroupOtFormCreators_Employees_EmployeeId");
+        });
+
         modelBuilder.Entity<EmployeeAccumulationHistory>(entity =>
         {
             entity.HasIndex(e => new { e.EmployeeId, e.Year, e.Month }, "IX_EmployeeAccumulationHistories_EmployeeId_Year_Month").IsUnique();
             entity.HasIndex(e => new { e.Year, e.Month }, "IX_EmployeeAccumulationHistories_Year_Month");
 
             entity.Property(e => e.TotalHours).HasPrecision(10, 2);
+            // Two forms signed off at once for the same person: the loser's UPDATE matches no row instead of losing hours.
+            entity.Property(e => e.TotalHours).IsConcurrencyToken();
             entity.Property(e => e.Note).HasMaxLength(1000);
 
             entity.HasOne(d => d.Employee).WithMany(p => p.EmployeeAccumulationHistories)
@@ -274,6 +294,8 @@ public partial class AttendanceDbContext : DbContext
 
         modelBuilder.Entity<OtForm>(entity =>
         {
+            // An edit racing an approval would otherwise overwrite the whole row and strand the form.
+            entity.Property(e => e.RowVersion).IsRowVersion();
             entity.HasIndex(e => e.GroupId, "IX_OtForms_GroupId");
             entity.HasIndex(e => e.DepartmentId, "IX_OtForms_DepartmentId");
             entity.HasIndex(e => e.WorkshopId, "IX_OtForms_WorkshopId");
@@ -331,6 +353,7 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.NoteJp).HasMaxLength(500);
             entity.Property(e => e.MonthToDate).HasPrecision(10, 2);
             entity.Property(e => e.YearToDate).HasPrecision(10, 2);
+            entity.Property(e => e.LedgerHours).HasPrecision(10, 2);
             entity.Property(e => e.RemovedByUserName).HasMaxLength(100);
             entity.Property(e => e.RemovedByFullName).HasMaxLength(255);
             entity.Property(e => e.RemoveReason).HasMaxLength(500);

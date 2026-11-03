@@ -56,6 +56,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
+import { normalizeText } from "@/lib/normalizeText";
 
 // excludeId drops the node and its subtree, since picking a descendant as parent would create a cycle.
 function flattenTree(nodes: OrgUnitTreeDto[], depth = 0, excludeId?: number | null): FlatOrgUnitOption[] {
@@ -66,15 +67,6 @@ function flattenTree(nodes: OrgUnitTreeDto[], depth = 0, excludeId?: number | nu
         result.push(...flattenTree(node.children, depth + 1, excludeId));
     }
     return result;
-}
-
-// Lower-case, accent-free form used for matching, so "xuong di an" matches the accented name.
-function normalizeText(value: string) {
-    return value
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .replace(/đ/g, "d")
-        .toLowerCase();
 }
 
 // Keeps the nodes whose own fields match (whole subtree kept) or that hold a matching member / descendant.

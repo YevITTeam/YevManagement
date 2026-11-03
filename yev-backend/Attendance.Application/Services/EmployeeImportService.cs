@@ -563,25 +563,12 @@ namespace Attendance.Application.Services
         }
 
         // Simplified 2-column format (code + monthly total) since the ledger stores only totals per month.
-        // Delta-upsert because of the unique (EmployeeId, Year, Month) index; same logic as ApplyAccumulationAsync.
         private const string MonthlyAccumulationHeaderMarkerCellB = "MNV";
 
         public async Task<ProductionEmployeeAccumulationResultDto> ImportMonthlyAccumulationAsync(
             Stream excelFileStream, int year, int month, string userName, bool isAdmin)
         {
-            XLWorkbook workbook;
-            try
-            {
-                workbook = new XLWorkbook(excelFileStream);
-            }
-            catch (Exception ex) when (ex is not DomainException)
-            {
-                throw new DomainException(
-                    "File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx).",
-                    new List<string> { $"{ex.GetType().Name}: {ex.Message}" });
-            }
-
-            using var _ = workbook;
+            using var workbook = OpenWorkbook(excelFileStream);
             var worksheet = workbook.Worksheets.First();
             var usedRange = worksheet.RangeUsed();
 
@@ -610,61 +597,13 @@ namespace Attendance.Application.Services
 
             if (dataRows.Count == 0) return result;
 
-            var codes = dataRows.Select(r => r.EmployeeCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var employeesByCode = (await _unitOfWork.Employees.SelectAsync(
-                x => !x.IsDeleted && codes.Contains(x.Code),
-                x => new { x.Id, x.Code, x.GroupId, DepartmentId = x.DepartmentId ?? (x.Group != null ? (int?)x.Group.DepartmentId : null) }))
-                .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
-
-            // Scoped per row, same rules as ImportOtHourLimitsAsync.
-            var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
-            var managedGroupIds = isAdmin ? null : (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
-                x => x.Employee.UserName == userName && !x.IsDeleted)).Select(x => x.GroupId).ToHashSet();
-
-            var employeeIds = employeesByCode.Values.Select(x => x.Id).ToList();
-            var existingLedgerRows = employeeIds.Count == 0
-                ? new List<EmployeeAccumulationHistory>()
-                : (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
-                    x => employeeIds.Contains(x.EmployeeId) && x.Year == year));
-
-            var ledgerRowsByEmployeeAndMonth = existingLedgerRows
-                .GroupBy(x => (x.EmployeeId, x.Month))
-                .ToDictionary(g => g.Key, g => g.First());
-
-            var ledgerRowsByEmployee = existingLedgerRows
-                .GroupBy(x => x.EmployeeId)
-                .ToDictionary(g => g.Key, g => g.ToList());
-
+            var (employeesByCode, scope, ledger) = await LoadAccumulationContextAsync(dataRows.Select(r => r.EmployeeCode), year, userName, isAdmin);
             var note = $"Điều chỉnh từ import lũy kế OT theo tháng/năm ngày {TimeHelper.GetCurrentUtcTime():dd/MM/yyyy HH:mm}";
 
             foreach (var row in dataRows)
             {
-                if (!employeesByCode.TryGetValue(row.EmployeeCode, out var employee))
-                {
-                    result.SkippedCount++;
-                    result.SkippedRows.Add(new ProductionEmployeeAccumulationSkippedRowDto
-                    {
-                        EmployeeCode = row.EmployeeCode,
-                        Reason = "Không tìm thấy nhân viên trong hệ thống."
-                    });
-                    continue;
-                }
-
-                if (managedDepartmentIds != null)
-                {
-                    var inDepartmentScope = employee.DepartmentId.HasValue && managedDepartmentIds.Contains(employee.DepartmentId.Value);
-                    var inGroupScope = employee.GroupId.HasValue && managedGroupIds!.Contains(employee.GroupId.Value);
-                    if (!inDepartmentScope && !inGroupScope)
-                    {
-                        result.SkippedCount++;
-                        result.SkippedRows.Add(new ProductionEmployeeAccumulationSkippedRowDto
-                        {
-                            EmployeeCode = row.EmployeeCode,
-                            Reason = "Nhân viên không thuộc Phòng ban/Nhóm bạn phụ trách."
-                        });
-                        continue;
-                    }
-                }
+                var employee = ResolveAccumulationEmployee(row.EmployeeCode, employeesByCode, scope, result);
+                if (employee == null) continue;
 
                 var changedMonth = false;
                 var changedYear = false;
@@ -672,98 +611,263 @@ namespace Attendance.Application.Services
                 // Monthly accumulation (column C).
                 if (row.TotalHours.HasValue)
                 {
-                    var targetMonthHours = row.TotalHours.Value;
-                    var hasMonthRow = ledgerRowsByEmployeeAndMonth.TryGetValue((employee.Id, month), out var monthRow);
-                    var currentMonthHours = hasMonthRow ? monthRow!.TotalHours : 0m;
-                    var deltaMonth = targetMonthHours - currentMonthHours;
-
+                    var deltaMonth = await ledger.SetMonthTotalAsync(employee.Id, month, row.TotalHours.Value, note, note);
                     if (deltaMonth != 0)
                     {
-                        if (hasMonthRow)
-                        {
-                            monthRow!.TotalHours += deltaMonth;
-                            monthRow.Note = string.IsNullOrEmpty(monthRow.Note) ? note : monthRow.Note + "; " + note;
-                            _unitOfWork.EmployeeAccumulationHistories.Update(monthRow);
-                        }
-                        else
-                        {
-                            var newMonthRow = new EmployeeAccumulationHistory
-                            {
-                                EmployeeId = employee.Id,
-                                Year = year,
-                                Month = month,
-                                TotalHours = deltaMonth,
-                                Note = note
-                            };
-                            await _unitOfWork.EmployeeAccumulationHistories.AddAsync(newMonthRow);
-                            ledgerRowsByEmployeeAndMonth[(employee.Id, month)] = newMonthRow;
-                            if (!ledgerRowsByEmployee.TryGetValue(employee.Id, out var list))
-                            {
-                                list = new List<EmployeeAccumulationHistory>();
-                                ledgerRowsByEmployee[employee.Id] = list;
-                            }
-                            list.Add(newMonthRow);
-                        }
-
                         result.AdjustedCount++;
                         result.TotalDeltaHours += deltaMonth;
                         changedMonth = true;
                     }
                 }
 
-                // Yearly accumulation (column D) goes to the opening-balance row (Month = 0).
+                // Yearly accumulation (column D) goes to the opening-balance row (Month = 0) so months 1..12 stay actual.
                 if (row.YearHours.HasValue)
                 {
-                    var targetYearHours = row.YearHours.Value;
-                    // Current year total including the monthly adjustment above.
-                    var employeeYearRows = ledgerRowsByEmployee.TryGetValue(employee.Id, out var yRows) ? yRows : new List<EmployeeAccumulationHistory>();
-                    var currentYearHours = employeeYearRows.Sum(x => x.TotalHours);
-                    var deltaYear = targetYearHours - currentYearHours;
-
+                    var deltaYear = row.YearHours.Value - ledger.YearTotal(employee.Id);
                     if (deltaYear != 0)
                     {
-                        // Store the delta on Month = 0 so actual hours for months 1..12 stay accurate.
-                        var hasInitialRow = ledgerRowsByEmployeeAndMonth.TryGetValue((employee.Id, 0), out var initialRow);
-                        if (hasInitialRow)
-                        {
-                            initialRow!.TotalHours += deltaYear;
-                            initialRow.Note = string.IsNullOrEmpty(initialRow.Note) ? note : initialRow.Note + "; " + note;
-                            _unitOfWork.EmployeeAccumulationHistories.Update(initialRow);
-                        }
-                        else
-                        {
-                            var newInitialRow = new EmployeeAccumulationHistory
-                            {
-                                EmployeeId = employee.Id,
-                                Year = year,
-                                Month = 0,
-                                TotalHours = deltaYear,
-                                Note = $"Số dư lũy kế đầu kỳ/các tháng trước từ import ngày {TimeHelper.GetCurrentUtcTime():dd/MM/yyyy HH:mm}"
-                            };
-                            await _unitOfWork.EmployeeAccumulationHistories.AddAsync(newInitialRow);
-                            ledgerRowsByEmployeeAndMonth[(employee.Id, 0)] = newInitialRow;
-                            if (!ledgerRowsByEmployee.TryGetValue(employee.Id, out var list))
-                            {
-                                list = new List<EmployeeAccumulationHistory>();
-                                ledgerRowsByEmployee[employee.Id] = list;
-                            }
-                            list.Add(newInitialRow);
-                        }
-
+                        await ledger.SetMonthTotalAsync(employee.Id, 0, ledger.MonthTotal(employee.Id, 0) + deltaYear, note,
+                            $"Số dư lũy kế đầu kỳ/các tháng trước từ import ngày {TimeHelper.GetCurrentUtcTime():dd/MM/yyyy HH:mm}");
                         result.AdjustedYearCount++;
                         result.TotalDeltaYearHours += deltaYear;
                         changedYear = true;
                     }
                 }
 
-                if (!changedMonth && !changedYear)
-                {
-                    result.UnchangedCount++;
-                }
+                if (!changedMonth && !changedYear) result.UnchangedCount++;
             }
 
             await _unitOfWork.SaveChangesAsync();
             return result;
+        }
+
+        // Columns are found by header text, so both the system template (data from column B) and a hand-made sheet
+        // (code in column A, then name/group, then T1..T12) import as-is; name, group and total columns are ignored.
+        private static readonly string[] EmployeeCodeHeaders = { "MNV", "Mã NV", "Mã nhân viên" };
+        private static readonly System.Text.RegularExpressions.Regex MonthHeaderPattern = new(@"^T0?(\d{1,2})(?:/(\d{4}))?$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+        public async Task<ProductionEmployeeAccumulationResultDto> ImportYearlyAccumulationAsync(
+            Stream excelFileStream, int year, string userName, bool isAdmin)
+        {
+            using var workbook = OpenWorkbook(excelFileStream);
+            var worksheet = workbook.Worksheets.First();
+            var usedRange = worksheet.RangeUsed();
+
+            var result = new ProductionEmployeeAccumulationResultDto();
+            if (usedRange == null) return result;
+
+            var allUsedRows = usedRange.RowsUsed().ToList();
+            int? headerRowNumber = null, codeColumn = null;
+            var monthColumns = new Dictionary<int, int>();
+            foreach (var row in allUsedRows)
+            {
+                int? rowCodeColumn = null;
+                var rowMonthColumns = new Dictionary<int, int>();
+                foreach (var cell in row.CellsUsed())
+                {
+                    var text = cell.GetString().Trim();
+                    if (EmployeeCodeHeaders.Contains(text, StringComparer.OrdinalIgnoreCase))
+                    {
+                        rowCodeColumn ??= cell.Address.ColumnNumber;
+                        continue;
+                    }
+
+                    var match = MonthHeaderPattern.Match(text);
+                    if (!match.Success) continue;
+                    var month = int.Parse(match.Groups[1].Value);
+                    if (month < 1 || month > 12) continue;
+                    if (match.Groups[2].Success && int.Parse(match.Groups[2].Value) != year)
+                        throw new DomainException($"Cột \"{text}\" thuộc năm {match.Groups[2].Value}, khác năm đang chọn ({year}).");
+                    if (!rowMonthColumns.TryAdd(month, cell.Address.ColumnNumber))
+                        throw new DomainException($"File có 2 cột cho tháng {month}.");
+                }
+
+                if (rowCodeColumn == null || rowMonthColumns.Count == 0) continue;
+                headerRowNumber = row.RowNumber();
+                codeColumn = rowCodeColumn;
+                monthColumns = rowMonthColumns;
+                break;
+            }
+
+            if (headerRowNumber == null)
+                throw new DomainException("Không tìm thấy dòng tiêu đề: cần một cột \"MNV\" (hoặc \"Mã nhân viên\") và các cột tháng \"T1\"…\"T12\".");
+
+            var dataRows = new List<(string EmployeeCode, Dictionary<int, decimal> Hours)>();
+            foreach (var row in allUsedRows.Where(r => r.RowNumber() > headerRowNumber))
+            {
+                var code = worksheet.Cell(row.RowNumber(), codeColumn!.Value).GetString().Trim();
+                // The summary row of a hand-made sheet is not an employee.
+                if (string.IsNullOrEmpty(code) || code.Equals("Tổng", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var hours = new Dictionary<int, decimal>();
+                string? error = null;
+                foreach (var (month, column) in monthColumns)
+                {
+                    var cell = worksheet.Cell(row.RowNumber(), column);
+                    if (cell.IsEmpty()) continue;
+                    if (!cell.TryGetValue<decimal>(out var value)) error = $"Giờ tháng {month} không phải số.";
+                    else if (value < 0) error = $"Giờ tháng {month} không được âm.";
+                    else hours[month] = value;
+                }
+
+                if (error != null)
+                {
+                    result.SkippedCount++;
+                    result.SkippedRows.Add(new ProductionEmployeeAccumulationSkippedRowDto { EmployeeCode = code, Reason = error });
+                    continue;
+                }
+                if (hours.Count > 0) dataRows.Add((code, hours));
+            }
+
+            if (dataRows.Count == 0) return result;
+
+            // A month that hasn't started has no OT yet; this catches a year-total column labelled as T12.
+            var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
+            var future = dataRows
+                .SelectMany(r => r.Hours.Where(h => h.Value != 0 && (year > today.Year || (year == today.Year && h.Key > today.Month)))
+                    .Select(h => (r.EmployeeCode, Month: h.Key)))
+                .FirstOrDefault();
+            if (future.EmployeeCode != null)
+                throw new DomainException(
+                    $"Tháng {future.Month}/{year} chưa tới nhưng file có giờ (vd. MNV {future.EmployeeCode}). Kiểm tra lại cột T{future.Month} — có thể đang là cột tổng năm. Không có dữ liệu nào được ghi.");
+
+            var (employeesByCode, scope, ledger) = await LoadAccumulationContextAsync(dataRows.Select(r => r.EmployeeCode), year, userName, isAdmin);
+            var note = $"Điều chỉnh từ import lũy kế OT cả năm ngày {TimeHelper.GetCurrentUtcTime():dd/MM/yyyy HH:mm}";
+
+            foreach (var row in dataRows)
+            {
+                var employee = ResolveAccumulationEmployee(row.EmployeeCode, employeesByCode, scope, result);
+                if (employee == null) continue;
+
+                // +2h in one month and -2h in another is still a change, so track it per month.
+                var changed = false;
+                foreach (var (month, target) in row.Hours)
+                {
+                    var delta = await ledger.SetMonthTotalAsync(employee.Id, month, target, note, note);
+                    if (delta == 0) continue;
+                    changed = true;
+                    result.TotalDeltaHours += delta;
+                }
+
+                if (changed) result.AdjustedCount++;
+                else result.UnchangedCount++;
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+            return result;
+        }
+
+        private static XLWorkbook OpenWorkbook(Stream excelFileStream)
+        {
+            try
+            {
+                return new XLWorkbook(excelFileStream);
+            }
+            catch (Exception ex) when (ex is not DomainException)
+            {
+                throw new DomainException(
+                    "File Excel không hợp lệ hoặc bị hỏng, vui lòng kiểm tra lại file (chỉ hỗ trợ định dạng .xlsx).",
+                    new List<string> { $"{ex.GetType().Name}: {ex.Message}" });
+            }
+        }
+
+        private sealed record AccumulationEmployee(int Id, string Code, int? GroupId, int? DepartmentId);
+
+        // null = Admin (no limit); otherwise the departments/groups the caller coordinates.
+        private sealed record AccumulationScope(HashSet<int> DepartmentIds, HashSet<int> GroupIds);
+
+        private async Task<(Dictionary<string, AccumulationEmployee> EmployeesByCode, AccumulationScope? Scope, YearLedger Ledger)>
+            LoadAccumulationContextAsync(IEnumerable<string> employeeCodes, int year, string userName, bool isAdmin)
+        {
+            var codes = employeeCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var employeesByCode = (await _unitOfWork.Employees.SelectAsync(
+                x => !x.IsDeleted && codes.Contains(x.Code),
+                x => new AccumulationEmployee(x.Id, x.Code, x.GroupId, x.DepartmentId ?? (x.Group != null ? (int?)x.Group.DepartmentId : null))))
+                .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
+
+            // Scoped per row, same rules as ImportOtHourLimitsAsync.
+            AccumulationScope? scope = null;
+            if (!isAdmin)
+            {
+                var managedGroupIds = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
+                    x => x.Employee.UserName == userName && !x.IsDeleted)).Select(x => x.GroupId).ToHashSet();
+                scope = new AccumulationScope(
+                    (await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName)).ToHashSet(), managedGroupIds);
+            }
+
+            var employeeIds = employeesByCode.Values.Select(x => x.Id).ToList();
+            var ledgerRows = employeeIds.Count == 0
+                ? new List<EmployeeAccumulationHistory>()
+                : (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(x => employeeIds.Contains(x.EmployeeId) && x.Year == year)).ToList();
+
+            return (employeesByCode, scope, new YearLedger(_unitOfWork, year, ledgerRows));
+        }
+
+        // Unknown codes and employees outside the caller's scope land in SkippedRows.
+        private static AccumulationEmployee? ResolveAccumulationEmployee(
+            string employeeCode, Dictionary<string, AccumulationEmployee> employeesByCode, AccumulationScope? scope,
+            ProductionEmployeeAccumulationResultDto result)
+        {
+            string? reason = null;
+            if (!employeesByCode.TryGetValue(employeeCode, out var employee))
+                reason = "Không tìm thấy nhân viên trong hệ thống.";
+            else if (scope != null
+                && !(employee.DepartmentId.HasValue && scope.DepartmentIds.Contains(employee.DepartmentId.Value))
+                && !(employee.GroupId.HasValue && scope.GroupIds.Contains(employee.GroupId.Value)))
+                reason = "Nhân viên không thuộc Phòng ban/Nhóm bạn phụ trách.";
+
+            if (reason == null) return employee;
+            result.SkippedCount++;
+            result.SkippedRows.Add(new ProductionEmployeeAccumulationSkippedRowDto { EmployeeCode = employeeCode, Reason = reason });
+            return null;
+        }
+
+        // One year of ledger rows. Totals are set by adding the difference, because (EmployeeId, Year, Month) is unique
+        // and running the same file twice must not double-count.
+        private sealed class YearLedger
+        {
+            private readonly IAttendanceUnitOfWork _unitOfWork;
+            private readonly int _year;
+            private readonly Dictionary<int, Dictionary<int, EmployeeAccumulationHistory>> _rowsByEmployee;
+
+            public YearLedger(IAttendanceUnitOfWork unitOfWork, int year, IEnumerable<EmployeeAccumulationHistory> rows)
+            {
+                _unitOfWork = unitOfWork;
+                _year = year;
+                _rowsByEmployee = rows.GroupBy(x => x.EmployeeId)
+                    .ToDictionary(g => g.Key, g => g.GroupBy(x => x.Month).ToDictionary(m => m.Key, m => m.First()));
+            }
+
+            private Dictionary<int, EmployeeAccumulationHistory> RowsOf(int employeeId) =>
+                _rowsByEmployee.TryGetValue(employeeId, out var rows) ? rows : _rowsByEmployee[employeeId] = new();
+
+            public decimal MonthTotal(int employeeId, int month) =>
+                RowsOf(employeeId).TryGetValue(month, out var row) ? row.TotalHours : 0m;
+
+            public decimal YearTotal(int employeeId) => RowsOf(employeeId).Values.Sum(x => x.TotalHours);
+
+            // Returns the difference applied (0 = already at target).
+            public async Task<decimal> SetMonthTotalAsync(int employeeId, int month, decimal target, string note, string newRowNote)
+            {
+                var rows = RowsOf(employeeId);
+                var delta = target - (rows.TryGetValue(month, out var existing) ? existing.TotalHours : 0m);
+                if (delta == 0) return 0;
+
+                if (existing != null)
+                {
+                    existing.TotalHours += delta;
+                    existing.Note = string.IsNullOrEmpty(existing.Note) ? note : existing.Note + "; " + note;
+                    _unitOfWork.EmployeeAccumulationHistories.Update(existing);
+                }
+                else
+                {
+                    var row = new EmployeeAccumulationHistory { EmployeeId = employeeId, Year = _year, Month = month, TotalHours = delta, Note = newRowNote };
+                    await _unitOfWork.EmployeeAccumulationHistories.AddAsync(row);
+                    rows[month] = row;
+                }
+                return delta;
+            }
         }
 
         private static readonly string[] EmployeeNotes =
@@ -823,6 +927,22 @@ namespace Attendance.Application.Services
             new("Tổng giờ OT năm", 20, false, "0.00"),
         };
 
+        private static readonly string[] YearlyAccumulationNotes =
+        {
+            "Chọn Năm trên màn import. Mỗi dòng 1 nhân viên, định danh bằng MNV; Họ và tên, Mã nhóm chỉ để đối chiếu.",
+            "T1…T12: tổng giờ OT của từng tháng. Ô có số → lũy kế tháng đó được đặt đúng bằng số đó; ô trống → giữ nguyên tháng đó.",
+            "Áp dụng ngay, không có bước xem trước; chạy lại cùng file không cộng trùng. Số dư đầu kỳ (nếu có) không bị đổi.",
+        };
+
+        private static readonly ImportTemplateColumn[] YearlyAccumulationColumns = new[]
+            {
+                new ImportTemplateColumn("MNV", 16, true, "@"),
+                new ImportTemplateColumn("Họ và tên", 28, false),
+                new ImportTemplateColumn("Mã nhóm", 12, false, "@"),
+            }
+            .Concat(Enumerable.Range(1, 12).Select(m => new ImportTemplateColumn($"T{m}", 9, false, "0.##")))
+            .ToArray();
+
         private static string ExportStamp() => TimeHelper.GetCurrentUtcTime().AddHours(7).ToString("yyyyMMdd_HHmm");
 
         public async Task<(byte[] Content, string FileName)> GenerateTemplateAsync() => ImportTemplateBuilder.Build(
@@ -837,6 +957,10 @@ namespace Attendance.Application.Services
         public (byte[] Content, string FileName) GenerateMonthlyAccumulationTemplate() => ImportTemplateBuilder.Build(
             "Luy ke OT", "MẪU IMPORT LŨY KẾ GIỜ TĂNG CA", MonthlyAccumulationNotes, MonthlyAccumulationColumns,
             Array.Empty<object?[]>(), "Mau_Import_LuyKeOT.xlsx");
+
+        public (byte[] Content, string FileName) GenerateYearlyAccumulationTemplate() => ImportTemplateBuilder.Build(
+            "Luy ke OT nam", "MẪU IMPORT LŨY KẾ GIỜ TĂNG CA CẢ NĂM (T1–T12)", YearlyAccumulationNotes, YearlyAccumulationColumns,
+            Array.Empty<object?[]>(), "Mau_Import_LuyKeOT_CaNam.xlsx");
 
         public async Task<(byte[] Content, string FileName)> ExportEmployeesAsync(EmployeeExportFilterDto filter, string userName, bool isAdmin)
         {
@@ -866,6 +990,26 @@ namespace Attendance.Application.Services
                 .ToList();
             return ImportTemplateBuilder.Build("Luy ke OT", $"IMPORT LŨY KẾ GIỜ TĂNG CA — THÁNG {month:00}/{year}", MonthlyAccumulationNotes,
                 MonthlyAccumulationColumns, rows, $"LuyKeOT_{year}{month:00}_{ExportStamp()}.xlsx", rowsAreSamples: false);
+        }
+
+        // Months without a ledger row export blank, so re-importing the file leaves them untouched.
+        public async Task<(byte[] Content, string FileName)> ExportYearlyAccumulationAsync(
+            EmployeeExportFilterDto filter, int year, string userName, bool isAdmin)
+        {
+            var employees = await _employeeService.GetForExportAsync(userName, isAdmin, filter);
+            var codes = employees.Select(x => x.Code).ToList();
+            var hoursByCodeAndMonth = (await _unitOfWork.EmployeeAccumulationHistories.SelectAsync(
+                    x => x.Year == year && x.Month >= 1 && codes.Contains(x.Employee.Code),
+                    x => new { x.Employee.Code, x.Month, x.TotalHours }))
+                .ToDictionary(x => (x.Code, x.Month), x => x.TotalHours);
+
+            var rows = employees
+                .Select(x => new object?[] { x.Code, x.FullName, x.GroupCode }
+                    .Concat(Enumerable.Range(1, 12).Select(m => hoursByCodeAndMonth.TryGetValue((x.Code, m), out var h) ? (object?)h : null))
+                    .ToArray())
+                .ToList();
+            return ImportTemplateBuilder.Build("Luy ke OT nam", $"IMPORT LŨY KẾ GIỜ TĂNG CA — NĂM {year}", YearlyAccumulationNotes,
+                YearlyAccumulationColumns, rows, $"LuyKeOT_{year}_CaNam_{ExportStamp()}.xlsx", rowsAreSamples: false);
         }
     }
 }

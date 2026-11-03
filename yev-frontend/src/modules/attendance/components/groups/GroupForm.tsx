@@ -18,6 +18,7 @@ export interface GroupFormValues {
     groupCode: string;
     groupNameVn: string;
     groupNameJp: string | null;
+    allowEatLater: boolean;
 }
 
 interface GroupFormProps {
@@ -35,6 +36,7 @@ const emptyValues: GroupFormValues = {
     groupCode: "",
     groupNameVn: "",
     groupNameJp: null,
+    allowEatLater: true,
 };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
@@ -71,6 +73,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                       groupCode: current.groupCode,
                       groupNameVn: current.groupNameVn,
                       groupNameJp: current.groupNameJp,
+                      allowEatLater: current.allowEatLater,
                   }
                 : emptyValues
         );
@@ -180,6 +183,17 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             />
                         </label>
                     </div>
+
+                    <label className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            checked={values.allowEatLater}
+                            onChange={(event) => setValues((current) => ({ ...current, allowEatLater: event.target.checked }))}
+                            disabled={loading}
+                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                        />
+                        <span className="text-sm text-[#191c1e]">{t("fieldAllowEatLater")}</span>
+                    </label>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

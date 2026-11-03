@@ -63,6 +63,7 @@ const statusOptions = [
     { value: 1, label: "Đang sử dụng", dotClassName: "bg-[#16a34a]" },
     { value: 2, label: "Chờ thanh lý", dotClassName: "bg-[#f59e0b]" },
     { value: 3, label: "Đã thanh lý", dotClassName: "bg-[#dc2626]" },
+    { value: 4, label: "Đang sửa chữa", dotClassName: "bg-[#8b5cf6]" },
 ];
 
 const emptyValues: DeviceFormValues = {

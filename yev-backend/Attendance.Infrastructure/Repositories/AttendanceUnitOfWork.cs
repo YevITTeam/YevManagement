@@ -38,6 +38,7 @@ namespace Attendance.Infrastructure.Repositories
             IDepartmentApprovalStepCoordinatorRepository departmentApprovalStepCoordinators,
             IGroupApprovalStepCoordinatorRepository groupApprovalStepCoordinators,
             IGroupBorrowedApproverRepository groupBorrowedApprovers,
+            IGroupOtFormCreatorRepository groupOtFormCreators,
             IEmployeeAccumulationHistoryRepository employeeAccumulationHistories,
             IProductionLineRepository productionLines,
             IProductionShiftTeamRepository productionShiftTeams,
@@ -68,6 +69,7 @@ namespace Attendance.Infrastructure.Repositories
             DepartmentApprovalStepCoordinators = departmentApprovalStepCoordinators;
             GroupApprovalStepCoordinators = groupApprovalStepCoordinators;
             GroupBorrowedApprovers = groupBorrowedApprovers;
+            GroupOtFormCreators = groupOtFormCreators;
             Departments = departments;
             Groups = groups;
             Workshops = workshops;
@@ -117,6 +119,7 @@ namespace Attendance.Infrastructure.Repositories
         public IDepartmentApprovalStepCoordinatorRepository DepartmentApprovalStepCoordinators { get; }
         public IGroupApprovalStepCoordinatorRepository GroupApprovalStepCoordinators { get; }
         public IGroupBorrowedApproverRepository GroupBorrowedApprovers { get; }
+        public IGroupOtFormCreatorRepository GroupOtFormCreators { get; }
         public IEmployeeAccumulationHistoryRepository EmployeeAccumulationHistories { get; }
         public IProductionLineRepository ProductionLines { get; }
         public IProductionShiftTeamRepository ProductionShiftTeams { get; }

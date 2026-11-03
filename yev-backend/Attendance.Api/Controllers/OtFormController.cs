@@ -170,6 +170,15 @@ namespace Attendance.Api.Controllers
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công.");
         }
 
+        // Office forms for several groups at once (one form per group, all or nothing).
+        [RequirePermission("Attendance.OTForm.Create")]
+        [HttpPost("multi-group")]
+        public async Task<ActionResult<ApiResponse<List<OtFormDto>>>> CreateMany([FromBody] CreateManyOtFormsDto request)
+        {
+            var result = await _otFormService.CreateManyAsync(CurrentUserName, CurrentFullName, User.IsInRole(AdminRole), request);
+            return Success(result, $"Đã tạo {result.Count} đơn tăng ca.");
+        }
+
         // Accepts either permission; OtFormService.UpdateAsync enforces the real per-step/scope rules.
         [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
         [HttpPut("{id}")]

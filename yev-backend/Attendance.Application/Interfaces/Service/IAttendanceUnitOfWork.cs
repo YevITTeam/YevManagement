@@ -31,6 +31,7 @@ namespace Attendance.Application.Interfaces.Service
         IDepartmentApprovalStepCoordinatorRepository DepartmentApprovalStepCoordinators { get; }
         IGroupApprovalStepCoordinatorRepository GroupApprovalStepCoordinators { get; }
         IGroupBorrowedApproverRepository GroupBorrowedApprovers { get; }
+        IGroupOtFormCreatorRepository GroupOtFormCreators { get; }
         IOtFormApprovalStepRepository OtFormApprovalSteps { get; }
         IOtFormApprovalStepCandidateRepository OtFormApprovalStepCandidates { get; }
         IJobTitlePermissionRepository JobTitlePermissions { get; }

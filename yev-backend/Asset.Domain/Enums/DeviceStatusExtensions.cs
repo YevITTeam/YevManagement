@@ -13,6 +13,7 @@ public static class DeviceStatusExtensions
         DeviceStatus.InUse => "Đang sử dụng",
         DeviceStatus.PendingLiquidation => "Chờ thanh lý",
         DeviceStatus.Liquidated => "Đã thanh lý",
+        DeviceStatus.UnderRepair => "Đang sửa chữa",
         _ => UnknownText
     };
 

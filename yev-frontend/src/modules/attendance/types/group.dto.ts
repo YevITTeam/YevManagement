@@ -7,4 +7,5 @@ export interface GroupDto {
     departmentNameVn: string;
     workshopId: number;
     workshopNameVn: string;
+    allowEatLater: boolean;
 }

@@ -10,6 +10,7 @@ import type { ProductionEmployeeAccumulationResultDto } from "@/modules/attendan
 import ExportFilteredButton from "./ExportFilteredButton";
 import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { Tabs } from "@/components/ui/Tabs";
 
 interface EmployeeMonthlyAccumulationImportDialogProps {
     isOpen: boolean;
@@ -19,6 +20,7 @@ interface EmployeeMonthlyAccumulationImportDialogProps {
 }
 
 // No preview step: it only adjusts the accumulation delta of existing employees, reading the file directly.
+// "year" mode reads T1..T12 columns in one file instead of one month per file.
 export default function EmployeeMonthlyAccumulationImportDialog({
     isOpen,
     onClose,
@@ -29,6 +31,8 @@ export default function EmployeeMonthlyAccumulationImportDialog({
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState(now.getMonth() + 1);
+    const [mode, setMode] = useState<"month" | "year">("month");
+    const isYearMode = mode === "year";
     const [file, setFile] = useState<File | null>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [result, setResult] = useState<ProductionEmployeeAccumulationResultDto | null>(null);
@@ -59,11 +63,13 @@ export default function EmployeeMonthlyAccumulationImportDialog({
     const handleDownloadTemplate = async () => {
         setIsDownloadingTemplate(true);
         try {
-            const { blob, fileName } = await EmployeeImportApi.downloadMonthlyAccumulationTemplate();
+            const { blob, fileName } = isYearMode
+                ? await EmployeeImportApi.downloadYearlyAccumulationTemplate()
+                : await EmployeeImportApi.downloadMonthlyAccumulationTemplate();
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            link.download = fileName ?? "Mau_Import_LuyKeOT.xlsx";
+            link.download = fileName ?? (isYearMode ? "Mau_Import_LuyKeOT_CaNam.xlsx" : "Mau_Import_LuyKeOT.xlsx");
             link.click();
             URL.revokeObjectURL(url);
         } catch (err) {
@@ -77,7 +83,9 @@ export default function EmployeeMonthlyAccumulationImportDialog({
         if (!file) return;
         setIsImporting(true);
         try {
-            const data = await EmployeeImportApi.importMonthlyAccumulation(year, month, file);
+            const data = isYearMode
+                ? await EmployeeImportApi.importYearlyAccumulation(year, file)
+                : await EmployeeImportApi.importMonthlyAccumulation(year, month, file);
             setResult(data);
         } catch (err) {
             console.error(err);
@@ -111,6 +119,17 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                 <div className="flex-1 overflow-auto p-6">
                 {!result ? (
                     <div className="space-y-4">
+                        <Tabs
+                            tabs={[
+                                { key: "month", label: t("accumulationModeMonth") },
+                                { key: "year", label: t("accumulationModeYear") },
+                            ]}
+                            activeKey={mode}
+                            onChange={(key) => {
+                                setMode(key);
+                                resetState();
+                            }}
+                        />
                         <div className="flex flex-wrap items-end gap-3">
                             <label className="block">
                                 <span className="mb-1 block text-xs font-semibold text-[#5e3f3a]">{t("monthlyAccumulationYear")}</span>
@@ -122,6 +141,7 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                                     className="h-9 w-28 rounded-lg border border-[#e0e3e5] px-3 text-sm outline-none focus:border-[#e3000f]"
                                 />
                             </label>
+                            {!isYearMode && (
                             <label className="block">
                                 <span className="mb-1 block text-xs font-semibold text-[#5e3f3a]">{t("monthlyAccumulationMonth")}</span>
                                 <input
@@ -134,6 +154,7 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                                     className="h-9 w-20 rounded-lg border border-[#e0e3e5] px-3 text-sm outline-none focus:border-[#e3000f]"
                                 />
                             </label>
+                            )}
                         </div>
                         <input
                             ref={fileInputRef}
@@ -151,7 +172,14 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                         >
                             <Download className="h-3.5 w-3.5" /> {t("monthlyAccumulationDownloadTemplate")}
                         </button>
-                        <ExportFilteredButton download={() => EmployeeImportApi.exportMonthlyAccumulation(exportFilter, year, month)} fallbackFileName="LuyKeOT.xlsx" />
+                        <ExportFilteredButton
+                            download={() =>
+                                isYearMode
+                                    ? EmployeeImportApi.exportYearlyAccumulation(exportFilter, year)
+                                    : EmployeeImportApi.exportMonthlyAccumulation(exportFilter, year, month)
+                            }
+                            fallbackFileName={isYearMode ? "LuyKeOT_CaNam.xlsx" : "LuyKeOT.xlsx"}
+                        />
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={handleClose}
@@ -162,7 +190,7 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                             </button>
                             <button
                                 onClick={handleImport}
-                                disabled={!file || isImporting || month < 1 || month > 12}
+                                disabled={!file || isImporting || (!isYearMode && (month < 1 || month > 12))}
                                 className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {isImporting ? t("monthlyAccumulationImporting") : t("monthlyAccumulationImportSubmit")}

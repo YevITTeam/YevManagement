@@ -191,5 +191,59 @@ namespace Attendance.Application.Services
 
             return await GetBorrowedApproversCoreAsync(groupId);
         }
+        public async Task<GroupOtFormCreatorsDto> GetOtFormCreatorsAsync(string userName, bool isAdmin, int groupId)
+        {
+            await EnsureCanManageGroupAsync(userName, isAdmin, groupId);
+            return await GetOtFormCreatorsCoreAsync(groupId);
+        }
+
+        private async Task<GroupOtFormCreatorsDto> GetOtFormCreatorsCoreAsync(int groupId)
+        {
+            var group = await _unitOfWork.Groups.GetByIdAsync(groupId);
+            group.OrThrowNotFound("Nhóm", groupId);
+
+            var creatorIds = (await _unitOfWork.GroupOtFormCreators.SelectAsync(x => x.GroupId == groupId, x => x.EmployeeId)).ToHashSet();
+
+            // Own members can already create; only people with an account can log in to do it.
+            var eligible = await _unitOfWork.Employees.SelectAsync(
+                x => !x.IsDeleted && x.UserName != null && x.GroupId != groupId
+                    && ((x.Group != null && x.Group.DepartmentId == group!.DepartmentId) || x.DepartmentId == group!.DepartmentId),
+                x => new GroupOtFormCreatorDto
+                {
+                    EmployeeId = x.Id,
+                    EmployeeCode = x.Code,
+                    LastName = x.LastName,
+                    FirstName = x.FirstName,
+                    GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null
+                });
+
+            return new GroupOtFormCreatorsDto
+            {
+                Creators = eligible.Where(x => creatorIds.Contains(x.EmployeeId)).OrderBy(x => x.EmployeeCode).ToList(),
+                Candidates = eligible.Where(x => !creatorIds.Contains(x.EmployeeId)).OrderBy(x => x.EmployeeCode).ToList()
+            };
+        }
+
+        public async Task<GroupOtFormCreatorsDto> ReplaceOtFormCreatorsAsync(string userName, bool isAdmin, int groupId, ReplaceGroupOtFormCreatorsDto request)
+        {
+            await EnsureCanManageGroupAsync(userName, isAdmin, groupId);
+
+            var current = await GetOtFormCreatorsCoreAsync(groupId);
+            var eligibleIds = current.Creators.Concat(current.Candidates).Select(x => x.EmployeeId).ToHashSet();
+            var requestedIds = request.EmployeeIds.Distinct().ToList();
+            if (requestedIds.Any(id => !eligibleIds.Contains(id)))
+                throw new DomainException("Chỉ được chọn nhân viên có tài khoản, cùng Bộ phận, ngoài Nhóm này.");
+
+            var existing = await _unitOfWork.GroupOtFormCreators.FindAsync(x => x.GroupId == groupId);
+            foreach (var item in existing.Where(x => !requestedIds.Contains(x.EmployeeId)))
+                _unitOfWork.GroupOtFormCreators.Delete(item);
+
+            var existingIds = existing.Select(x => x.EmployeeId).ToHashSet();
+            await _unitOfWork.GroupOtFormCreators.AddRangeAsync(
+                requestedIds.Where(id => !existingIds.Contains(id)).Select(id => new GroupOtFormCreator { GroupId = groupId, EmployeeId = id }));
+            await _unitOfWork.SaveChangesAsync();
+
+            return await GetOtFormCreatorsCoreAsync(groupId);
+        }
     }
 }

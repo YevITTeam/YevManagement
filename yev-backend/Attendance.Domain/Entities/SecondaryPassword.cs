@@ -14,4 +14,9 @@ public partial class SecondaryPassword
     public string PasswordHash { get; set; } = null!;
 
     public DateTime UpdatedAt { get; set; }
+
+    // Brute-force guard for the login-free email links; reset on success or when the lock is set.
+    public int FailedAttempts { get; set; }
+
+    public DateTime? LockedUntil { get; set; }
 }

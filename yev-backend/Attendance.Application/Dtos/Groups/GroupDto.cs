@@ -10,5 +10,6 @@ namespace Attendance.Application.Dtos.Groups
         public string DepartmentNameVn { get; set; } = null!;
         public int WorkshopId { get; set; }
         public string WorkshopNameVn { get; set; } = null!;
+        public bool AllowEatLater { get; set; }
     }
 }

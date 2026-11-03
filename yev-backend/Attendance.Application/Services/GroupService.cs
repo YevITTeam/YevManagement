@@ -35,7 +35,8 @@ namespace Attendance.Application.Services
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department.DepartmentNameVn,
                     WorkshopId = x.WorkshopId,
-                    WorkshopNameVn = x.Workshop.WorkshopNameVn
+                    WorkshopNameVn = x.Workshop.WorkshopNameVn,
+                    AllowEatLater = x.AllowEatLater
                 }
             );
         }
@@ -53,7 +54,8 @@ namespace Attendance.Application.Services
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department.DepartmentNameVn,
                     WorkshopId = x.WorkshopId,
-                    WorkshopNameVn = x.Workshop.WorkshopNameVn
+                    WorkshopNameVn = x.Workshop.WorkshopNameVn,
+                    AllowEatLater = x.AllowEatLater
                 }
             );
             return groups.OrderBy(x => x.GroupNameVn).ToList();
@@ -72,7 +74,8 @@ namespace Attendance.Application.Services
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department.DepartmentNameVn,
                     WorkshopId = x.WorkshopId,
-                    WorkshopNameVn = x.Workshop.WorkshopNameVn
+                    WorkshopNameVn = x.Workshop.WorkshopNameVn,
+                    AllowEatLater = x.AllowEatLater
                 }
             );
             return groups.OrderBy(x => x.GroupNameVn).ToList();
@@ -92,7 +95,8 @@ namespace Attendance.Application.Services
                 DepartmentId = group.DepartmentId,
                 DepartmentNameVn = group.Department.DepartmentNameVn,
                 WorkshopId = group.WorkshopId,
-                WorkshopNameVn = group.Workshop.WorkshopNameVn
+                WorkshopNameVn = group.Workshop.WorkshopNameVn,
+                AllowEatLater = group.AllowEatLater
             };
         }
 
@@ -114,6 +118,7 @@ namespace Attendance.Application.Services
                 GroupNameJp = request.GroupNameJp,
                 DepartmentId = request.DepartmentId,
                 WorkshopId = request.WorkshopId,
+                AllowEatLater = request.AllowEatLater,
                 IsDeleted = false
             };
 
@@ -151,6 +156,7 @@ namespace Attendance.Application.Services
             group.GroupNameJp = request.GroupNameJp;
             group.DepartmentId = request.DepartmentId;
             group.WorkshopId = request.WorkshopId;
+            group.AllowEatLater = request.AllowEatLater;
 
             _unitOfWork.Groups.Update(group);
             await _unitOfWork.SaveChangesAsync();

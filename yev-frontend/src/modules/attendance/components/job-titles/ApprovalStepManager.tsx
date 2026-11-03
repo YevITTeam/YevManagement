@@ -17,7 +17,7 @@ import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { ApprovalTreeDepartmentDto, DepartmentApprovalStepDto } from "@/modules/attendance/types/department-approval-step.dto";
-import type { GroupApprovalStepDto, GroupBorrowedApproversDto } from "@/modules/attendance/types/group-approval-step.dto";
+import type { GroupApprovalStepDto, GroupBorrowedApproversDto, GroupOtFormCreatorsDto } from "@/modules/attendance/types/group-approval-step.dto";
 import type { ProductionApprovalStepDto } from "@/modules/attendance/types/production-approval-step.dto";
 import type { DepartmentApprovalStepCoordinatorDto } from "@/modules/attendance/types/department-approval-step-coordinator.dto";
 import type { GroupApprovalStepCoordinatorDto } from "@/modules/attendance/types/group-approval-step-coordinator.dto";
@@ -38,6 +38,7 @@ import CoordinatorsBox, { type CoordinatorsBoxLabels } from "./CoordinatorsBox";
 
 const TEAM_LEADER_CODE = "TL";
 const EMPTY_BORROWED: GroupBorrowedApproversDto = { approvers: [], candidates: [] };
+const EMPTY_CREATORS: GroupOtFormCreatorsDto = { creators: [], candidates: [] };
 
 const sectionTitleClassName = "text-sm font-semibold text-[#191c1e]";
 // Compact trigger for the selects in this screen (default input trigger is too tall/wide for a tree UI).
@@ -127,6 +128,9 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const [isLoadingGroupCoordinators, setIsLoadingGroupCoordinators] = useState(false);
     const [isSavingGroupCoordinators, setIsSavingGroupCoordinators] = useState(false);
     const [addingGroupCoordinatorEmployeeId, setAddingGroupCoordinatorEmployeeId] = useState<number | "">("");
+    const [groupCreators, setGroupCreators] = useState<GroupOtFormCreatorsDto>(EMPTY_CREATORS);
+    const [isSavingGroupCreators, setIsSavingGroupCreators] = useState(false);
+    const [addingGroupCreatorEmployeeId, setAddingGroupCreatorEmployeeId] = useState<number | "">("");
 
     // Holds the pending department/group change, run only after the user confirms discarding unsaved edits.
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
@@ -269,6 +273,15 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             });
     };
 
+    const fetchGroupCreators = (targetGroupId: number) => {
+        GroupApprovalStepApi.getOtFormCreators(targetGroupId)
+            .then((data) => setGroupCreators(data))
+            .catch((err) => {
+                console.error(err);
+                toast.error(getApiErrorMessage(err, tGroup("loadEmployeesError")));
+            });
+    };
+
     const fetchGroupCoordinators = (targetGroupId: number) => {
         if (!canManageGroupCoordinators) return;
         setIsLoadingGroupCoordinators(true);
@@ -292,6 +305,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             if (typeof groupId === "number") {
                 fetchGroupSteps(groupId);
                 fetchGroupEmployees(groupId);
+                fetchGroupCreators(groupId);
                 fetchGroupCoordinators(groupId);
             }
         },
@@ -313,6 +327,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setGroupSteps([]);
         setGroupEmployees([]);
         setGroupBorrowed(EMPTY_BORROWED);
+        setGroupCreators(EMPTY_CREATORS);
         setGroupCoordinators([]);
         setAddingGroupJobTitleId("");
         setIsGroupDirty(false);
@@ -334,6 +349,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         setGroupSteps([]);
         setGroupEmployees([]);
         setGroupBorrowed(EMPTY_BORROWED);
+        setGroupCreators(EMPTY_CREATORS);
         setGroupCoordinators([]);
         setAddingGroupJobTitleId("");
         setIsGroupDirty(false);
@@ -341,6 +357,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             fetchGroupSteps(value);
             fetchGroupEmployees(value);
             fetchGroupBorrowed(value);
+            fetchGroupCreators(value);
             fetchGroupCoordinators(value);
         }
     };
@@ -481,10 +498,13 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         }
     };
 
+    // Group coordinators may come from anywhere in the Department: own members first, then the department picker.
+    const groupCoordinatorPool = [...groupEmployees, ...deptPool.filter((e) => !groupEmployees.some((g) => g.id === e.id))];
+
     const handleAddGroupCoordinator = async (employeeId: number | "") => {
         setAddingGroupCoordinatorEmployeeId(employeeId);
         if (employeeId === "" || typeof groupId !== "number") return;
-        const employee = groupEmployees.find((e) => e.id === employeeId);
+        const employee = groupCoordinatorPool.find((e) => e.id === employeeId);
         if (!employee || groupCoordinators.some((c) => c.employeeId === employee.id)) {
             setAddingGroupCoordinatorEmployeeId("");
             return;
@@ -502,6 +522,27 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
             setIsSavingGroupCoordinators(false);
             setAddingGroupCoordinatorEmployeeId("");
         }
+    };
+
+    const saveGroupCreators = async (nextEmployeeIds: number[]) => {
+        if (typeof groupId !== "number") return;
+        setIsSavingGroupCreators(true);
+        try {
+            setGroupCreators(await GroupApprovalStepApi.replaceOtFormCreators(groupId, nextEmployeeIds));
+            toast.success(tGroup("saveOtFormCreatorsSuccess"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, tGroup("saveOtFormCreatorsError")));
+        } finally {
+            setIsSavingGroupCreators(false);
+            setAddingGroupCreatorEmployeeId("");
+        }
+    };
+
+    const handleAddGroupCreator = (employeeId: number | "") => {
+        setAddingGroupCreatorEmployeeId(employeeId);
+        if (employeeId === "") return;
+        void saveGroupCreators([...groupCreators.creators.map((c) => c.employeeId), employeeId]);
     };
 
     const handleRemoveGroupCoordinator = async (employeeId: number) => {
@@ -891,6 +932,17 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         removeHint: tGroup("removeCoordinatorHint"),
         addPlaceholder: tGroup("addCoordinatorPlaceholder"),
     };
+    const groupCreatorLabels: CoordinatorsBoxLabels = {
+        title: tGroup("otFormCreatorsTitle"),
+        hint: "",
+        label: "",
+        loading: tGroup("loadingCoordinators"),
+        noCoordinators: tGroup("noOtFormCreators"),
+        notLinked: "",
+        notLinkedHint: "",
+        removeHint: tGroup("removeOtFormCreatorHint"),
+        addPlaceholder: tGroup("addOtFormCreatorPlaceholder"),
+    };
     const deptCoordinatorLabels: CoordinatorsBoxLabels = {
         title: tDept("coordinatorsTitle"),
         hint: tDept("coordinatorsHint"),
@@ -940,6 +992,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                     setGroupSteps([]);
                                     setGroupEmployees([]);
                                     setGroupBorrowed(EMPTY_BORROWED);
+        setGroupCreators(EMPTY_CREATORS);
                                     setGroupCoordinators([]);
                                     setIsGroupDirty(false);
                                     if (typeof departmentId === "number") fetchDeptEmployees(departmentId, v);
@@ -1177,10 +1230,37 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                         coordinators={groupCoordinators}
                                         onRemove={handleRemoveGroupCoordinator}
                                         isSaving={isSavingGroupCoordinators}
-                                        addOptions={buildCoordinatorOptions(groupEmployees, new Set(groupCoordinators.map((c) => c.employeeId)))}
+                                        addOptions={buildCoordinatorOptions(groupCoordinatorPool, new Set(groupCoordinators.map((c) => c.employeeId)))}
+                                        onAddQueryChange={handleDeptPickerQuery}
                                         addingValue={addingGroupCoordinatorEmployeeId}
                                         onAddChange={handleAddGroupCoordinator}
                                         labels={groupCoordinatorLabels}
+                                    />
+                                )}
+
+                                {typeof groupId === "number" && (
+                                    <CoordinatorsBox
+                                        embedded
+                                        isLoading={false}
+                                        // Creators always have an account (the API only offers those), hence the fixed userName.
+                                        coordinators={groupCreators.creators.map((c) => ({
+                                            employeeId: c.employeeId,
+                                            fullName: `${c.lastName} ${c.firstName}`,
+                                            employeeCode: c.employeeCode,
+                                            userName: "linked",
+                                        }))}
+                                        onRemove={(employeeId) =>
+                                            saveGroupCreators(groupCreators.creators.filter((c) => c.employeeId !== employeeId).map((c) => c.employeeId))
+                                        }
+                                        isSaving={isSavingGroupCreators}
+                                        addOptions={groupCreators.candidates.map((c) => ({
+                                            value: c.employeeId,
+                                            label: `${c.lastName} ${c.firstName} (${c.employeeCode})${c.groupNameVn ? ` · ${c.groupNameVn}` : ""}`,
+                                            searchText: `${c.lastName} ${c.firstName} ${c.employeeCode} ${c.groupNameVn ?? ""}`.toLowerCase(),
+                                        }))}
+                                        addingValue={addingGroupCreatorEmployeeId}
+                                        onAddChange={handleAddGroupCreator}
+                                        labels={groupCreatorLabels}
                                     />
                                 )}
 

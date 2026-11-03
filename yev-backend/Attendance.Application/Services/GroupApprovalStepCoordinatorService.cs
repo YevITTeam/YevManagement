@@ -54,10 +54,14 @@ namespace Attendance.Application.Services
             var employeeIds = request.EmployeeIds.Distinct().ToList();
             if (employeeIds.Count > 0)
             {
-                var validEmployees = await _unitOfWork.Employees.FindAsync(x =>
-                    employeeIds.Contains(x.Id) && !x.IsDeleted && x.GroupId == groupId);
+                // Any employee of the same Department, so someone outside the Group can manage it; scope checks key off this table.
+                var departmentId = group!.DepartmentId;
+                var validEmployees = await _unitOfWork.Employees.SelectAsync(x =>
+                    employeeIds.Contains(x.Id) && !x.IsDeleted
+                    && (x.GroupId == groupId || x.DepartmentId == departmentId || (x.Group != null && x.Group.DepartmentId == departmentId)),
+                    x => x.Id);
                 if (validEmployees.Count != employeeIds.Count)
-                    throw new DomainException("Chỉ được chọn nhân viên đang thuộc Nhóm này làm người phụ trách.");
+                    throw new DomainException("Chỉ được chọn nhân viên cùng Bộ phận với Nhóm này làm người phụ trách.");
             }
 
             var existing = await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(x => x.GroupId == groupId && !x.IsDeleted);

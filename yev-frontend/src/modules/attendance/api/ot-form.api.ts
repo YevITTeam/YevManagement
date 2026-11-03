@@ -6,6 +6,7 @@ import type {
     BulkRejectOtFormDto,
     CheckOtFormOverlapDto,
     CreateOtFormDto,
+    CreateOtFormsDto,
     DeleteOtFormDto,
     MyCreateScopeItemDto,
     MyProductionCreateScopeItemDto,
@@ -25,6 +26,7 @@ const ENDPOINTS = {
         getMyProductionCreateScopes: "/OtForm/my-production-create-scopes",
         checkOverlap: "/OtForm/check-overlap",
         createOtForm: "/OtForm",
+        createOtForms: "/OtForm/multi-group",
         getMyForms: "/OtForm/my-forms",
         getPendingApprovals: "/OtForm/pending-approvals",
         getPendingApprovalsCount: "/OtForm/pending-approvals/count",
@@ -98,6 +100,10 @@ export const OtFormApi = {
     // Returns the full OtFormDto; no need to refetch.
     createOtForm: async (data: CreateOtFormDto) => {
         const response = await api.post<ApiResponse<OtFormDto>>(ENDPOINTS.OT_FORM.createOtForm, data);
+        return response.data;
+    },
+    createOtForms: async (data: CreateOtFormsDto) => {
+        const response = await api.post<ApiResponse<OtFormDto[]>>(ENDPOINTS.OT_FORM.createOtForms, data);
         return response.data;
     },
     // Creator only, while still Pending; returns the full OtFormDto.

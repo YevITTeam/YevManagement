@@ -96,12 +96,13 @@ const fieldWithIconClassName = `${fieldClassName} pl-8`;
 
 const fieldLabelClassName = "mb-1 flex items-center gap-1 text-xs font-semibold text-[#5e3f3a]";
 
-// Chip labels only; the API value is 0-3 or the "outsourced" sentinel (filters IsOutsourced).
+// Chip labels only; the API value is 0-4 or the "outsourced" sentinel (filters IsOutsourced).
 const statusChipLabels: Record<string, string> = {
     "0": "Chưa sử dụng",
     "1": "Đang sử dụng",
     "2": "Chờ thanh lý",
     "3": "Đã thanh lý",
+    "4": "Đang sửa chữa",
     outsourced: "Thuê ngoài",
 };
 
@@ -245,7 +246,8 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                             { value: "1", label: "Đang sử dụng", dotClassName: "bg-[#16a34a]" },
                             { value: "2", label: "Chờ thanh lý", dotClassName: "bg-[#f59e0b]" },
                             { value: "3", label: "Đã thanh lý", dotClassName: "bg-[#dc2626]" },
-                            // Not a Device.Status value (only 0-3) — separate filter on IsOutsourced sharing this dropdown.
+                            { value: "4", label: "Đang sửa chữa", dotClassName: "bg-[#8b5cf6]" },
+                            // Not a Device.Status value (only 0-4) — separate filter on IsOutsourced sharing this dropdown.
                             { value: "outsourced", label: "Thuê ngoài", dotClassName: "bg-[#2563eb]" },
                         ]}
                     />

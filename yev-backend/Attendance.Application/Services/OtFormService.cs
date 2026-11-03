@@ -130,45 +130,58 @@ namespace Attendance.Application.Services
 
         // Callers have already saved the business change, so mail is queued to avoid waiting on SMTP.
         // Pass ids only: the request DI scope is disposed before the job runs.
-        private void QueueStepApprovalNotification(int otFormId, int otFormApprovalStepId)
+        // Set while RunAtomicallyAsync runs: mails wait for the commit so a rolled-back change never sends one.
+        private List<Func<IOtFormNotificationService, Task>>? _deferredNotifications;
+
+        private void QueueNotification(Func<IOtFormNotificationService, Task> send)
         {
-            _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
+            if (_deferredNotifications != null)
             {
-                var notificationService = sp.GetRequiredService<IOtFormNotificationService>();
-                await notificationService.SendStepApprovalNotificationAsync(otFormId, otFormApprovalStepId);
-            });
+                _deferredNotifications.Add(send);
+                return;
+            }
+            _taskQueue.QueueBackgroundWorkItem(async (sp, _) => await send(sp.GetRequiredService<IOtFormNotificationService>()));
         }
 
-        // Notify the form's creator (not the approvers) when the form is approved or rejected, or employees
-        // are removed from it. Same background-queue rationale as QueueStepApprovalNotification: callers have already
-        // saved the business change, so a slow/failed SMTP round-trip must not affect the response.
-        private void QueueRejectedNotification(int otFormId)
+        // Several single-form flows as one unit (multi-group create, batch approval): all or nothing, mail after commit.
+        private async Task<T> RunAtomicallyAsync<T>(Func<Task<T>> work)
         {
-            _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
+            var deferred = _deferredNotifications = new();
+            T result;
+            await _unitOfWork.BeginTransactionAsync();
+            try
             {
-                var notificationService = sp.GetRequiredService<IOtFormNotificationService>();
-                await notificationService.SendRejectedNotificationAsync(otFormId);
-            });
+                result = await work();
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
+            finally
+            {
+                _deferredNotifications = null;
+            }
+
+            foreach (var send in deferred) QueueNotification(send);
+            return result;
         }
 
-        private void QueueApprovedNotification(int otFormId)
-        {
-            _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
-            {
-                var notificationService = sp.GetRequiredService<IOtFormNotificationService>();
-                await notificationService.SendApprovedNotificationAsync(otFormId);
-            });
-        }
+        private void QueueStepApprovalNotification(int otFormId, int otFormApprovalStepId) =>
+            QueueNotification(n => n.SendStepApprovalNotificationAsync(otFormId, otFormApprovalStepId));
+
+        // The creator (not the approvers) hears when the form is approved or rejected, or employees are removed from it.
+        private void QueueRejectedNotification(int otFormId) =>
+            QueueNotification(n => n.SendRejectedNotificationAsync(otFormId));
+
+        private void QueueApprovedNotification(int otFormId) =>
+            QueueNotification(n => n.SendApprovedNotificationAsync(otFormId));
 
         private void QueueEmployeesRemovedNotification(int otFormId, List<int> employeeIds)
         {
             if (employeeIds.Count == 0) return;
-
-            _taskQueue.QueueBackgroundWorkItem(async (sp, _) =>
-            {
-                var notificationService = sp.GetRequiredService<IOtFormNotificationService>();
-                await notificationService.SendEmployeesRemovedNotificationAsync(otFormId, employeeIds);
-            });
+            QueueNotification(n => n.SendEmployeesRemovedNotificationAsync(otFormId, employeeIds));
         }
 
         public async Task<PagedResponse<OtFormListItemDto>> GetMyFormsAsync(
@@ -538,6 +551,46 @@ namespace Attendance.Application.Services
             return await CreateCoreAsync(createdByUserName, createdByFullName, isAdmin, request);
         }
 
+        // One office form per group, all or nothing: any failure rolls every form back and names the group.
+        public async Task<List<OtFormDto>> CreateManyAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateManyOtFormsDto request)
+        {
+            if (request.Forms.Count == 0)
+                throw new DomainException("Chưa chọn Nhóm nào.");
+            if (request.Forms.Any(x => x.IsProductionForm || !x.GroupId.HasValue))
+                throw new DomainException("Tạo nhiều đơn chỉ áp dụng cho đơn theo Nhóm.");
+            if (request.Forms.Select(x => x.GroupId).Distinct().Count() != request.Forms.Count)
+                throw new DomainException("Mỗi Nhóm chỉ được một đơn.");
+            var date = request.Forms[0].Date;
+            if (request.Forms.Any(x => x.Date != date))
+                throw new DomainException("Các đơn phải cùng ngày.");
+
+            // Checked once up front so a wrong password isn't reported against the first group.
+            await _secondaryPasswordService.VerifyAsync(createdByUserName, request.SecondaryPassword);
+
+            var groupNames = (await _unitOfWork.Groups.SelectAsync(
+                    x => request.Forms.Select(f => f.GroupId!.Value).Contains(x.Id), x => new { x.Id, x.GroupNameVn }))
+                .ToDictionary(x => x.Id, x => x.GroupNameVn);
+
+            using var dateLock = await AcquireDateLockAsync(date);
+            return await RunAtomicallyAsync(async () =>
+            {
+                var created = new List<OtFormDto>();
+                foreach (var form in request.Forms)
+                {
+                    form.SecondaryPassword = request.SecondaryPassword;
+                    try
+                    {
+                        created.Add(await CreateCoreAsync(createdByUserName, createdByFullName, isAdmin, form));
+                    }
+                    catch (DomainException ex) when (request.Forms.Count > 1)
+                    {
+                        throw new DomainException($"Nhóm {groupNames.GetValueOrDefault(form.GroupId!.Value, form.GroupId.ToString())}: {ex.Message}");
+                    }
+                }
+                return created;
+            });
+        }
+
         private async Task<OtFormDto> CreateCoreAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
         {
             // Overnight shifts aren't supported; checked first because later validation compares TimeOnly values directly.
@@ -545,6 +598,9 @@ namespace Attendance.Application.Services
                 throw new DomainException("Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).");
 
             EnsureDateNotTooFarBack(request.Date, (await _attendanceSettingService.GetAsync()).BackdateDays);
+
+            if (request.Employees.Select(x => x.EmployeeId).Distinct().Count() != request.Employees.Count)
+                throw new DomainException("Danh sách nhân viên có mã trùng lặp.");
 
             // Verified before any other work, same as approve/reject.
             await _secondaryPasswordService.VerifyAsync(createdByUserName, request.SecondaryPassword);
@@ -576,7 +632,7 @@ namespace Attendance.Application.Services
 
             var validatedEmployees = await ValidateEmployeesAsync(groupId, request.StartTime, request.EndTime, request.Employees);
 
-            var accumulated = await EnsureOtCaseMatchesRulesAsync(request, isProductionForm: false, otCase!);
+            var accumulated = await EnsureOtCaseMatchesRulesAsync(request, forceMeal: !group.AllowEatLater, otCase!);
 
             // An employee may not appear in two overlapping non-rejected forms on the same day.
             var employeeTimes = request.Employees.ToDictionary(
@@ -602,7 +658,7 @@ namespace Attendance.Application.Services
                 StartTime = request.StartTime,
                 EndTime = request.EndTime,
                 SubReason = request.SubReason,
-                TotalHour = request.TotalHour,
+                TotalHour = Math.Round((decimal)(request.EndTime - request.StartTime).TotalHours, 2),
                 Date = request.Date,
                 NumberOfEmployee = request.Employees.Count,
                 CreatedByUserName = createdByUserName,
@@ -618,7 +674,7 @@ namespace Attendance.Application.Services
                 IsDeleted = false
             };
 
-            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId: null);
+            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId: null, forceMeal: !group.AllowEatLater);
         }
 
         // Who may create production forms is decided by the Attendance.OTForm.CreateProduction permission;
@@ -664,6 +720,12 @@ namespace Attendance.Application.Services
             // Defensive check for legacy/manual data; import already rejects rows without a shift team.
             var productionEmployeesForCheck = await _unitOfWork.ProductionEmployees.FindAsync(
                 x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted);
+            var notOnRoster = employeeIds.Except(productionEmployeesForCheck.Select(x => x.EmployeeId!.Value)).ToList();
+            if (notOnRoster.Count > 0)
+            {
+                var codes = await _unitOfWork.Employees.SelectAsync(x => notOnRoster.Contains(x.Id), x => x.Code);
+                throw new DomainException($"Nhân viên không có trong danh sách nhân sự dưới chuyền: {string.Join(", ", codes)}.");
+            }
             var missingShiftTeam = productionEmployeesForCheck.Where(x => x.ShiftTeamId == null).Select(x => x.EmployeeCode).ToList();
             if (missingShiftTeam.Count > 0)
                 throw new DomainException($"Nhân viên chưa có Nhóm ca, cần cập nhật trước khi tạo đơn: {string.Join(", ", missingShiftTeam)}.");
@@ -686,7 +748,7 @@ namespace Attendance.Application.Services
 
             var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
 
-            var accumulated = await EnsureOtCaseMatchesRulesAsync(request, isProductionForm: true, otCase!);
+            var accumulated = await EnsureOtCaseMatchesRulesAsync(request, forceMeal: true, otCase!);
 
             var employeeTimes = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => (x.StartTime ?? request.StartTime, x.EndTime));
@@ -711,7 +773,7 @@ namespace Attendance.Application.Services
                 StartTime = request.StartTime,
                 EndTime = request.EndTime,
                 SubReason = request.SubReason,
-                TotalHour = request.TotalHour,
+                TotalHour = Math.Round((decimal)(request.EndTime - request.StartTime).TotalHours, 2),
                 Date = request.Date,
                 NumberOfEmployee = request.Employees.Count,
                 CreatedByUserName = createdByUserName,
@@ -730,7 +792,7 @@ namespace Attendance.Application.Services
                 x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted))
                 .ToDictionary(x => x.EmployeeId!.Value);
 
-            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId);
+            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId, forceMeal: true);
         }
 
         // When the creator outranks every mandatory signer, they sign the "requester" box themselves;
@@ -745,19 +807,19 @@ namespace Attendance.Application.Services
             return creatorSignature.SignatureImage;
         }
 
-        // Meal is mandatory on production forms; on office forms DidEat=true still means eating during the shift (deducted).
-        private static bool ResolveDidEat(bool isProductionForm, bool requestedDidEat) => isProductionForm || requestedDidEat;
+        // Meal is mandatory on production forms and on groups that disallow eating later; otherwise DidEat=true still means eating during the shift (deducted).
+        private static bool ResolveDidEat(bool forceMeal, bool requestedDidEat) => forceMeal || requestedDidEat;
 
         private async Task<OtFormDto> FinalizeCreateAsync(
             OtForm newOtForm, CreateOtFormDto request, ResolveApprovalChainResultDto chainResult,
-            AccumulatedByEmployee accumulated, Dictionary<int, ProductionEmployee>? productionEmployeesByEmployeeId)
+            AccumulatedByEmployee accumulated, Dictionary<int, ProductionEmployee>? productionEmployeesByEmployeeId, bool forceMeal)
         {
             await _unitOfWork.OtForms.AddAsync(newOtForm);
 
             var mealSettings = await _attendanceSettingService.GetAsync();
 
             var didEatByEmployeeId = request.Employees.ToDictionary(
-                x => x.EmployeeId, x => ResolveDidEat(newOtForm.IsProductionForm, x.DidEat));
+                x => x.EmployeeId, x => ResolveDidEat(forceMeal, x.DidEat));
 
             // Hard block before writing anything when any employee exceeds a daily limit.
             var newHoursByEmployeeId = request.Employees.ToDictionary(
@@ -853,19 +915,24 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(newOtForm.Id);
         }
 
-        // Returns the employee when they belong to the group, null for Admin (treated as lowest level in chain resolution).
+        // Returns the employee when they belong to the group or were granted it (GroupOtFormCreator), null for Admin
+        // (treated as lowest level in chain resolution).
         private async Task<Employee?> EnsureCanCreateOrEditForScopeAsync(string userName, bool isAdmin, int groupId)
         {
             var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(
-                x => x.UserName == userName && !x.IsDeleted && x.GroupId == groupId, x => x.JobTitle!);
+                x => x.UserName == userName && !x.IsDeleted, x => x.JobTitle!);
 
-            if (callerEmployee == null && !isAdmin)
-                throw new DomainException("Bạn chỉ được tạo/sửa đơn cho đúng Nhóm/Bộ phận của mình. Liên hệ Admin nếu tài khoản chưa liên kết đúng nhân viên/nhóm.");
+            var allowed = callerEmployee != null && (callerEmployee.GroupId == groupId
+                || (await _unitOfWork.GroupOtFormCreators.SelectAsync(
+                    x => x.GroupId == groupId && x.EmployeeId == callerEmployee.Id, x => x.Id)).Count > 0);
 
-            return callerEmployee;
+            if (!allowed && !isAdmin)
+                throw new DomainException("Bạn chỉ được tạo/sửa đơn cho Nhóm của mình hoặc Nhóm được cấp thêm. Liên hệ Admin nếu tài khoản chưa liên kết đúng nhân viên/nhóm.");
+
+            return allowed ? callerEmployee : null;
         }
 
-        // Only the caller's own group.
+        // The caller's own group plus groups granted through GroupOtFormCreator.
         public async Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin)
         {
             if (isAdmin) return new List<MyCreateScopeItemDto>();
@@ -873,19 +940,20 @@ namespace Attendance.Application.Services
             var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted);
             if (callerEmployee == null) return new List<MyCreateScopeItemDto>();
 
-            var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == callerEmployee.GroupId && !x.IsDeleted, x => x.Department);
-            if (group == null) return new List<MyCreateScopeItemDto>();
+            var grantedGroupIds = await _unitOfWork.GroupOtFormCreators.SelectAsync(x => x.EmployeeId == callerEmployee.Id, x => x.GroupId);
+            var groupIds = grantedGroupIds.Append(callerEmployee.GroupId ?? 0).ToList();
 
-            return new List<MyCreateScopeItemDto>
-            {
-                new MyCreateScopeItemDto
+            var scopes = await _unitOfWork.Groups.SelectAsync(
+                x => groupIds.Contains(x.Id) && !x.IsDeleted,
+                x => new MyCreateScopeItemDto
                 {
-                    GroupId = group.Id,
-                    GroupNameVn = group.GroupNameVn,
-                    DepartmentId = group.DepartmentId,
-                    DepartmentNameVn = group.Department.DepartmentNameVn
-                }
-            };
+                    GroupId = x.Id,
+                    GroupNameVn = x.GroupNameVn,
+                    DepartmentId = x.DepartmentId,
+                    DepartmentNameVn = x.Department.DepartmentNameVn
+                });
+            // Own group first so a single-scope user keeps today's prefilled, locked form.
+            return scopes.OrderBy(x => x.GroupId == callerEmployee.GroupId ? 0 : 1).ThenBy(x => x.GroupNameVn).ToList();
         }
 
         // Lets FE prefill and lock the Team/Line/Shift-team dropdowns; empty for Admin and non-leaders.
@@ -1134,9 +1202,10 @@ namespace Attendance.Application.Services
             if (otForm.Status == (int)OtFormStatus.Completed)
                 await AccumulateEmployeeHoursAsync(otForm, activeEmployees, sign: -1);
 
-            // Meal is mandatory on every form: production forms force DidEat, office forms keep the request value.
+            var forceMeal = otForm.IsProductionForm
+                || (await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == otForm.GroupId))?.AllowEatLater == false;
             var didEatByEmployeeId = request.Employees.ToDictionary(
-                x => x.EmployeeId, x => ResolveDidEat(otForm.IsProductionForm, x.DidEat));
+                x => x.EmployeeId, x => ResolveDidEat(forceMeal, x.DidEat));
 
             // excludeFormId: this form's own rows are being replaced, so they must not count against their new hours.
             var newHoursByEmployeeId = request.Employees.ToDictionary(
@@ -1163,8 +1232,8 @@ namespace Attendance.Application.Services
                     throw new DomainException("Giờ sửa khiến có nhân viên vượt giới hạn OT tháng/năm, đơn này phải là TH3. Vui lòng giảm giờ hoặc tạo đơn TH3 mới.");
             }
 
-            // Office forms re-check every member (date/time may have moved); production only the added ones.
-            var overlapEmployeeIds = isOfficeForm ? requestedEmployeeIds : toAddIds;
+            // Every member: kept rows may have new times too.
+            var overlapEmployeeIds = requestedEmployeeIds;
             if (overlapEmployeeIds.Count > 0)
             {
                 var overlapEmployees = overlapEmployeeIds.Select(eid => employeesById[eid]).ToList();
@@ -1410,18 +1479,24 @@ namespace Attendance.Application.Services
             otForm.ApprovalChainWarning = chain.Warning;
 
             // No configured chain: leave the existing steps instead of stranding the form without any.
-            if (chain.Steps.Count == 0 && !chain.IsComplete) return false;
+            if (chain.Steps.Count == 0 && !chain.IsComplete)
+            {
+                if (!steps.Any(x => !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending))
+                    throw new DomainException("Nhóm/Bộ phận của đơn chưa có cây duyệt nên không thể trình lại. Liên hệ người phụ trách cây duyệt hoặc Admin.");
+                return false;
+            }
 
             var existingSteps = steps.Where(x => !x.IsDeleted).ToList();
             var stepByJobTitleId = existingSteps.GroupBy(x => x.JobTitleId).ToDictionary(g => g.Key, g => g.OrderBy(x => x.StepOrder).First());
 
-            var keptStepIds = new HashSet<int>();
+            // By reference: re-sign copies are not saved yet, so they all share Id 0.
+            var keptSteps = new HashSet<OtFormApprovalStep>();
             var pendingCount = 0;
             foreach (var step in chain.Steps)
             {
                 if (stepByJobTitleId.TryGetValue(step.JobTitleId, out var row))
                 {
-                    keptStepIds.Add(row.Id);
+                    keptSteps.Add(row);
                     row.StepOrder = step.StepOrder;
                     if (row.Status == (int)OtFormApprovalStepStatus.Approved)
                     {
@@ -1467,7 +1542,7 @@ namespace Attendance.Application.Services
                 pendingCount++;
             }
 
-            foreach (var row in existingSteps.Where(x => !keptStepIds.Contains(x.Id) && x.Status == (int)OtFormApprovalStepStatus.Pending))
+            foreach (var row in existingSteps.Where(x => !keptSteps.Contains(x) && x.Status == (int)OtFormApprovalStepStatus.Pending))
             {
                 row.IsDeleted = true;
                 _unitOfWork.OtFormApprovalSteps.Update(row);
@@ -1678,6 +1753,10 @@ namespace Attendance.Application.Services
             if (!match.IsActor)
                 throw new DomainException($"Bạn không phải người được chỉ định duyệt bước hiện tại (Chức vụ '{currentStep.JobTitleNameSnapshot}') của đơn này.");
 
+            // A delegate signing their own form would let one person both raise and approve it.
+            if (match.DelegatorUserName != null && string.Equals(otForm.CreatedByUserName, approverUserName, StringComparison.OrdinalIgnoreCase))
+                throw new DomainException("Bạn là người tạo đơn nên không thể duyệt thay (ủy quyền) cho bước này. Người ủy quyền phải tự duyệt.");
+
             return (otForm, currentStep, match.DelegatorUserName, match.DelegatorFullName);
         }
 
@@ -1716,10 +1795,12 @@ namespace Attendance.Application.Services
             var remainingPending = await _unitOfWork.OtFormApprovalSteps.FindAsync(
                 x => x.OtFormId == otForm.Id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending && x.Id != currentStep.Id);
 
+            // Always touched: its rowversion makes an edit saved meanwhile fail instead of being overwritten.
+            _unitOfWork.OtForms.Update(otForm);
+
             if (remainingPending.Count == 0)
             {
                 otForm.Status = (int)OtFormStatus.Completed;
-                _unitOfWork.OtForms.Update(otForm);
                 var activeRows = await _unitOfWork.OtFormEmployees.FindAsync(x => x.OtFormId == otForm.Id && !x.IsRemoved);
                 await AccumulateEmployeeHoursAsync(otForm, activeRows);
             }
@@ -1731,7 +1812,6 @@ namespace Attendance.Application.Services
                 {
                     otForm.OtFormBatch = null;
                     otForm.OtFormBatchId = null;
-                    _unitOfWork.OtForms.Update(otForm);
                 }
             }
 
@@ -1942,22 +2022,19 @@ namespace Attendance.Application.Services
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: true);
 
-            await ApproveAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, request);
-
+            // Saved by the flow's own SaveChanges, so the decision, the used token and the queued mail can't drift apart.
             emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
             _unitOfWork.OtFormApprovalEmailTokens.Update(emailToken);
-            await _unitOfWork.SaveChangesAsync();
+            await ApproveAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, request);
         }
 
         public async Task RejectByEmailTokenAsync(string token, RejectOtFormDto request)
         {
             var emailToken = await ResolveEmailTokenAsync(token, requireUnused: true);
 
-            await RejectAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, request);
-
             emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
             _unitOfWork.OtFormApprovalEmailTokens.Update(emailToken);
-            await _unitOfWork.SaveChangesAsync();
+            await RejectAsync(emailToken.OtFormId, emailToken.ApproverUserName, emailToken.ApproverFullName, request);
         }
 
         private async Task<OtFormApprovalEmailToken> ResolveEmailTokenAsync(string token, bool requireUnused)
@@ -2148,7 +2225,11 @@ namespace Attendance.Application.Services
 
             foreach (var otFormEmployee in otFormEmployees)
             {
-                var hours = sign * CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mealSettings);
+                var hours = sign > 0
+                    ? CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mealSettings)
+                    : -(otFormEmployee.LedgerHours
+                        ?? CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mealSettings));
+                otFormEmployee.LedgerHours = sign > 0 ? hours : null;
 
                 if (existingLedgerRows.TryGetValue(otFormEmployee.EmployeeId, out var ledgerRow))
                 {
@@ -2325,13 +2406,13 @@ namespace Attendance.Application.Services
         // The OT case is derived, not chosen: TH3 when ExceedsMonthYearLimitAsync, otherwise TH2 on a non-working
         // day and TH1 on a working day. The daily total never forces TH3. Rejects a request whose OtCaseId differs
         // from the derived case. Returns the accumulation it computed so the create flow reuses it.
-        private async Task<AccumulatedByEmployee> EnsureOtCaseMatchesRulesAsync(CreateOtFormDto request, bool isProductionForm, OtCase requestedCase)
+        private async Task<AccumulatedByEmployee> EnsureOtCaseMatchesRulesAsync(CreateOtFormDto request, bool forceMeal, OtCase requestedCase)
         {
             var settings = await _attendanceSettingService.GetAsync();
 
             var newHoursByEmployeeId = request.Employees.ToDictionary(
                 x => x.EmployeeId,
-                x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, ResolveDidEat(isProductionForm, x.DidEat), settings));
+                x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, ResolveDidEat(forceMeal, x.DidEat), settings));
             var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, request.Date, settings);
             var exceedsTh3 = await ExceedsMonthYearLimitAsync(newHoursByEmployeeId, settings, accumulated);
 
@@ -2552,7 +2633,7 @@ namespace Attendance.Application.Services
             if (!requestedFormIds.ToHashSet().SetEquals(activeFormIds))
                 throw new DomainException("Danh sách đơn gửi lên không khớp với danh sách đơn còn hiệu lực của đơn tổng này — vui lòng tải lại trang.");
 
-            // Fail fast before writing: there is no DB transaction here.
+            // Validated up front for clear errors; the writes below still run in one transaction.
             var currentStepByFormId = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                 x => activeFormIds.Contains(x.OtFormId) && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending, x => x.Candidates))
                 .GroupBy(x => x.OtFormId)
@@ -2584,47 +2665,51 @@ namespace Attendance.Application.Services
                 }
             }
 
+            // Outside the transaction so a wrong guess is still counted when it rolls back.
             await _secondaryPasswordService.VerifyAsync(approverUserName, request.SecondaryPassword);
 
             // Reuse the single-form flows unchanged (accumulation, next-level mail).
-            foreach (var item in request.Forms)
+            await RunAtomicallyAsync(async () =>
             {
-                if (item.Decision == (int)OtFormBatchFormDecision.Reject)
+                foreach (var item in request.Forms)
                 {
-                    await RejectAsync(item.OtFormId, approverUserName, approverFullName, new RejectOtFormDto
+                    if (item.Decision == (int)OtFormBatchFormDecision.Reject)
                     {
-                        Comment = item.RejectReason!,
-                        SecondaryPassword = request.SecondaryPassword
-                    });
-                    continue;
-                }
-
-                if (item.ExcludedEmployeeIds != null)
-                {
-                    foreach (var employeeId in item.ExcludedEmployeeIds)
-                    {
-                        // The secondary password was verified once for the whole batch above, so pass null.
-                        await RemoveEmployeeCoreAsync(
-                            item.OtFormId, approverUserName, approverFullName, isAdmin: false,
-                            employeeId, "Loại khi duyệt Đơn tổng", secondaryPassword: null);
+                        await RejectAsync(item.OtFormId, approverUserName, approverFullName, new RejectOtFormDto
+                        {
+                            Comment = item.RejectReason!,
+                            SecondaryPassword = request.SecondaryPassword
+                        });
+                        continue;
                     }
 
-                    // 1 mail per form listing every employee removed in this pass, not 1 per employee.
-                    QueueEmployeesRemovedNotification(item.OtFormId, item.ExcludedEmployeeIds.ToList());
+                    if (item.ExcludedEmployeeIds != null)
+                    {
+                        foreach (var employeeId in item.ExcludedEmployeeIds)
+                        {
+                            // The secondary password was verified once for the whole batch above, so pass null.
+                            await RemoveEmployeeCoreAsync(
+                                item.OtFormId, approverUserName, approverFullName, isAdmin: false,
+                                employeeId, "Loại khi duyệt Đơn tổng", secondaryPassword: null);
+                        }
+
+                        // 1 mail per form listing every employee removed in this pass, not 1 per employee.
+                        QueueEmployeesRemovedNotification(item.OtFormId, item.ExcludedEmployeeIds.ToList());
+                    }
+
+                    await ApproveAsync(item.OtFormId, approverUserName, approverFullName, new ApproveOtFormDto
+                    {
+                        SecondaryPassword = request.SecondaryPassword
+                    });
                 }
 
-                await ApproveAsync(item.OtFormId, approverUserName, approverFullName, new ApproveOtFormDto
-                {
-                    SecondaryPassword = request.SecondaryPassword
-                });
-            }
-
-            batch.Status = (int)OtFormBatchStatus.Processed;
-            batch.ProcessedAt = TimeHelper.GetCurrentUtcTime();
-            batch.ProcessedByUserName = approverUserName;
-            batch.ProcessedByFullName = approverFullName;
-            _unitOfWork.OtFormBatches.Update(batch);
-            await _unitOfWork.SaveChangesAsync();
+                batch.Status = (int)OtFormBatchStatus.Processed;
+                batch.ProcessedAt = TimeHelper.GetCurrentUtcTime();
+                batch.ProcessedByUserName = approverUserName;
+                batch.ProcessedByFullName = approverFullName;
+                _unitOfWork.OtFormBatches.Update(batch);
+                return true;
+            });
 
             return await BuildBatchDtoAsync(batch);
         }
@@ -2641,13 +2726,9 @@ namespace Attendance.Application.Services
         {
             var emailToken = await ResolveBatchEmailTokenAsync(token, requireUnused: true);
 
-            var result = await ProcessBatchAsync(emailToken.OtFormBatchId, emailToken.ApproverUserName, emailToken.ApproverFullName, request);
-
             emailToken.UsedAt = TimeHelper.GetCurrentUtcTime();
             _unitOfWork.OtFormBatchEmailTokens.Update(emailToken);
-            await _unitOfWork.SaveChangesAsync();
-
-            return result;
+            return await ProcessBatchAsync(emailToken.OtFormBatchId, emailToken.ApproverUserName, emailToken.ApproverFullName, request);
         }
 
         private async Task<OtFormBatchEmailToken> ResolveBatchEmailTokenAsync(string token, bool requireUnused)
@@ -2769,6 +2850,13 @@ namespace Attendance.Application.Services
                 predicate: d => !d.IsDeleted && d.FromDate == today, selector: d => d.Id);
             foreach (var delegationId in startingToday)
                 await _notificationService.SendDelegationBackfillNotificationsAsync(delegationId);
+
+            var setting = (await _unitOfWork.AttendanceSettings.GetAllAsync()).FirstOrDefault();
+            if (setting != null)
+            {
+                setting.LastBatchSweepDate = today;
+                _unitOfWork.AttendanceSettings.Update(setting);
+            }
 
             await _unitOfWork.SaveChangesAsync();
         }

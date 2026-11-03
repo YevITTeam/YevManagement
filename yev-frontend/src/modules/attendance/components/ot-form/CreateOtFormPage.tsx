@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, Car, Check, Printer, RefreshCw, Undo2, UserMinus, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
@@ -22,14 +22,15 @@ import { ProductionEmployeeApi } from "@/modules/attendance/api/production-emplo
 import type { ProductionEmployeeSearchItemDto, ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type {
+    CreateOtFormDto,
     MyCreateScopeItemDto,
     MyProductionCreateScopeItemDto,
     OtFormEmployeeDto,
     OtFormEmployeeInputDto,
     ProcessPartDto,
-    UpdateOtFormEmployeeTimeDto,
 } from "@/modules/attendance/types/ot-form.dto";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 import InfoTooltip from "@/components/ui/InfoTooltip";
 import TimePicker24h from "@/components/ui/TimePicker24h";
@@ -37,6 +38,7 @@ import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import SecondaryPasswordDialog from "@/modules/attendance/components/secondary-password/SecondaryPasswordDialog";
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
 import { getApiErrorMessage } from "@/lib/apiError";
+import { normalizeText } from "@/lib/normalizeText";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
@@ -230,7 +232,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [groups, setGroups] = useState<GroupDto[]>([]);
     const [reasons, setReasons] = useState<ReasonDto[]>([]);
     const [otCases, setOtCases] = useState<OtCaseDto[]>([]);
-    const [groupEmployees, setGroupEmployees] = useState<EmployeeDto[]>([]);
+    // Group-mode create loads one list per selected group; edit mode keeps the form's single group.
+    const [employeeGroups, setEmployeeGroups] = useState<{ groupId: number; employees: EmployeeDto[] }[]>([]);
+    const groupEmployees = useMemo(() => employeeGroups.flatMap((g) => g.employees), [employeeGroups]);
 
     // ── Production mode: filters + ProductionEmployee search ──
     const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
@@ -249,7 +253,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const isProductionScopeLocked = isProductionScopeRestricted && productionCreateScopes!.length === 1;
 
     const [departmentId, setDepartmentId] = useState<number | null>(null);
-    const [groupId, setGroupId] = useState<number | null>(null);
+    const [groupIds, setGroupIds] = useState<number[]>([]);
+    const groupId = groupIds[0] ?? null;
     const [reasonId, setReasonId] = useState<number | null>(null);
     // OT case of the form being edited. On create the case is derived, never chosen (see otCaseId below).
     const [loadedOtCaseId, setLoadedOtCaseId] = useState<number | null>(null);
@@ -298,22 +303,34 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // The creator removes people from their own form without giving a reason.
     const [isFormCreator, setIsFormCreator] = useState(false);
 
-    const [processPart, setProcessPart] = useState<ProcessPartDto>(emptyProcessPart);
-    // Goes false for good once the user overrides either count, so their edit isn't overwritten.
-    const [autoMealTicket, setAutoMealTicket] = useState(true);
+    // Keyed by groupId in group-mode create (each group has its own support request), 0 otherwise.
+    const [processParts, setProcessParts] = useState<Record<number, ProcessPartDto>>({});
+    // Keys whose meal ticket counts the user typed; others always show and send the live computed counts.
+    const [manualMealTicketKeys, setManualMealTicketKeys] = useState<Record<number, boolean>>({});
 
     const { setting } = useAttendanceSetting();
 
     // Production forms: always true (meals mandatory); office forms: false = "eat later" ticked, no deduction.
     const defaultDidEatForNewEmployee = formMode === "production";
 
+    // Groups that disallow eating later always eat during the shift (BE forces the same); unknown groups stay allowed.
+    const noEatLaterGroupIds = useMemo(() => new Set(groups.filter((g) => !g.allowEatLater).map((g) => g.id)), [groups]);
+    const groupIdByEmployeeId = useMemo(() => new Map(groupEmployees.map((e) => [e.id, e.groupId])), [groupEmployees]);
+    const canEatLater = (employeeId: number) => {
+        if (formMode === "production") return false;
+        const employeeGroupId = isEditMode ? groupId : groupIdByEmployeeId.get(employeeId);
+        return employeeGroupId == null || !noEatLaterGroupIds.has(employeeGroupId);
+    };
+    const didEatOf = (employeeId: number) =>
+        !canEatLater(employeeId) || (employeeOverrides[employeeId]?.didEat ?? defaultDidEatForNewEmployee);
+    const showAteLaterColumn = formMode !== "production" && groupIds.some((id) => !noEatLaterGroupIds.has(id));
+
     const dailyOtHourLimit = isNonWorkingDay ? setting.dailyOtHourLimitHoliday : setting.dailyOtHourLimit;
 
     // TH3 is forced when any selected employee's projected month/year accumulation plus this form's own
     // hours passes their month/year limit (own custom limit first, else the shared one). The daily total never
     // forces it. Mirrors OtFormService.ExceedsMonthYearLimitAsync, which is the real guard.
-    const exceedsTh3 = useMemo(() => {
-        if (isEditMode || !date || !startTime || !endTime) return false;
+    const accumulationById = useMemo(() => {
         const accumulationById = new Map<number, { month: number; year: number; monthLimit: number; yearLimit: number }>();
         for (const employee of groupEmployees) {
             accumulationById.set(employee.id, {
@@ -331,20 +348,48 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 yearLimit: item.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit,
             });
         }
-        return selectedEmployeeIds.some((employeeId) => {
+        return accumulationById;
+    }, [groupEmployees, productionResults, setting]);
+    const exceedsTh3For = (employeeIds: number[]) => {
+        if (isEditMode || !date || !startTime || !endTime) return false;
+        return employeeIds.some((employeeId) => {
             const accumulation = accumulationById.get(employeeId);
             if (!accumulation) return false;
             const hours = computeActualHours(
                 employeeOverrides[employeeId]?.startTime || startTime,
                 employeeOverrides[employeeId]?.endTime || endTime,
-                employeeOverrides[employeeId]?.didEat ?? defaultDidEatForNewEmployee,
+                didEatOf(employeeId),
                 setting
             );
             return accumulation.month + hours > accumulation.monthLimit || accumulation.year + hours > accumulation.yearLimit;
         });
-    }, [isEditMode, date, startTime, endTime, groupEmployees, productionResults, selectedEmployeeIds, employeeOverrides, defaultDidEatForNewEmployee, setting]);
+    };
+    const otCaseCodeFor = (employeeIds: number[]) => (exceedsTh3For(employeeIds) ? "TH3" : baseOtCaseCode);
+    const exceedsTh3 = exceedsTh3For(selectedEmployeeIds);
     const otCaseCode = exceedsTh3 ? "TH3" : baseOtCaseCode;
     const otCaseId = isEditMode ? loadedOtCaseId : (otCases.find((c) => c.code === otCaseCode)?.id ?? null);
+
+    // Group-mode create: narrows the table only; hidden rows keep their selection.
+    const [employeeQuery, setEmployeeQuery] = useState("");
+    const employeeKeyword = normalizeText(employeeQuery.trim());
+    const matchesEmployeeQuery = (employee: EmployeeDto) =>
+        !employeeKeyword || normalizeText(`${employee.code} ${employee.lastName} ${employee.firstName}`).includes(employeeKeyword);
+
+    // Group-mode create: one form per selected group, each with its own OT case and support request.
+    const isGroupCreate = !isEditMode && formMode === "group";
+    const isMultiGroup = isGroupCreate && groupIds.length > 1;
+    const groupSections = isGroupCreate
+        ? groupIds.map((id) => {
+              const employees = employeeGroups.find((g) => g.groupId === id)?.employees ?? [];
+              return {
+                  groupId: id,
+                  employees,
+                  visibleEmployees: employees.filter(matchesEmployeeQuery),
+                  selectedIds: employees.filter((e) => selectedEmployeeIds.includes(e.id)).map((e) => e.id),
+              };
+          })
+        : [];
+    const visibleGroupEmployees = groupSections.flatMap((section) => section.visibleEmployees);
 
     // Signature is only required at approval, so this is a soft hint that never blocks submit.
     const [hasSignature, setHasSignature] = useState<boolean | null>(null);
@@ -437,10 +482,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         OtFormApi.getMyCreateScopes()
             .then((scopes) => {
                 setCreateScopes(scopes);
-                // Prefill only on create; edit mode already holds the form's real data.
-                if (!isEditMode && scopes.length === 1) {
+                // Prefill only on create; edit mode already holds the form's real data. Several scopes share one department.
+                if (!isEditMode && scopes.length > 0) {
                     setDepartmentId(scopes[0].departmentId);
-                    setGroupId(scopes[0].groupId);
+                    if (scopes.length === 1) setGroupIds([scopes[0].groupId]);
                 }
                 // Production-only accounts have empty group scopes and would be blocked in group mode; switch them to
                 // production without locking the tab.
@@ -481,6 +526,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const isScopeRestricted = createScopes !== null && createScopes.length > 0;
     // Lock only on create; edit still allows changing within scope.
     const isScopeLocked = !isEditMode && isScopeRestricted && createScopes!.length === 1;
+    const isScopeDepartmentLocked = !isEditMode && isScopeRestricted && new Set(createScopes!.map((s) => s.departmentId)).size === 1;
     // Empty scopes and not Admin → no department to create for; block instead of failing with 400 later.
     // Group mode only: production forms don't need createScopes.
     const isBlockedNoScope =
@@ -505,12 +551,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         const options = createScopes!
             .filter((s) => !departmentId || s.departmentId === departmentId)
             .map((s) => ({ id: s.groupId, label: s.groupNameVn }));
-        if (groupId && !options.some((o) => o.id === groupId)) {
-            const existing = groups.find((g) => g.id === groupId);
+        for (const id of groupIds) {
+            if (options.some((o) => o.id === id)) continue;
+            const existing = groups.find((g) => g.id === id);
             if (existing) options.push({ id: existing.id, label: existing.groupNameVn });
         }
         return options;
-    }, [isScopeRestricted, createScopes, groups, departmentId, groupId]);
+    }, [isScopeRestricted, createScopes, groups, departmentId, groupIds]);
+    const groupLabel = (id: number) => visibleGroups.find((g) => g.id === id)?.label ?? String(id);
 
     // When restricted, build options from productionCreateScopes instead of the catalog; Line depends on Team,
     // shift group on both, same as the unrestricted dropdowns.
@@ -575,7 +623,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 // Without this, editing a production form would render the group-mode UI.
                 setFormMode(data.isProductionForm ? "production" : "group");
                 setDepartmentId(data.departmentId);
-                setGroupId(data.groupId);
+                setGroupIds(data.groupId ? [data.groupId] : []);
                 setReasonId(data.reasonId);
                 setLoadedOtCaseId(data.otCaseId);
                 setIsFormCreator(data.createdByUserName.toLowerCase() === myUserName);
@@ -602,7 +650,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         ])
                     )
                 );
-                setProcessPart(data.processPart ?? emptyProcessPart);
+                setProcessParts({ 0: data.processPart ?? emptyProcessPart });
             })
             .catch((err) => {
                 console.error(err);
@@ -628,20 +676,28 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [departmentId]);
 
     // Loads only, doesn't clear the selection (same reason as above).
-    const [prevGroupId, setPrevGroupId] = useState(groupId);
-    if (prevGroupId !== groupId) {
-        setPrevGroupId(groupId);
-        if (!groupId) setGroupEmployees([]);
+    const [prevGroupIds, setPrevGroupIds] = useState(groupIds);
+    if (prevGroupIds !== groupIds) {
+        setPrevGroupIds(groupIds);
+        if (groupIds.length === 0) setEmployeeGroups([]);
     }
 
     useEffect(() => {
         // Edit mode takes its list from the form itself.
-        if (!groupId || isEditMode) return;
+        if (groupIds.length === 0 || isEditMode) return;
+        let isStale = false;
         // Pass the form's date so projected accumulation uses that month/year; changing the date must reload.
-        EmployeeApi.getEmployeesByGroup(groupId, date || undefined)
-            .then(setGroupEmployees)
+        Promise.all(
+            groupIds.map((id) => EmployeeApi.getEmployeesByGroup(id, date || undefined).then((employees) => ({ groupId: id, employees })))
+        )
+            .then((result) => {
+                if (!isStale) setEmployeeGroups(result);
+            })
             .catch((err) => console.error(err));
-    }, [groupId, isEditMode, date]);
+        return () => {
+            isStale = true;
+        };
+    }, [groupIds, isEditMode, date]);
 
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
     const isTimeRangeInvalid = Boolean(startTime && endTime && toMinutes(endTime) <= toMinutes(startTime));
@@ -658,42 +714,46 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [isEditMode, formMode, editEmployees]);
 
     // Tiers from lib/mealTicket.ts on each person's actual hours; milk is never auto-computed.
-    const mealTicketCounts = useMemo(() => {
+    const countMealTickets = (employeeIds: number[]) => {
         let main = 0;
         let secondary = 0;
-        for (const employeeId of selectedEmployeeIds) {
+        for (const employeeId of employeeIds) {
             const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
-            const didEat = employeeOverrides[employeeId]?.didEat ?? defaultDidEatForNewEmployee;
+            const didEat = didEatOf(employeeId);
             const employeeStartTime = employeeOverrides[employeeId]?.startTime || startTime;
             const ticketType = computeMealTicketType(employeeStartTime, employeeEndTime, didEat, setting);
             if (ticketType === MEAL_TICKET_MAIN) main += 1;
             else if (ticketType === MEAL_TICKET_SECONDARY) secondary += 1;
         }
         return { main, secondary };
-    }, [selectedEmployeeIds, employeeOverrides, startTime, endTime, setting, defaultDidEatForNewEmployee]);
+    };
 
-    // Sync via render-time snapshot (no setState in effects). Stops once the user overrides; not used in edit mode
-    // where the block is locked.
-    const autoMealTicketKey = `${mealTicketCounts.main}/${mealTicketCounts.secondary}`;
-    const [prevAutoMealTicketKey, setPrevAutoMealTicketKey] = useState(autoMealTicketKey);
-    if (prevAutoMealTicketKey !== autoMealTicketKey) {
-        setPrevAutoMealTicketKey(autoMealTicketKey);
-        if (autoMealTicket && !isEditMode) {
-            setProcessPart((current) => ({
-                ...current,
-                mainTicketCount: mealTicketCounts.main,
-                secondaryTicketCount: mealTicketCounts.secondary,
-            }));
+    // Group-mode create: one support block per selected group; otherwise a single block under key 0.
+    const supportSections =
+        isGroupCreate && groupSections.length > 0
+            ? groupSections.map((section) => ({ key: section.groupId, employeeIds: section.selectedIds }))
+            : [{ key: 0, employeeIds: selectedEmployeeIds }];
+
+    // Edit mode sends the stored block as-is (BE recalculates the counts after save).
+    const getSubmitProcessPart = (key: number, employeeIds: number[]): ProcessPartDto => {
+        const part = processParts[key] ?? emptyProcessPart;
+        if (isEditMode || manualMealTicketKeys[key]) return { ...part, isEat: true };
+        const counts = countMealTickets(employeeIds);
+        return { ...part, mainTicketCount: counts.main, secondaryTicketCount: counts.secondary, isEat: true };
+    };
+
+    const updateProcessPart = (key: number, patch: Partial<ProcessPartDto>) =>
+        setProcessParts((current) => ({ ...current, [key]: { ...(current[key] ?? emptyProcessPart), ...patch } }));
+
+    // Freezes both counts at their current values so editing one doesn't zero the other.
+    const overrideMealTicket = (key: number, employeeIds: number[], patch: Partial<ProcessPartDto>) => {
+        const counts = countMealTickets(employeeIds);
+        if (!manualMealTicketKeys[key]) {
+            updateProcessPart(key, { mainTicketCount: counts.main, secondaryTicketCount: counts.secondary, ...patch });
+            setManualMealTicketKeys((current) => ({ ...current, [key]: true }));
+        } else {
+            updateProcessPart(key, patch);
         }
-    }
-
-    const recalculateMealTickets = () => {
-        setAutoMealTicket(true);
-        setProcessPart((current) => ({
-            ...current,
-            mainTicketCount: mealTicketCounts.main,
-            secondaryTicketCount: mealTicketCounts.secondary,
-        }));
     };
 
     // setState only inside callbacks, never synchronously in the effect body (react-hooks/set-state-in-effect).
@@ -722,6 +782,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
         return () => clearTimeout(timeout);
     }, [date, startTime, endTime, selectedEmployeeIds, employeeOverrides, isEditMode, otFormId]);
+
+    // Clicks on a row's own controls stay with those controls.
+    const isControlClick = (event: React.MouseEvent) =>
+        Boolean((event.target as HTMLElement).closest("input, button, select, textarea, a, label"));
 
     const toggleEmployee = (employeeId: number) => {
         setSelectedEmployeeIds((current) =>
@@ -769,18 +833,45 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         }));
     };
 
-    const handleEmployeeDidEatChange = (employeeId: number, didEat: boolean) => {
-        setEmployeeOverrides((current) => ({
-            ...current,
-            [employeeId]: {
-                startTime: current[employeeId]?.startTime ?? "",
-                endTime: current[employeeId]?.endTime ?? endTime,
-                didEat,
-                noteVn: current[employeeId]?.noteVn ?? "",
-                noteJp: current[employeeId]?.noteJp ?? "",
-            },
-        }));
+    const setEmployeesDidEat = (employeeIds: number[], didEat: boolean) => {
+        setEmployeeOverrides((current) => {
+            const next = { ...current };
+            for (const id of employeeIds) {
+                next[id] = {
+                    startTime: current[id]?.startTime ?? "",
+                    endTime: current[id]?.endTime ?? endTime,
+                    didEat,
+                    noteVn: current[id]?.noteVn ?? "",
+                    noteJp: current[id]?.noteJp ?? "",
+                };
+            }
+            return next;
+        });
     };
+    const handleEmployeeDidEatChange = (employeeId: number, didEat: boolean) => setEmployeesDidEat([employeeId], didEat);
+
+    // Bulk toggle covers only the rows that show the checkbox: selected, group allows it, outside the early window.
+    const ateLaterBulkIds = selectedEmployeeIds.filter(
+        (id) =>
+            canEatLater(id) &&
+            !isEarlyMealWindowOt(employeeOverrides[id]?.startTime || startTime, employeeOverrides[id]?.endTime || endTime, setting)
+    );
+    const allAteLater = ateLaterBulkIds.length > 0 && ateLaterBulkIds.every((id) => !didEatOf(id));
+    const ateLaterHeader = (
+        <th rowSpan={2} className="h-px w-px whitespace-normal p-0 text-center align-bottom leading-tight">
+            <label className="flex h-full cursor-pointer flex-col items-center justify-end gap-1 px-2 py-2 has-disabled:cursor-not-allowed">
+                {t("colAteLater")}
+                <input
+                    type="checkbox"
+                    checked={allAteLater}
+                    onChange={() => setEmployeesDidEat(ateLaterBulkIds, allAteLater)}
+                    disabled={isSubmitting || ateLaterBulkIds.length === 0}
+                    aria-label={t("ateLaterAllLabel")}
+                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                />
+            </label>
+        </th>
+    );
 
     // Candidates for "add employee" while editing. Group forms: the whole Group (small), filtered by the
     // dropdown itself. Production forms: searched on the server by the typed keyword (empty = nothing).
@@ -858,20 +949,23 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     const handleDepartmentChange = (nextId: number | "") => {
         setDepartmentId(nextId === "" ? null : nextId);
-        setGroupId(null);
+        setGroupIds([]);
         setSelectedEmployeeIds([]);
         setEmployeeOverrides({});
     };
 
-    const handleGroupChange = (nextId: number | "") => {
-        setGroupId(nextId === "" ? null : nextId);
-        setSelectedEmployeeIds([]);
-        setEmployeeOverrides({});
+    // Keeps the selection of groups that stay; drops people of the removed ones.
+    const handleGroupIdsChange = (nextIds: number[]) => {
+        const removedEmployeeIds = new Set(
+            employeeGroups.filter((g) => !nextIds.includes(g.groupId)).flatMap((g) => g.employees.map((e) => e.id))
+        );
+        setGroupIds(nextIds);
+        setSelectedEmployeeIds((current) => current.filter((id) => !removedEmployeeIds.has(id)));
     };
 
     const handleModeChange = (nextMode: "group" | "production") => {
         setFormMode(nextMode);
-        setGroupId(null);
+        setGroupIds([]);
         setSelectedEmployeeIds([]);
         setEmployeeOverrides({});
     };
@@ -882,13 +976,18 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         // Edit mode locks the other fields, so only require at least one person. groupId is required in group mode only.
         if (
             (!isEditMode || isOfficeEdit) &&
-            ((formMode === "group" && !groupId) || !departmentId || !reasonId || !otCaseId || !date || !startTime || !endTime)
+            ((formMode === "group" && groupIds.length === 0) || !departmentId || !reasonId || !otCaseId || !date || !startTime || !endTime)
         ) {
             toast.error(t("requiredFieldsError"));
             return;
         }
         if (selectedEmployeeIds.length === 0) {
             toast.error(t("requiredFieldsError"));
+            return;
+        }
+        const emptyGroup = groupSections.find((section) => section.selectedIds.length === 0);
+        if (emptyGroup) {
+            toast.error(t("groupNoEmployeeError", { group: groupLabel(emptyGroup.groupId) }));
             return;
         }
         if ((!isEditMode || isOfficeEdit) && isTimeRangeInvalid) {
@@ -936,17 +1035,32 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             return;
         }
         setIsSubmitting(true);
+        const toEmployeeInput = (employeeId: number): OtFormEmployeeInputDto => ({
+            employeeId,
+            startTime: `${employeeOverrides[employeeId]?.startTime || startTime}:00`,
+            endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
+            didEat: didEatOf(employeeId),
+            noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
+            noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
+        });
+        const buildCreateDto = (employeeIds: number[], processPartKey: number, formGroupId: number | null): CreateOtFormDto => ({
+            groupId: formGroupId,
+            isProductionForm: formGroupId === null,
+            departmentId: departmentId!,
+            reasonId: reasonId!,
+            otCaseId: otCases.find((c) => c.code === otCaseCodeFor(employeeIds))?.id ?? otCaseId!,
+            startTime: `${startTime}:00`,
+            endTime: `${endTime}:00`,
+            subReason: subReason.trim() || null,
+            totalHour,
+            date,
+            employees: employeeIds.map(toEmployeeInput),
+            processPart: getSubmitProcessPart(processPartKey, employeeIds),
+            secondaryPassword,
+        });
         try {
             let result;
             if (isEditMode && otFormId) {
-                const employees: UpdateOtFormEmployeeTimeDto[] = selectedEmployeeIds.map((employeeId) => ({
-                    employeeId,
-                    startTime: `${employeeOverrides[employeeId]?.startTime || startTime}:00`,
-                    endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
-                    didEat: employeeOverrides[employeeId]?.didEat ?? defaultDidEatForNewEmployee,
-                    noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
-                    noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
-                }));
                 // selectedEmployeeIds already reflects staged adds/removals; removedEmployees carries the required reasons.
                 const removedEmployees = Object.entries(pendingRemovals).map(([employeeId, reason]) => ({
                     employeeId: Number(employeeId),
@@ -960,39 +1074,27 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                               endTime: `${endTime}:00`,
                               reasonId: reasonId!,
                               subReason: subReason.trim() || null,
-                              processPart: { ...processPart, isEat: true },
+                              processPart: getSubmitProcessPart(0, selectedEmployeeIds),
                           }
                         : null,
-                    employees,
+                    employees: selectedEmployeeIds.map(toEmployeeInput),
                     removedEmployees,
                     secondaryPassword,
                     resubmitReason: resubmitKind != null ? resubmitReason.trim() : null,
                 });
-            } else {
-                const employees: OtFormEmployeeInputDto[] = selectedEmployeeIds.map((employeeId) => ({
-                    employeeId,
-                    startTime: `${employeeOverrides[employeeId]?.startTime || startTime}:00`,
-                    endTime: `${employeeOverrides[employeeId]?.endTime || endTime}:00`,
-                    didEat: employeeOverrides[employeeId]?.didEat ?? defaultDidEatForNewEmployee,
-                    noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
-                    noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
-                }));
-                result = await OtFormApi.createOtForm({
-                    groupId: formMode === "production" ? null : groupId!,
-                    isProductionForm: formMode === "production",
-                    departmentId: departmentId!,
-                    reasonId: reasonId!,
-                    otCaseId: otCaseId!,
-                    startTime: `${startTime}:00`,
-                    endTime: `${endTime}:00`,
-                    subReason: subReason.trim() || null,
-                    totalHour,
-                    date,
-                    employees,
-                    // Always sent with isEat=true; BE enforces the same (defense in depth).
-                    processPart: { ...processPart, isEat: true },
+            } else if (formMode === "group") {
+                const created = await OtFormApi.createOtForms({
                     secondaryPassword,
+                    forms: groupSections.map((section) => buildCreateDto(section.selectedIds, section.groupId, section.groupId)),
                 });
+                if (created.length !== 1) {
+                    toast.success(t("createManySuccess", { count: created.length }));
+                    router.push("/ot/list");
+                    return;
+                }
+                result = created[0];
+            } else {
+                result = await OtFormApi.createOtForm(buildCreateDto(selectedEmployeeIds, 0, null));
             }
             toast.success(isEditMode ? t("updateSuccess") : t("createSuccess"));
             router.push({ pathname: "/ot/forms", query: { id: String(result.id) } });
@@ -1068,13 +1170,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 )}
             </div>
 
-            {/* A single locked scope needs no banner (the unit field shows it); several scopes aren't shown anywhere else. */}
-            {!isEditMode && isScopeRestricted && !isScopeLocked && (
-                <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
-                    {t("scopeRestrictedMessage", { groupNames: createScopes!.map((s) => s.groupNameVn).join(", ") })}
-                </div>
-            )}
-
             {/* Same rule: a single combo is already prefilled and locked; several need the banner. */}
             {!isEditMode && formMode === "production" && isProductionScopeRestricted && !isProductionScopeLocked && (
                 <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
@@ -1115,20 +1210,30 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 onChange={handleDepartmentChange}
                                 placeholder={t("fieldDepartmentPlaceholder")}
                                 // Production mode locks as soon as any scope exists: the Line Leader's department is known from one combo.
-                                disabled={isSubmitting || isEditMode || (formMode === "group" ? isScopeLocked : isProductionScopeRestricted)}
+                                disabled={isSubmitting || isEditMode || (formMode === "group" ? isScopeDepartmentLocked : isProductionScopeRestricted)}
                             />
                         </label>
 
                         {formMode === "group" && (
                             <label className="block">
                                 <span className={fieldLabelClassName}>{t("fieldGroup")}<RequiredMark /></span>
-                                <SearchableSelect
-                                    options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
-                                    value={groupId ?? ""}
-                                    onChange={handleGroupChange}
-                                    placeholder={departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
-                                    disabled={isSubmitting || isScopeLocked || !departmentId || isEditMode}
-                                />
+                                {isEditMode || isScopeLocked ? (
+                                    <SearchableSelect
+                                        options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
+                                        value={groupId ?? ""}
+                                        onChange={() => {}}
+                                        placeholder={t("fieldGroupPlaceholder")}
+                                        disabled
+                                    />
+                                ) : (
+                                    <MultiSelect
+                                        options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
+                                        values={groupIds}
+                                        onChange={handleGroupIdsChange}
+                                        placeholder={departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
+                                        disabled={isSubmitting || !departmentId}
+                                    />
+                                )}
                             </label>
                         )}
 
@@ -1199,6 +1304,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             />
                         </label>
 
+                        {/* With several groups each group header shows its own case. */}
+                        {!isMultiGroup && (
                         <label className="block sm:col-span-2">
                             <span className={`${fieldLabelClassName.replace("block", "flex")} items-center gap-1`}>
                                 {t("fieldOtCase")}<RequiredMark />
@@ -1221,6 +1328,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 disabled
                             />
                         </label>
+                        )}
 
                         
                     </div>
@@ -1242,20 +1350,26 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         {t("otherSupportLabel")}
                     </span>
 
-                    <div className="space-y-2.5">
+                    {supportSections.map((section) => {
+                        const part = processParts[section.key] ?? emptyProcessPart;
+                        const isManual = Boolean(manualMealTicketKeys[section.key]);
+                        const counts = countMealTickets(section.employeeIds);
+                        return (
+                    <div key={section.key} className="space-y-2.5">
+                        {isMultiGroup && <span className="block text-sm font-semibold text-[#191c1e]">{groupLabel(section.key)}</span>}
                         <div className="flex flex-nowrap gap-1.5">
                             <ToggleOptionCard
                                 icon={<Car size={13} />}
                                 label={t("transportationLabel")}
-                                checked={processPart.isTransportation}
-                                onChange={(value) => setProcessPart((current) => ({ ...current, isTransportation: value }))}
+                                checked={part.isTransportation}
+                                onChange={(value) => updateProcessPart(section.key, { isTransportation: value })}
                                 disabled={isSubmitting || isHeaderLocked}
                             />
                             <ToggleOptionCard
                                 icon={<Printer size={13} />}
                                 label={t("copyRoomLabel")}
-                                checked={processPart.isUseCopyRoom}
-                                onChange={(value) => setProcessPart((current) => ({ ...current, isUseCopyRoom: value }))}
+                                checked={part.isUseCopyRoom}
+                                onChange={(value) => updateProcessPart(section.key, { isUseCopyRoom: value })}
                                 disabled={isSubmitting || isHeaderLocked}
                             />
                         </div>
@@ -1265,14 +1379,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <div className="flex items-center justify-between gap-2 text-xs">
                                 <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("mealTicketCountsTitle")}</span>
                                 {!isEditMode &&
-                                    (autoMealTicket ? (
+                                    (!isManual ? (
                                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-semibold text-emerald-700">
                                             <Check className="h-3 w-3" /> {t("mealTicketAutoBadge")}
                                         </span>
                                     ) : (
                                         <button
                                             type="button"
-                                            onClick={recalculateMealTickets}
+                                            onClick={() => setManualMealTicketKeys((current) => ({ ...current, [section.key]: false }))}
                                             disabled={isSubmitting}
                                             className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1 font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                                         >
@@ -1287,13 +1401,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <input
                                     type="number"
                                     min={0}
-                                    // Edit mode doesn't send this block (BE recalculates after save), so show the live computed value
-                                    // rather than the stale loaded one.
-                                    value={isEditMode ? mealTicketCounts.main : processPart.mainTicketCount}
-                                    onChange={(event) => {
-                                        setAutoMealTicket(false);
-                                        setProcessPart((current) => ({ ...current, mainTicketCount: Number(event.target.value) }));
-                                    }}
+                                    // Edit mode never overrides (BE recalculates after save), so it shows the live computed value.
+                                    value={isManual ? part.mainTicketCount : counts.main}
+                                    onChange={(event) =>
+                                        overrideMealTicket(section.key, section.employeeIds, { mainTicketCount: Number(event.target.value) })
+                                    }
                                     disabled={isSubmitting || isEditMode}
                                     className={`${compactFieldClassName.replace("w-full", "w-20")} text-center`}
                                 />
@@ -1303,14 +1415,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <input
                                     type="number"
                                     min={0}
-                                    value={isEditMode ? mealTicketCounts.secondary : processPart.secondaryTicketCount}
-                                    onChange={(event) => {
-                                        setAutoMealTicket(false);
-                                        setProcessPart((current) => ({
-                                            ...current,
-                                            secondaryTicketCount: Number(event.target.value),
-                                        }));
-                                    }}
+                                    value={isManual ? part.secondaryTicketCount : counts.secondary}
+                                    onChange={(event) =>
+                                        overrideMealTicket(section.key, section.employeeIds, { secondaryTicketCount: Number(event.target.value) })
+                                    }
                                     disabled={isSubmitting || isEditMode}
                                     className={`${compactFieldClassName.replace("w-full", "w-20")} text-center`}
                                 />
@@ -1320,10 +1428,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <input
                                     type="number"
                                     min={0}
-                                    value={processPart.milkCount}
-                                    onChange={(event) =>
-                                        setProcessPart((current) => ({ ...current, milkCount: Number(event.target.value) }))
-                                    }
+                                    value={part.milkCount}
+                                    onChange={(event) => updateProcessPart(section.key, { milkCount: Number(event.target.value) })}
                                     disabled={isSubmitting || isHeaderLocked}
                                     className={`${compactFieldClassName.replace("w-full", "w-20")} text-center`}
                                 />
@@ -1334,15 +1440,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("anotherSuggestionVnLabel")}</span>
                             <input
-                                value={processPart.anotherSuggestionVn ?? ""}
-                                onChange={(event) =>
-                                    setProcessPart((current) => ({ ...current, anotherSuggestionVn: event.target.value }))
-                                }
+                                value={part.anotherSuggestionVn ?? ""}
+                                onChange={(event) => updateProcessPart(section.key, { anotherSuggestionVn: event.target.value })}
                                 disabled={isSubmitting || isHeaderLocked}
                                 className={compactFieldClassName}
                             />
                         </label>
                     </div>
+                        );
+                    })}
                     </div>
                 </section>
 
@@ -1351,7 +1457,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                             {t("employeeListTitle")}
                         </h2>
-                        <div className={`flex flex-wrap items-center justify-end gap-2 ${isEditMode ? "w-full sm:w-auto" : ""}`}>
+                        <div className={`flex flex-wrap items-center justify-end gap-2 ${isEditMode || isGroupCreate ? "w-full sm:w-auto" : ""}`}>
+                            {isGroupCreate && groupEmployees.length > 0 && (
+                                <input
+                                    value={employeeQuery}
+                                    onChange={(event) => setEmployeeQuery(event.target.value)}
+                                    placeholder={t("employeeSearchPlaceholder")}
+                                    aria-label={t("employeeSearchPlaceholder")}
+                                    className="h-8 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-xs text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] sm:w-56"
+                                />
+                            )}
                             {isEditMode && (
                                 <div className="w-full sm:w-64">
                                     <SearchableSelect
@@ -1404,9 +1519,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
                                         {/* Production forms: meals mandatory, nothing to choose. Office forms show it inverted as "eat later". */}
-                                        {formMode !== "production" && (
-                                            <th rowSpan={2} className="w-px whitespace-normal px-2 py-2 text-center align-bottom leading-tight">{t("colAteLater")}</th>
-                                        )}
+                                        {showAteLaterColumn && ateLaterHeader}
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
                                         <th rowSpan={2} className="sticky right-0 z-10 bg-white px-2 py-2" />
@@ -1427,7 +1540,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     </td>
                                                     <td
                                                         className="px-3 py-2 align-top text-sm text-[#930006]"
-                                                        colSpan={formMode === "production" ? 9 : 7}
+                                                        colSpan={formMode === "production" ? 10 : showAteLaterColumn ? 8 : 7}
                                                     >
                                                         <span className="line-through">{employee.fullName}</span> —{" "}
                                                         {removalReason ? t("willBeRemovedNote", { reason: removalReason }) : t("willBeRemovedNoteNoReason")}
@@ -1449,7 +1562,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         // No daily data here (monthToDate/yearToDate are actuals, not projections), so warn month/year only.
                                         const currentStartTime = employeeOverrides[employee.employeeId]?.startTime || startTime;
                                         const currentEndTime = employeeOverrides[employee.employeeId]?.endTime || endTime;
-                                        const currentDidEat = employeeOverrides[employee.employeeId]?.didEat ?? defaultDidEatForNewEmployee;
+                                        const currentDidEat = didEatOf(employee.employeeId);
                                         const currentAteLater = !currentDidEat;
                                         const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);
                                         const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, currentDidEat, setting);
@@ -1488,19 +1601,21 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         disabled={isSubmitting}
                                                     />
                                                 </td>
-                                                {formMode !== "production" && (
-                                                    <td className="px-3 py-2 align-top">
-                                                        {earlyWindow ? null : (
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={currentAteLater}
-                                                                onChange={(event) =>
-                                                                    handleEmployeeDidEatChange(employee.employeeId, !event.target.checked)
-                                                                }
-                                                                disabled={isSubmitting}
-                                                                aria-label={t("ateLaterLabel")}
-                                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                            />
+                                                {showAteLaterColumn && (
+                                                    <td className="h-px p-0 align-top">
+                                                        {earlyWindow || !canEatLater(employee.employeeId) ? null : (
+                                                            <label className="flex h-full cursor-pointer justify-center px-3 py-2 has-disabled:cursor-not-allowed">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={currentAteLater}
+                                                                    onChange={(event) =>
+                                                                        handleEmployeeDidEatChange(employee.employeeId, !event.target.checked)
+                                                                    }
+                                                                    disabled={isSubmitting}
+                                                                    aria-label={t("ateLaterLabel")}
+                                                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                                />
+                                                            </label>
                                                         )}
                                                     </td>
                                                 )}
@@ -1542,7 +1657,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             if (!meta) return null;
                                             const currentStartTime = employeeOverrides[employeeId]?.startTime || startTime;
                                             const currentEndTime = employeeOverrides[employeeId]?.endTime || endTime;
-                                            const currentDidEat = employeeOverrides[employeeId]?.didEat ?? defaultDidEatForNewEmployee;
+                                            const currentDidEat = didEatOf(employeeId);
                                             const currentAteLater = !currentDidEat;
                                             const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);
                                             const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, currentDidEat, setting);
@@ -1578,17 +1693,19 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                             disabled={isSubmitting}
                                                         />
                                                     </td>
-                                                    {formMode !== "production" && (
-                                                        <td className="px-3 py-2 align-top">
-                                                            {earlyWindow ? null : (
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={currentAteLater}
-                                                                    onChange={(event) => handleEmployeeDidEatChange(employeeId, !event.target.checked)}
-                                                                    disabled={isSubmitting}
-                                                                    aria-label={t("ateLaterLabel")}
-                                                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                                />
+                                                    {showAteLaterColumn && (
+                                                        <td className="h-px p-0 align-top">
+                                                            {earlyWindow || !canEatLater(employeeId) ? null : (
+                                                                <label className="flex h-full cursor-pointer justify-center px-3 py-2 has-disabled:cursor-not-allowed">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={currentAteLater}
+                                                                        onChange={(event) => handleEmployeeDidEatChange(employeeId, !event.target.checked)}
+                                                                        disabled={isSubmitting}
+                                                                        aria-label={t("ateLaterLabel")}
+                                                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                                    />
+                                                                </label>
                                                             )}
                                                         </td>
                                                     )}
@@ -1736,20 +1853,22 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     <table className={tableClassName}>
                                         <thead className="sticky top-0 z-10 bg-white">
                                             <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                <th rowSpan={2} className="w-10 px-3 py-2 align-bottom">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={productionResults.length > 0 && productionResults.every((item) => selectedEmployeeIds.includes(item.employeeId))}
-                                                        onChange={() =>
-                                                            setEmployeesSelected(
-                                                                productionResults.map((item) => item.employeeId),
-                                                                !productionResults.every((item) => selectedEmployeeIds.includes(item.employeeId))
-                                                            )
-                                                        }
-                                                        disabled={isSubmitting}
-                                                        aria-label={t("selectAllLabel")}
-                                                        className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                    />
+                                                <th rowSpan={2} className="h-px w-10 p-0 align-bottom">
+                                                    <label className="flex h-full cursor-pointer items-end justify-center px-3 py-2 has-disabled:cursor-not-allowed">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={productionResults.length > 0 && productionResults.every((item) => selectedEmployeeIds.includes(item.employeeId))}
+                                                            onChange={() =>
+                                                                setEmployeesSelected(
+                                                                    productionResults.map((item) => item.employeeId),
+                                                                    !productionResults.every((item) => selectedEmployeeIds.includes(item.employeeId))
+                                                                )
+                                                            }
+                                                            disabled={isSubmitting}
+                                                            aria-label={t("selectAllLabel")}
+                                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                        />
+                                                    </label>
                                                 </th>
                                                 <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
                                                 <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
@@ -1790,7 +1909,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 return (
                                                     <tr
                                                         key={item.employeeId}
-                                                        className={`border-b border-[#f1f5f9] transition-colors ${checked ? "bg-[#fff4f2]" : "bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"}`}
+                                                        onClick={(event) => {
+                                                            if (!isSubmitting && !isControlClick(event)) toggleEmployee(item.employeeId);
+                                                        }}
+                                                        className={`cursor-pointer border-b border-[#f1f5f9] transition-colors ${checked ? "bg-[#fff4f2]" : "bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"}`}
                                                     >
                                                         <td className="px-3 py-2 align-top">
                                                             <input
@@ -1861,7 +1983,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 </div>
                             )}
                         </div>
-                    ) : !isCoreFormInfoFilled || !groupId ? (
+                    ) : !isCoreFormInfoFilled || groupIds.length === 0 ? (
                         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#e0e3e5] bg-[#f8fafc] px-4 py-16 text-center text-sm text-[#5e3f3a]">
                             <Users className="h-8 w-8 text-[#c7ccd1]" />
                             {t("employeeListPlaceholder")}
@@ -1877,27 +1999,29 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <table className={tableClassName}>
                                 <thead className="sticky top-0 z-10 bg-white">
                                     <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                        <th rowSpan={2} className="w-10 px-3 py-2 align-bottom">
-                                            <input
-                                                type="checkbox"
-                                                checked={groupEmployees.length > 0 && groupEmployees.every((employee) => selectedEmployeeIds.includes(employee.id))}
-                                                onChange={() =>
-                                                    setEmployeesSelected(
-                                                        groupEmployees.map((employee) => employee.id),
-                                                        !groupEmployees.every((employee) => selectedEmployeeIds.includes(employee.id))
-                                                    )
-                                                }
-                                                disabled={isSubmitting}
-                                                aria-label={t("selectAllLabel")}
-                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                            />
+                                        <th rowSpan={2} className="h-px w-10 p-0 align-bottom">
+                                            <label className="flex h-full cursor-pointer items-end justify-center px-3 py-2 has-disabled:cursor-not-allowed">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={visibleGroupEmployees.length > 0 && visibleGroupEmployees.every((employee) => selectedEmployeeIds.includes(employee.id))}
+                                                    onChange={() =>
+                                                        setEmployeesSelected(
+                                                            visibleGroupEmployees.map((employee) => employee.id),
+                                                            !visibleGroupEmployees.every((employee) => selectedEmployeeIds.includes(employee.id))
+                                                        )
+                                                    }
+                                                    disabled={isSubmitting}
+                                                    aria-label={t("selectAllLabel")}
+                                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                />
+                                            </label>
                                         </th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
                                         <th colSpan={3} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
-                                        <th rowSpan={2} className="w-px whitespace-normal px-2 py-2 text-center align-bottom leading-tight">{t("colAteLater")}</th>
+                                        {showAteLaterColumn && ateLaterHeader}
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
                                     </tr>
@@ -1908,14 +2032,60 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {groupEmployees.map((employee) => {
+                                    {groupSections.map((section) => {
+                                        const caseCode = otCaseCodeFor(section.selectedIds);
+                                        const allSelected =
+                                            section.visibleEmployees.length > 0 &&
+                                            section.visibleEmployees.every((employee) => selectedEmployeeIds.includes(employee.id));
+                                        return (
+                                    <Fragment key={section.groupId}>
+                                    {isMultiGroup && (!employeeKeyword || section.visibleEmployees.length > 0) && (
+                                        <tr
+                                            onClick={(event) => {
+                                                if (!isSubmitting && !isControlClick(event) && section.visibleEmployees.length > 0)
+                                                    setEmployeesSelected(section.visibleEmployees.map((employee) => employee.id), !allSelected);
+                                            }}
+                                            className="cursor-pointer border-b border-[#e0e3e5] bg-[#eef1f4]"
+                                        >
+                                            <td className="px-3 py-2 align-middle">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={allSelected}
+                                                    onChange={() => setEmployeesSelected(section.visibleEmployees.map((employee) => employee.id), !allSelected)}
+                                                    disabled={isSubmitting || section.visibleEmployees.length === 0}
+                                                    aria-label={t("selectAllLabel")}
+                                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                />
+                                            </td>
+                                            <td colSpan={showAteLaterColumn ? 10 : 9} className="px-3 py-2 text-sm">
+                                                <span className="inline-flex items-center gap-2">
+                                                    <span className="font-semibold text-[#191c1e]">{groupLabel(section.groupId)}</span>
+                                                    <span className="text-xs tabular-nums text-[#5e3f3a]">
+                                                        {section.selectedIds.length}/{section.employees.length}
+                                                    </span>
+                                                    {caseCode && (
+                                                        <span
+                                                            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
+                                                                caseCode === "TH3"
+                                                                    ? "border-[#fde68a] bg-[#fffbeb] text-[#b45309]"
+                                                                    : "border-[#e0e3e5] bg-white text-[#5e3f3a]"
+                                                            }`}
+                                                        >
+                                                            {caseCode}
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {section.visibleEmployees.map((employee) => {
                                         const checked = selectedEmployeeIds.includes(employee.id);
                                         // Use projected accumulation (actual + other pending forms) so two concurrent forms both see the warning.
                                         // Early warning only; BE ValidateOtHourLimitsAsync is the real guard.
                                         const currentStartTime = employeeOverrides[employee.id]?.startTime || startTime;
                                         const currentEndTime = employeeOverrides[employee.id]?.endTime || endTime;
                                         // BE field (true = eats during the shift, hours deducted); the UI shows it inverted as "eat later".
-                                        const currentDidEat = employeeOverrides[employee.id]?.didEat ?? defaultDidEatForNewEmployee;
+                                        const currentDidEat = didEatOf(employee.id);
                                         const currentAteLater = !currentDidEat;
                                         const earlyWindow = isEarlyMealWindowOt(currentStartTime, currentEndTime, setting);
                                         const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, currentDidEat, setting);
@@ -1933,7 +2103,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         return (
                                             <tr
                                                 key={employee.id}
-                                                className={`border-b border-[#f1f5f9] transition-colors ${checked ? "bg-[#fff4f2]" : "bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"}`}
+                                                onClick={(event) => {
+                                                    if (!isSubmitting && !isControlClick(event)) toggleEmployee(employee.id);
+                                                }}
+                                                className={`cursor-pointer border-b border-[#f1f5f9] transition-colors ${checked ? "bg-[#fff4f2]" : "bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"}`}
                                             >
                                                 <td className="px-3 py-2 align-top">
                                                     <input
@@ -1978,18 +2151,22 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 </AlertTriangle>
 )}
                                                 </td>
-                                                <td className="px-3 py-2 align-top">
-                                                    {earlyWindow ? null : (
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={currentAteLater}
-                                                            onChange={(event) => handleEmployeeDidEatChange(employee.id, !event.target.checked)}
-                                                            disabled={isSubmitting || !checked}
-                                                            aria-label={t("ateLaterLabel")}
-                                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                        />
-                                                    )}
-                                                </td>
+                                                {showAteLaterColumn && (
+                                                    <td className="h-px p-0 align-top">
+                                                        {earlyWindow || !canEatLater(employee.id) ? null : (
+                                                            <label className="flex h-full cursor-pointer justify-center px-3 py-2 has-disabled:cursor-not-allowed">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={currentAteLater}
+                                                                    onChange={(event) => handleEmployeeDidEatChange(employee.id, !event.target.checked)}
+                                                                    disabled={isSubmitting || !checked}
+                                                                    aria-label={t("ateLaterLabel")}
+                                                                    className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                                                />
+                                                            </label>
+                                                        )}
+                                                    </td>
+                                                )}
                                                 <td className="px-3 py-2 align-top">
                                                     {mealTicketType !== MEAL_TICKET_NONE && <MealTicketTypeBadge type={mealTicketType} t={t} />}
                                                 </td>
@@ -2005,6 +2182,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             </tr>
                                         );
                                     })}
+                                    </Fragment>
+                                        );
+                                    })}
+                                    {employeeKeyword && visibleGroupEmployees.length === 0 && (
+                                        <tr>
+                                            <td colSpan={showAteLaterColumn ? 11 : 10} className="px-3 py-8 text-center text-sm text-[#5e3f3a]">
+                                                {t("employeeSearchNoResult")}
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>

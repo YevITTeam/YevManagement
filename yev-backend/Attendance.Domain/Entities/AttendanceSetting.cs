@@ -35,6 +35,9 @@ public partial class AttendanceSetting
     // Vietnam local time of day when OtFormBatchBackgroundService builds batches.
     public TimeOnly BatchAutoSendTime { get; set; }
 
+    // Lets a restarted app pool catch up on a sweep it slept through.
+    public DateOnly? LastBatchSweepDate { get; set; }
+
     // Days after completion during which an office form signed by a Manager can still be edited and re-signed. Default 3.
     public int ResubmitWindowDays { get; set; }
 

@@ -25,6 +25,9 @@ public partial class OtFormEmployee
 
     public decimal YearToDate { get; set; }
 
+    // Hours actually added to the ledger at sign-off, so reversing subtracts the same figure even after settings change.
+    public decimal? LedgerHours { get; set; }
+
     // Soft removal by an approver: the form is a legal document, so who was dropped and why must stay traceable.
     // Accumulation, NumberOfEmployee and the PDF all filter on IsRemoved.
     public bool IsRemoved { get; set; }

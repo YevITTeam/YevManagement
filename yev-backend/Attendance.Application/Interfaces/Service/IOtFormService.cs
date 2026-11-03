@@ -52,6 +52,7 @@ namespace Attendance.Application.Interfaces.Service
         Task<List<int>> CheckOverlapAsync(CheckOtFormOverlapDto request);
 
         Task<OtFormDto> CreateAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request);
+        Task<List<OtFormDto>> CreateManyAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateManyOtFormsDto request);
 
         Task<OtFormDto> UpdateAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request);
 

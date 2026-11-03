@@ -29,6 +29,7 @@ export interface CreateUpdateGroupDto {
     groupNameJp: string | null;
     departmentId: number;
     workshopId: number;
+    allowEatLater: boolean;
 }
 
 export const GroupApi = {

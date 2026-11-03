@@ -20,11 +20,17 @@ export function useDragScroll<T extends HTMLElement>() {
             el.scrollLeft = startLeft - (moveEvent.clientX - startX);
             el.scrollTop = startTop - (moveEvent.clientY - startY);
         };
-        const onUp = () => {
+        const onUp = (upEvent: MouseEvent) => {
             el.style.cursor = "";
             el.style.userSelect = "";
             window.removeEventListener("mousemove", onMove);
             window.removeEventListener("mouseup", onUp);
+            // A real drag must not also count as a click on the row it ended over (rows can be click-to-select).
+            if (Math.abs(upEvent.clientX - startX) + Math.abs(upEvent.clientY - startY) > 5) {
+                const swallow = (clickEvent: MouseEvent) => clickEvent.stopPropagation();
+                window.addEventListener("click", swallow, { capture: true, once: true });
+                setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+            }
         };
         window.addEventListener("mousemove", onMove);
         window.addEventListener("mouseup", onUp);

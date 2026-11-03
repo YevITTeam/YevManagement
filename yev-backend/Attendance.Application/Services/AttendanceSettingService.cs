@@ -64,10 +64,10 @@ namespace Attendance.Application.Services
             return ToDto(setting);
         }
 
-        public async Task<TimeOnly> GetBatchAutoSendTimeAsync()
+        public async Task<(TimeOnly RunAt, DateOnly? LastRunDate)> GetBatchScheduleAsync()
         {
             var setting = await GetOrCreateSettingEntityAsync();
-            return setting.BatchAutoSendTime;
+            return (setting.BatchAutoSendTime, setting.LastBatchSweepDate);
         }
 
         public async Task<bool> SendTestEmailAsync(SendTestEmailDto request, string senderDisplayName)

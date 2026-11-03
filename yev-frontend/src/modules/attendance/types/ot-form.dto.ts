@@ -73,8 +73,8 @@ export interface OtFormEmployeeDto {
     shiftTeamCodeSnapshot: string | null;
 }
 
-// Derived from the caller's Employee.GroupId; at most one item. Empty = Admin (unrestricted) or account not linked
-// to an Employee, FE distinguishes the two.
+// Caller's own group plus groups an admin granted, all in one department. Empty = Admin (unrestricted) or account
+// not linked to an Employee, FE distinguishes the two.
 export interface MyCreateScopeItemDto {
     groupId: number;
     groupNameVn: string;
@@ -115,6 +115,12 @@ export interface CreateOtFormDto {
     employees: OtFormEmployeeInputDto[];
     processPart: ProcessPartDto | null;
     secondaryPassword: string;
+}
+
+// One office form per group, created all-or-nothing; BE requires secondaryPassword on every item as well.
+export interface CreateOtFormsDto {
+    secondaryPassword: string;
+    forms: CreateOtFormDto[];
 }
 
 // noteVn/noteJp let leaders comment per employee on production-line forms instead of on paper.

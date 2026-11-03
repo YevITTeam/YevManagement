@@ -22,6 +22,7 @@ const statusLabels: Record<number, string> = {
   1: "Đang sử dụng",
   2: "Chờ thanh lý",
   3: "Đã thanh lý",
+  4: "Đang sửa chữa",
 };
 
 const statusClasses: Record<number, string> = {
@@ -29,6 +30,7 @@ const statusClasses: Record<number, string> = {
   1: "border border-[#16a34a] bg-[#16a34a] text-white",
   2: "border border-[#f59e0b] bg-[#fef3c7] text-[#b45309]",
   3: "border border-[#dc2626] bg-[#dc2626] text-white",
+  4: "border border-[#8b5cf6] bg-[#ede9fe] text-[#6d28d9]",
 };
 
 const defaultFilters: DeviceFilters = {

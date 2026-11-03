@@ -19,5 +19,7 @@ namespace Attendance.Application.Dtos.Groups
 
         [Required(ErrorMessage = "Xưởng không được để trống")]
         public int WorkshopId { get; set; }
+
+        public bool AllowEatLater { get; set; } = true;
     }
 }

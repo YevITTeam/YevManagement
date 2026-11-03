@@ -14,18 +14,10 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import PermissionTree from "./PermissionTree";
 import RoleForm from "../roles/RoleForm";
+import { normalizeText } from "@/lib/normalizeText";
 
 // Roles per page in the left list; search and pager appear only when there are more roles than this.
 const ROLE_PAGE_SIZE = 8;
-
-// Accent-free, lower-case form used for matching role names / descriptions.
-function normalizeText(value: string) {
-    return value
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/đ/g, "d")
-        .toLowerCase();
-}
 
 type RoleDialogState = { mode: "create" } | { mode: "edit"; role: RoleDto } | null;
 

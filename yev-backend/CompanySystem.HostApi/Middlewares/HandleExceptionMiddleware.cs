@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
 using System.ComponentModel.DataAnnotations;
@@ -86,6 +87,12 @@ namespace CompanySystem.HostApi.Middlewares
                 case DbUpdateConcurrencyException:
                     statusCode = (int)HttpStatusCode.Conflict;
                     message = "Dữ liệu vừa được thay đổi ở một phiên khác, vui lòng tải lại trang rồi thử lại.";
+                    break;
+
+                // Unique key hit by two concurrent inserts (e.g. a month's first ledger row) or a missed duplicate check.
+                case DbUpdateException { InnerException: SqlException { Number: 2601 or 2627 } }:
+                    statusCode = (int)HttpStatusCode.Conflict;
+                    message = "Dữ liệu bị trùng hoặc vừa được ghi ở một phiên khác, vui lòng tải lại trang rồi thử lại.";
                     break;
 
                 // Reaching this case usually means a service skipped its own duplicate/FK check —

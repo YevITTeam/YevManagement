@@ -15,6 +15,10 @@ namespace Attendance.Application.Services
         // Short expiry: self-confirmation happens right after the request.
         private const int ConfirmationExpiryMinutes = 30;
 
+        // Login-free email links make the secondary password the only barrier, so guesses are capped per user.
+        private const int MaxFailedAttempts = 5;
+        private static readonly TimeSpan LockDuration = TimeSpan.FromMinutes(15);
+
         private static readonly PasswordHasher<object> PasswordHasher = new();
 
         private readonly IUserDirectoryService _userDirectoryService;
@@ -115,10 +119,22 @@ namespace Attendance.Application.Services
             if (record == null)
                 throw new DomainException("Bạn chưa thiết lập mật khẩu cấp 2. Vui lòng thiết lập trước khi ký duyệt đơn.");
 
+            var now = TimeHelper.GetCurrentUtcTime();
+            if (record.LockedUntil > now)
+                throw new DomainException(
+                    $"Mật khẩu cấp 2 đang bị khoá do nhập sai {MaxFailedAttempts} lần, thử lại sau {Math.Ceiling((record.LockedUntil.Value - now).TotalMinutes)} phút.");
+
             var result = PasswordHasher.VerifyHashedPassword(null!, record.PasswordHash, plainPassword);
             if (result == PasswordVerificationResult.Failed)
+            {
+                await _unitOfWork.SecondaryPasswords.RegisterFailedAttemptAsync(record.Id, MaxFailedAttempts, now.Add(LockDuration));
                 throw new DomainException("Mật khẩu cấp 2 không đúng.");
+            }
+
+            if (record.FailedAttempts > 0)
+                await _unitOfWork.SecondaryPasswords.ResetFailedAttemptsAsync(record.Id);
         }
+
 
         private async Task<PendingSecondaryPasswordConfirmation> ResolvePendingConfirmationAsync(string token)
         {

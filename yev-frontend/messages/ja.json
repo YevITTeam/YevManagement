@@ -175,7 +175,8 @@
       "colWorkshop": "工場",
       "fieldWorkshop": "工場",
       "fieldWorkshopPlaceholder": "工場を選択してください...",
-      "allWorkshops": "すべての工場"
+      "allWorkshops": "すべての工場",
+      "fieldAllowEatLater": "残業後の食事を許可する"
     },
     "Reason": {
       "searchPlaceholder": "理由で検索...",
@@ -440,7 +441,7 @@
       "assignSuccess": "役職を更新しました",
       "assignError": "役職の更新に失敗しました",
       "coordinatorsTitle": "このグループの承認チェーン担当者",
-      "coordinatorsHint": "このグループに所属する社員の中からのみ選択できます。ここに追加された人はこの画面からグループレベルの承認チェーンを編集できるようになります — 対応する権限は自動的に付与/取り消しされ、「権限のカスタマイズ」画面での追加操作は不要です。部署担当者とは別管理で、自動継承されません。",
+      "coordinatorsHint": "同じ部署の社員なら、このグループ外の人も選択できます。グループ管理の権限は自動で付与／取り消しされます。",
       "coordinatorsLabel": "現在の担当者:",
       "noCoordinators": "このグループにはまだ担当者が設定されていません",
       "loadingCoordinators": "読み込み中...",
@@ -457,7 +458,13 @@
       "toggleResubmitSkipHint": "クリックで再申請の流れを切り替え：マネージャーへ直接（グループの段階は現在時刻で再署名）または最初の段階から再承認",
       "resubmitSkipYes": "マネージャーへ直接",
       "resubmitSkipNo": "最初から再承認",
-      "intermediateLimitShort": "「署名必須」は最大2ステップ"
+      "intermediateLimitShort": "「署名必須」は最大2ステップ",
+      "otFormCreatorsTitle": "他グループの申請作成者",
+      "noOtFormCreators": "なし",
+      "removeOtFormCreatorHint": "このグループの申請作成権限を外す",
+      "addOtFormCreatorPlaceholder": "+ 申請作成者を追加...",
+      "saveOtFormCreatorsSuccess": "申請作成者を更新しました",
+      "saveOtFormCreatorsError": "申請作成者の更新に失敗しました"
     },
     "Employee": {
       "searchPlaceholder": "社員コードまたは氏名で検索...",
@@ -577,7 +584,7 @@
       "otHourLimitDownloadTemplate": "テンプレートをダウンロード",
       "otHourLimitTemplateError": "テンプレートファイルをダウンロードできません。",
       "monthlyAccumulationImportMenuLabel": "OT累積のインポート",
-      "monthlyAccumulationImportTitle": "OT累積のインポート（月・年）",
+      "monthlyAccumulationImportTitle": "OT累積のインポート",
       "monthlyAccumulationImportDesc": ".xlsxファイル: B列=社員番号、C列=当月OT時間合計、D列=年間OT時間合計（任意）。あなたが担当する部門の社員のみ適用されます。ファイルの数値は既存の累積に対する差分として更新されます。",
       "monthlyAccumulationYear": "年",
       "monthlyAccumulationMonth": "月",
@@ -647,7 +654,9 @@
       "signatureSaveError": "署名の更新に失敗しました",
       "unitHour": "時間",
       "otLimitMonthly": "月間",
-      "otLimitYearly": "年間"
+      "otLimitYearly": "年間",
+      "accumulationModeMonth": "1か月分",
+      "accumulationModeYear": "年間（T1〜T12）"
     },
     "ProductionEmployeeImport": {
       "title": "ライン人員インポート",
@@ -1134,7 +1143,6 @@
       "notEditableError": "この申請は編集できません（処理済み、またはマネージャー以上が承認済み）。",
       "loadEditError": "編集する残業申請を読み込めませんでした。",
       "blockedNoScopeMessage": "このアカウントはどの部署についても申請作成権限が付与されていません — 管理者に「承認権限設定」の付与、または対応する社員情報の紐付けを依頼してください。",
-      "scopeRestrictedMessage": "このアカウントは次のグループでのみ申請作成が可能です：{groupNames}。",
       "productionScopeRestrictedMessage": "あなたは次のTeam/Line/シフトグループの組み合わせのLine Leaderです：{combos}。",
       "noSignatureMessage": "個人の署名が未登録です — 後続のステップで「申請者」として承認する前に登録が必要です。",
       "registerSignatureButton": "署名を登録",
@@ -1256,7 +1264,12 @@
       "resubmitReasonPlaceholder": "再申請の理由 *",
       "resubmitReasonRequiredError": "再申請の理由を入力してください。",
       "resubmitSubmit": "再申請",
-      "confirmSaveTitle": "保存の確認"
+      "confirmSaveTitle": "保存の確認",
+      "groupNoEmployeeError": "グループ「{group}」の社員が未選択です。",
+      "createManySuccess": "{count}件の申請を作成しました",
+      "ateLaterAllLabel": "後で食事：全選択／全解除",
+      "employeeSearchPlaceholder": "社員コード・氏名で検索...",
+      "employeeSearchNoResult": "該当する社員が見つかりません"
     },
     "OtFormPrint": {
       "loadError": "印刷する残業申請を読み込めませんでした。",

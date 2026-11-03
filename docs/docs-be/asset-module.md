@@ -32,7 +32,7 @@
 `IpPrefix`/`IpAddress` grid sort theo giá trị IP qua `NetworkHelper.ToSortableKey` (4 octet → `long`), sort+phân trang trong bộ nhớ (quy mô vừa; `IpAddress` chỉ tải cặp `(Id, IP)` rồi DTO đầy đủ cho đúng trang). `Device` sort theo IP cùng mẫu: tăng dùng IP nhỏ nhất của máy, giảm dùng IP lớn nhất, máy không IP luôn cuối.
 
 ### 1.4. `DeviceStatus` & tự gỡ IP/Software
-`0=PendingUse`, `1=InUse`, `2=PendingLiquidation`, `3=Liquidated`. Máy chỉ "giữ" IP/Software khi `InUse`. `DeviceService.UpdateAsync` so `Status` cũ/mới:
+`0=PendingUse`, `1=InUse`, `2=PendingLiquidation`, `3=Liquidated`, `4=UnderRepair` ("Đang sửa chữa"). Máy chỉ "giữ" IP/Software khi `InUse`; `UnderRepair` **không** gỡ gì (đi nhánh `SyncIpAddressesAsync` như `InUse`), chỉ là nhãn trạng thái — không vào báo cáo DANH SÁCH DESKTOP (§1.7, chỉ `PendingUse`/`InUse`) và không vào kiểm kê (§1.22, chỉ `InUse`). Cột `Status` là `int` nên không cần migration. `DeviceService.UpdateAsync` so `Status` cũ/mới:
 - Mới = `PendingLiquidation`/`Liquidated` (`IsLiquidationStatus`, extension `DeviceStatusExtensions`) → gỡ hết IP (về `Available`) **+ xoá cứng mọi `DeviceSoftware`**; `IpAddressIds` gửi kèm bị bỏ qua. `CreateAsync` tạo thẳng ở 2 trạng thái này cũng không gán IP.
 - Cũ = `InUse` → mới = `PendingUse`: chỉ gỡ IP, **giữ Software**. Còn lại → `SyncIpAddressesAsync`.
 - `DeviceSoftwareService.CreateAsync/SyncAsync` (Items > 0) ném `DomainException` nếu máy đang liquidation (vì Save Device kế tiếp sẽ xoá mất); `Sync` rỗng vẫn cho phép. FE `DeviceSoftwarePanel` disable nút khi status 2/3.

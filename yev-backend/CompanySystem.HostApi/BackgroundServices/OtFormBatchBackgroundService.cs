@@ -1,4 +1,5 @@
 using Attendance.Application.Interfaces.Service;
+using Microsoft.EntityFrameworkCore;
 using Shared.Application.Helper;
 
 namespace CompanySystem.HostApi.BackgroundServices
@@ -20,12 +21,14 @@ namespace CompanySystem.HostApi.BackgroundServices
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            var isFirstLoop = true;
             while (!stoppingToken.IsCancellationRequested)
             {
                 TimeSpan delay;
                 try
                 {
-                    delay = await GetDelayUntilNextRunAsync();
+                    delay = await GetDelayUntilNextRunAsync(catchUp: isFirstLoop);
+                    isFirstLoop = false;
                 }
                 catch (ObjectDisposedException)
                 {
@@ -48,19 +51,24 @@ namespace CompanySystem.HostApi.BackgroundServices
             }
         }
 
-        private async Task<TimeSpan> GetDelayUntilNextRunAsync()
+        // catchUp: an app pool started (or woken) after today's run time that missed it runs right away.
+        private async Task<TimeSpan> GetDelayUntilNextRunAsync(bool catchUp)
         {
             using var scope = _scopeFactory.CreateScope();
             var attendanceSettingService = scope.ServiceProvider.GetRequiredService<IAttendanceSettingService>();
-            var runAtTimeOfDay = (await attendanceSettingService.GetBatchAutoSendTimeAsync()).ToTimeSpan();
+            var (runAt, lastRunDate) = await attendanceSettingService.GetBatchScheduleAsync();
 
             var now = TimeHelper.GetCurrentUtcTime();
-            var nextRun = now.Date.Add(runAtTimeOfDay);
-            if (nextRun <= now) nextRun = nextRun.AddDays(1);
+            var nextRun = now.Date.Add(runAt.ToTimeSpan());
+            if (nextRun <= now)
+            {
+                if (catchUp && lastRunDate < DateOnly.FromDateTime(now)) return TimeSpan.Zero;
+                nextRun = nextRun.AddDays(1);
+            }
             return nextRun - now;
         }
 
-        private async Task RunOnceAsync()
+        private async Task RunOnceAsync(int attempt = 1)
         {
             using var scope = _scopeFactory.CreateScope();
             var otFormService = scope.ServiceProvider.GetRequiredService<IOtFormService>();
@@ -69,6 +77,12 @@ namespace CompanySystem.HostApi.BackgroundServices
             {
                 await otFormService.RunDailyBatchSweepAsync();
                 _logger.LogInformation("OtFormBatchBackgroundService: đã chạy xong đợt gom đơn tổng hằng ngày.");
+            }
+            // A form edited at the same moment (OtForm rowversion) fails the sweep; a fresh scope sees the new row.
+            catch (DbUpdateConcurrencyException) when (attempt < 3)
+            {
+                _logger.LogWarning("OtFormBatchBackgroundService: đơn vừa bị sửa đồng thời, chạy lại lần {Attempt}.", attempt + 1);
+                await RunOnceAsync(attempt + 1);
             }
             catch (Exception ex)
             {

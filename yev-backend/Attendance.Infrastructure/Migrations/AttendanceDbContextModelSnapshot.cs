@@ -84,6 +84,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<TimeOnly>("EarlyMealWindowStartTime")
                         .HasColumnType("time");
 
+                    b.Property<DateOnly?>("LastBatchSweepDate")
+                        .HasColumnType("date");
+
                     b.Property<decimal>("MainMealTicketMinHours")
                         .HasColumnType("decimal(5, 2)");
 
@@ -281,6 +284,7 @@ namespace Attendance.Infrastructure.Migrations
                         .HasColumnType("nvarchar(1000)");
 
                     b.Property<decimal>("TotalHours")
+                        .IsConcurrencyToken()
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
 
@@ -333,6 +337,9 @@ namespace Attendance.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AllowEatLater")
+                        .HasColumnType("bit");
 
                     b.Property<int>("DepartmentId")
                         .HasColumnType("int");
@@ -458,6 +465,30 @@ namespace Attendance.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("GroupBorrowedApprovers");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.GroupOtFormCreator", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("GroupId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "EmployeeId" }, "IX_GroupOtFormCreators_EmployeeId");
+
+                    b.HasIndex(new[] { "GroupId", "EmployeeId" }, "IX_GroupOtFormCreators_GroupId_EmployeeId")
+                        .IsUnique();
+
+                    b.ToTable("GroupOtFormCreators");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.JobTitle", b =>
@@ -632,6 +663,12 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<int>("ReasonId")
                         .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time");
@@ -1038,6 +1075,10 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<bool>("IsRemoved")
                         .HasColumnType("bit");
 
+                    b.Property<decimal?>("LedgerHours")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
                     b.Property<decimal>("MonthToDate")
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
@@ -1443,6 +1484,12 @@ namespace Attendance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1762,6 +1809,27 @@ namespace Attendance.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_GroupBorrowedApprovers_Groups_GroupId");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Group");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.GroupOtFormCreator", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Employee", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_GroupOtFormCreators_Employees_EmployeeId");
+
+                    b.HasOne("Attendance.Domain.Entities.Group", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_GroupOtFormCreators_Groups_GroupId");
 
                     b.Navigation("Employee");
 

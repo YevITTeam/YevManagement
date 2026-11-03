@@ -47,7 +47,7 @@ namespace Asset.Application.Dtos.Devices
 
         public bool IsOutsourced { get; set; }
 
-        [Range(0, 3, ErrorMessage = "Trạng thái không hợp lệ")]
+        [Range(0, 4, ErrorMessage = "Trạng thái không hợp lệ")]
         public int Status { get; set; }
 
         [Required(ErrorMessage = "Ghi chú không được để trống")]

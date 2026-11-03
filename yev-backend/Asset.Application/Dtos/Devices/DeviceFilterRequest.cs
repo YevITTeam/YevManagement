@@ -25,7 +25,7 @@ namespace Asset.Application.Dtos.Devices
         public bool? RequiresDailyCheck { get; set; }
         public int? BranchId { get; set; }
         public int? DeviceTypeId { get; set; }
-        // 0=PendingUse, 1=InUse, 2=PendingLiquidation, 3=Liquidated (Asset.Domain.Enums.DeviceStatus).
+        // 0=PendingUse, 1=InUse, 2=PendingLiquidation, 3=Liquidated, 4=UnderRepair (Asset.Domain.Enums.DeviceStatus).
         public int? Status { get; set; }
         // Inclusive: ExpirationDate <= ExpiryDate.
         public DateTime? ExpiryDate { get; set; }
