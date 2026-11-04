@@ -15,19 +15,19 @@ namespace Attendance.Application.Services
         private const int ConfirmationExpiryMinutes = 30;
 
         private readonly IUserDirectoryService _userDirectoryService;
-        private readonly IEmailService _emailService;
+        private readonly IAttendanceMailLogService _mailLogService;
         private readonly IEmailTemplateRenderer _emailTemplateRenderer;
         private readonly IConfiguration _configuration;
 
         public UserSignatureService(
             IAttendanceUnitOfWork unitOfWork,
             IUserDirectoryService userDirectoryService,
-            IEmailService emailService,
+            IAttendanceMailLogService mailLogService,
             IEmailTemplateRenderer emailTemplateRenderer,
             IConfiguration configuration) : base(unitOfWork)
         {
             _userDirectoryService = userDirectoryService;
-            _emailService = emailService;
+            _mailLogService = mailLogService;
             _emailTemplateRenderer = emailTemplateRenderer;
             _configuration = configuration;
         }
@@ -57,7 +57,11 @@ namespace Attendance.Application.Services
             await _unitOfWork.SaveChangesAsync();
 
             var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(userName, EmailModules.Attendance);
-            if (string.IsNullOrWhiteSpace(email)) return;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                await _mailLogService.LogSkippedAsync(userName, "Yêu cầu cập nhật chữ ký - YevManagement");
+                return;
+            }
 
             var baseUrl = _configuration["AppSettings:FrontendBaseUrl"];
             var link = $"{baseUrl}/xac-nhan-chu-ky?token={pending.Token}";
@@ -73,7 +77,7 @@ namespace Attendance.Application.Services
                     ["ExpiryMinutes"] = ConfirmationExpiryMinutes.ToString()
                 });
 
-                await _emailService.SendAsync(email, "Yêu cầu cập nhật chữ ký - YevManagement", html);
+                await _mailLogService.SendAsync(userName, email, "Yêu cầu cập nhật chữ ký - YevManagement", html);
             }
             catch (FileNotFoundException)
             {

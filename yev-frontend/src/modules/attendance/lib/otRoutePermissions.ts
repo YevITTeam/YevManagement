@@ -33,4 +33,5 @@ export const OT_ROUTE_PERMISSIONS: { prefix: string; permissions: string[] }[] =
     { prefix: "/ot/categories", permissions: OT_CATEGORIES_PERMISSIONS },
     { prefix: "/ot/signature", permissions: ["Attendance.UserSignature.Update"] },
     { prefix: "/ot/secondary-password", permissions: ["Attendance.SecondaryPassword.Update"] },
+    { prefix: "/ot/audit-trail", permissions: ["Attendance.AuditTrail.View"] },
 ];

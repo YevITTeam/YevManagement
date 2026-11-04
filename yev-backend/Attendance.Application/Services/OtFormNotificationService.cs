@@ -14,19 +14,19 @@ namespace Attendance.Application.Services
         private const int EmailApprovalTokenExpiryDays = 3;
 
         private readonly IUserDirectoryService _userDirectoryService;
-        private readonly IEmailService _emailService;
+        private readonly IAttendanceMailLogService _mailLogService;
         private readonly IEmailTemplateRenderer _emailTemplateRenderer;
         private readonly IConfiguration _configuration;
 
         public OtFormNotificationService(
             IAttendanceUnitOfWork unitOfWork,
             IUserDirectoryService userDirectoryService,
-            IEmailService emailService,
+            IAttendanceMailLogService mailLogService,
             IEmailTemplateRenderer emailTemplateRenderer,
             IConfiguration configuration) : base(unitOfWork)
         {
             _userDirectoryService = userDirectoryService;
-            _emailService = emailService;
+            _mailLogService = mailLogService;
             _emailTemplateRenderer = emailTemplateRenderer;
             _configuration = configuration;
         }
@@ -125,7 +125,11 @@ namespace Attendance.Application.Services
             string statusLabelVn, string statusLabelJp, string introVn, string introJp, string detailBlock, string accentColor)
         {
             var (email, requesterFullName) = await _userDirectoryService.GetContactInfoAsync(otForm.CreatedByUserName, EmailModules.Attendance);
-            if (string.IsNullOrWhiteSpace(email)) return;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                await _mailLogService.LogSkippedAsync(otForm.CreatedByUserName, subject);
+                return;
+            }
 
             var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == otForm.GroupId);
             var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == otForm.DepartmentId);
@@ -150,7 +154,7 @@ namespace Attendance.Application.Services
                     ["DetailLink"] = $"{_configuration["AppSettings:FrontendBaseUrl"]}/ot/forms?id={otForm.Id}"
                 });
 
-                await _emailService.SendAsync(email, subject, html);
+                await _mailLogService.SendAsync(otForm.CreatedByUserName, email, subject, html);
             }
             catch (FileNotFoundException)
             {
@@ -269,7 +273,11 @@ namespace Attendance.Application.Services
             foreach (var recipient in recipients)
             {
                 var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(recipient.UserName, EmailModules.Attendance);
-                if (string.IsNullOrWhiteSpace(email)) continue;
+                if (string.IsNullOrWhiteSpace(email))
+                {
+                    await _mailLogService.LogSkippedAsync(recipient.UserName, $"Đơn tăng ca #{otForm.Id} chờ duyệt - YevManagement");
+                    continue;
+                }
 
                 var emailToken = new OtFormApprovalEmailToken
                 {
@@ -307,7 +315,7 @@ namespace Attendance.Application.Services
                     wording.AddTo(placeholders);
                     var html = _emailTemplateRenderer.Render("OtForm/ApprovalNotification.html", placeholders);
 
-                    await _emailService.SendAsync(email, $"Đơn tăng ca #{otForm.Id} {wording.SubjectTail} - YevManagement", html);
+                    await _mailLogService.SendAsync(recipient.UserName, email, $"Đơn tăng ca #{otForm.Id} {wording.SubjectTail} - YevManagement", html);
                 }
                 catch (FileNotFoundException)
                 {
@@ -351,7 +359,11 @@ namespace Attendance.Application.Services
             foreach (var recipient in recipients)
             {
                 var (email, fullName) = await _userDirectoryService.GetContactInfoAsync(recipient.UserName, EmailModules.Attendance);
-                if (string.IsNullOrWhiteSpace(email)) continue;
+                if (string.IsNullOrWhiteSpace(email))
+                {
+                    await _mailLogService.LogSkippedAsync(recipient.UserName, $"Đơn tổng #{batch.Id} ({activeForms.Count} đơn) chờ duyệt - YevManagement");
+                    continue;
+                }
 
                 var emailToken = new OtFormBatchEmailToken
                 {
@@ -387,8 +399,8 @@ namespace Attendance.Application.Services
                     var html = _emailTemplateRenderer.Render("OtForm/BatchApprovalNotification.html", placeholders);
 
                     var subjectPrefix = isReminder ? "[Nhắc nhở] " : "";
-                    await _emailService.SendAsync(
-                        email, $"{subjectPrefix}Đơn tổng #{batch.Id} ({activeForms.Count} đơn) {wording.SubjectTail} - YevManagement", html);
+                    await _mailLogService.SendAsync(
+                        recipient.UserName, email, $"{subjectPrefix}Đơn tổng #{batch.Id} ({activeForms.Count} đơn) {wording.SubjectTail} - YevManagement", html);
                 }
                 catch (FileNotFoundException)
                 {

@@ -16,6 +16,7 @@ namespace Shared.Infrastructure.Services
         public string HtmlBody { get; set; } = "";
         public int Attempts { get; set; }
         public string? LastError { get; set; }
+        public string? TrackingId { get; set; }
     }
 
     // Mail is queued as one JSON file per message (not a DB table) because every module sends mail and each has its own DB.
@@ -32,7 +33,7 @@ namespace Shared.Infrastructure.Services
             _logger = logger;
         }
 
-        public async Task<bool> SendAsync(string toEmail, string subject, string htmlBody)
+        public async Task<bool> SendAsync(string toEmail, string subject, string htmlBody, string? trackingId = null)
         {
             if (string.IsNullOrWhiteSpace(_configuration["EmailSettings:SmtpHost"]) || string.IsNullOrWhiteSpace(toEmail))
                 return false;
@@ -40,7 +41,7 @@ namespace Shared.Infrastructure.Services
             try
             {
                 await WriteOutboxFileAsync(GetOutboxPath(_configuration), DateTime.UtcNow,
-                    new OutboxMail { To = toEmail, Subject = subject, HtmlBody = htmlBody });
+                    new OutboxMail { To = toEmail, Subject = subject, HtmlBody = htmlBody, TrackingId = trackingId });
                 return true;
             }
             catch (Exception ex)

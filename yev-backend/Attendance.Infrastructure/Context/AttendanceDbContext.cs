@@ -1,4 +1,4 @@
-using Attendance.Domain.Entities;
+﻿using Attendance.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Attendance.Infrastructure.Context;
@@ -9,10 +9,6 @@ public partial class AttendanceDbContext : DbContext
     {
     }
 
-    public AttendanceDbContext(DbContextOptions<AttendanceDbContext> options)
-        : base(options)
-    {
-    }
 
     public virtual DbSet<Department> Departments { get; set; }
     public virtual DbSet<Group> Groups { get; set; }
@@ -55,6 +51,8 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<ProductionApprovalStep> ProductionApprovalSteps { get; set; }
     public virtual DbSet<OtFormEditLog> OtFormEditLogs { get; set; }
     public virtual DbSet<ApprovalDelegation> ApprovalDelegations { get; set; }
+    public virtual DbSet<AttendanceAuditTrail> AttendanceAuditTrails { get; set; }
+    public virtual DbSet<AttendanceMailLog> AttendanceMailLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -398,6 +396,26 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.OtFormApprovalStepId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_OtFormApprovalHistories_OtFormApprovalSteps_OtFormApprovalStepId");
+        });
+
+        modelBuilder.Entity<AttendanceAuditTrail>(entity =>
+        {
+            entity.Property(e => e.TableName).HasMaxLength(100);
+            entity.Property(e => e.RecordName).HasMaxLength(255);
+            entity.Property(e => e.Action).HasMaxLength(20);
+            entity.Property(e => e.ChangedBy).HasMaxLength(100);
+            entity.HasIndex(e => new { e.TableName, e.RecordId }, "IX_AttendanceAuditTrails_TableName_RecordId");
+            entity.HasIndex(e => e.ChangedAt, "IX_AttendanceAuditTrails_ChangedAt");
+        });
+
+        modelBuilder.Entity<AttendanceMailLog>(entity =>
+        {
+            entity.Property(e => e.RecipientUserName).HasMaxLength(100);
+            entity.Property(e => e.ToEmail).HasMaxLength(255);
+            entity.Property(e => e.Subject).HasMaxLength(500);
+            entity.Property(e => e.LastError).HasMaxLength(1000);
+            entity.Property(e => e.RequestedBy).HasMaxLength(100);
+            entity.HasIndex(e => e.CreatedAt, "IX_AttendanceMailLogs_CreatedAt");
         });
 
         modelBuilder.Entity<OtFormEditLog>(entity =>

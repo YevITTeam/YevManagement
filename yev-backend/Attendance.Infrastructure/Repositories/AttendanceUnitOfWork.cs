@@ -46,9 +46,13 @@ namespace Attendance.Infrastructure.Repositories
             IProductionEmployeeRepository productionEmployees,
             IProductionApprovalStepRepository productionApprovalSteps,
             IOtFormEditLogRepository otFormEditLogs,
-            IApprovalDelegationRepository approvalDelegations) : base(dbContext)
+            IApprovalDelegationRepository approvalDelegations,
+            IAttendanceAuditTrailRepository attendanceAuditTrails,
+            IAttendanceMailLogRepository attendanceMailLogs) : base(dbContext)
         {
             ApprovalDelegations = approvalDelegations;
+            AttendanceAuditTrails = attendanceAuditTrails;
+            AttendanceMailLogs = attendanceMailLogs;
             OtFormEditLogs = otFormEditLogs;
             EmployeeAccumulationHistories = employeeAccumulationHistories;
             ProductionLines = productionLines;
@@ -128,5 +132,7 @@ namespace Attendance.Infrastructure.Repositories
         public IProductionApprovalStepRepository ProductionApprovalSteps { get; }
         public IOtFormEditLogRepository OtFormEditLogs { get; }
         public IApprovalDelegationRepository ApprovalDelegations { get; }
+        public IAttendanceAuditTrailRepository AttendanceAuditTrails { get; }
+        public IAttendanceMailLogRepository AttendanceMailLogs { get; }
     }
 }

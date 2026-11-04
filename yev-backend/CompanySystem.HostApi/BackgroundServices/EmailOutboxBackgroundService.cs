@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using MailKit.Net.Smtp;
 using MimeKit;
+using Shared.Application.Interfaces;
 using Shared.Infrastructure.Services;
 
 namespace CompanySystem.HostApi.BackgroundServices
@@ -19,11 +20,13 @@ namespace CompanySystem.HostApi.BackgroundServices
 
         private readonly IConfiguration _configuration;
         private readonly ILogger<EmailOutboxBackgroundService> _logger;
+        private readonly IServiceScopeFactory _scopeFactory;
 
-        public EmailOutboxBackgroundService(IConfiguration configuration, ILogger<EmailOutboxBackgroundService> logger)
+        public EmailOutboxBackgroundService(IConfiguration configuration, ILogger<EmailOutboxBackgroundService> logger, IServiceScopeFactory scopeFactory)
         {
             _configuration = configuration;
             _logger = logger;
+            _scopeFactory = scopeFactory;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -89,6 +92,7 @@ namespace CompanySystem.HostApi.BackgroundServices
                     if (mail == null) throw new JsonException("Empty outbox file.");
                     await EmailService.SmtpSendAsync(_configuration, _logger, mail.To, mail.Subject, mail.HtmlBody, ct);
                     File.Delete(claimed);
+                    await TrackAsync(mail.TrackingId, sent: true, permanent: true, mail.Attempts + 1, null);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -101,7 +105,8 @@ namespace CompanySystem.HostApi.BackgroundServices
                     mail.Attempts++;
                     mail.LastError = ex.Message;
 
-                    if (IsPermanent(ex) || mail.Attempts > RetryDelays.Length)
+                    var permanent = IsPermanent(ex) || mail.Attempts > RetryDelays.Length;
+                    if (permanent)
                     {
                         _logger.LogError(ex, "Gửi email thất bại, chuyển vào failed sau {Attempts} lần. To={ToEmail}", mail.Attempts, mail.To);
                         await EmailService.WriteOutboxFileAsync(Path.Combine(outbox, "failed"), now, mail);
@@ -113,10 +118,27 @@ namespace CompanySystem.HostApi.BackgroundServices
                         await EmailService.WriteOutboxFileAsync(outbox, now + retryIn, mail);
                     }
                     File.Delete(claimed);
+                    await TrackAsync(mail.TrackingId, sent: false, permanent, mail.Attempts, ex.Message);
                 }
                 return true;
             }
             return false;
+        }
+
+        // Tracking is bookkeeping only; its failure must never resend or drop the mail itself.
+        private async Task TrackAsync(string? trackingId, bool sent, bool permanent, int attempts, string? error)
+        {
+            if (trackingId == null) return;
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                foreach (var tracker in scope.ServiceProvider.GetServices<IMailDeliveryTracker>())
+                    await tracker.TrackAsync(trackingId, sent, permanent, attempts, error);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "EmailOutbox: không cập nhật được trạng thái gửi {TrackingId}.", trackingId);
+            }
         }
 
         // 5xx replies (e.g. 5.7.60 send-as denied), bad addresses and unreadable files will fail the same way on every retry.

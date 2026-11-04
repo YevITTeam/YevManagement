@@ -1,15 +1,16 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { FilterX, RefreshCw, Search } from "lucide-react";
 import { toast } from "react-toastify";
 
-import { AuditTrailApi } from "@/modules/pc-management/api/audit-trail.api";
+import { AuditTrailApi, type GetAuditTrailPageNationParams } from "@/modules/pc-management/api/audit-trail.api";
 import type { AuditTrailDto } from "@/modules/pc-management/types/audit-trail.dto";
 import { auditActionClasses, auditActionLabels } from "./audit-trail-format";
 import AuditTrailDiffView from "./AuditTrailDiffView";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
+import type { ApiResponseWithPageNation } from "@/types/api";
 
 const PAGE_SIZE = 20;
 
@@ -22,8 +23,24 @@ function formatDateTime(value: string) {
     return new Date(value).toLocaleString("vi-VN");
 }
 
-// BE-recorded Create/Update/Delete/Restore history for all Asset entities; needs Asset.AuditTrail.View.
-export default function AuditTrailList() {
+interface AuditTrailListProps {
+    // Attendance has its own audit table with the same row shape; defaults to Asset's.
+    fetchPage?: (params: GetAuditTrailPageNationParams) => Promise<ApiResponseWithPageNation<AuditTrailDto>["data"]>;
+    cacheKey?: string;
+    // Replaces the page title, e.g. with a tab bar.
+    header?: ReactNode;
+    tablePlaceholder?: string;
+    recordPlaceholder?: string;
+}
+
+// BE-recorded Create/Update/Delete/Restore history; needs Asset.AuditTrail.View (or Attendance.AuditTrail.View via fetchPage).
+export default function AuditTrailList({
+    fetchPage = AuditTrailApi.getAuditTrailPageNation,
+    cacheKey = "audit-trail",
+    header,
+    tablePlaceholder = "Device, Branch...",
+    recordPlaceholder = "Mã máy, IP...",
+}: AuditTrailListProps = {}) {
     const [rows, setRows] = useState<AuditTrailDto[]>([]);
     const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -53,7 +70,7 @@ export default function AuditTrailList() {
 
     const { isLoading, error, refetch: fetchRows } = useFetchEffect(
         () =>
-            AuditTrailApi.getAuditTrailPageNation({
+            fetchPage({
                 pageIndex,
                 pageSize: PAGE_SIZE,
                 tableName: appliedFilters.tableName || undefined,
@@ -74,7 +91,7 @@ export default function AuditTrailList() {
         },
         "Không thể tải lịch sử thao tác.",
         (message) => toast.error(message),
-        "audit-trail"
+        cacheKey
     );
 
     const handleSearch = () => {
@@ -105,9 +122,7 @@ export default function AuditTrailList() {
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
-                <div>
-                    <h1 className="text-lg font-semibold text-[#191c1e]">Lịch sử thao tác</h1>
-                </div>
+                {header ?? <h1 className="text-lg font-semibold text-[#191c1e]">Lịch sử thao tác</h1>}
                 <button
                     onClick={() => fetchRows()}
                     disabled={isLoading}
@@ -127,7 +142,7 @@ export default function AuditTrailList() {
                             value={tableName}
                             onChange={(event) => setTableName(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Device, Branch..."
+                            placeholder={tablePlaceholder}
                             className={fieldClassName}
                         />
                     </label>
@@ -137,7 +152,7 @@ export default function AuditTrailList() {
                             value={recordName}
                             onChange={(event) => setRecordName(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Mã máy, IP..."
+                            placeholder={recordPlaceholder}
                             className={fieldClassName}
                         />
                     </label>

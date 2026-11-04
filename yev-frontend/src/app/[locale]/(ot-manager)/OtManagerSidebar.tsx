@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, UserCheck, LayoutDashboard } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, UserCheck, LayoutDashboard, History } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { sidebarDrawerClass, useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -45,6 +45,7 @@ const navItems: OtNavItem[] = [
         icon: KeyRound,
         permissions: ["Attendance.SecondaryPassword.Update"],
     },
+    { key: "otAuditTrail", href: "/ot/audit-trail", icon: History, permissions: ["Attendance.AuditTrail.View"] },
 ];
 
 export default function OtManagerSidebar() {
