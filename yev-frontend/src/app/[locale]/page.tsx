@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { ArrowRight, CalendarClock, Cpu, ExternalLink, FileText, MessagesSquare, Network, Notebook, ShoppingCart } from "lucide-react";
+import { ArrowRight, CalendarClock, Cpu, ExternalLink, FileText, FolderOpen, MessagesSquare, Network, Notebook, ShoppingCart } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -92,6 +92,16 @@ export default function Home() {
       isExternal: true,
       accent: "#475569",
       tint: "#f1f5f9",
+    },
+    {
+      title: t("docsTitle"),
+      desc: t("docsDesc"),
+      link: "http://10.45.1.50:3000/yevdoc/",
+      icon: <FolderOpen className="h-6 w-6" />,
+      visible: true,
+      isExternal: true,
+      accent: "#1d4ed8",
+      tint: "#eaf0fd",
     },
   ].filter((item) => item.visible);
 
