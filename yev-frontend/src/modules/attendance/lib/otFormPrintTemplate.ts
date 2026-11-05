@@ -25,7 +25,7 @@ export const PAGE_SPECS: Record<PaperSize, PageSpec> = {
 
 // Rows per page; A5 page 1 holds only the header block.
 export const EMPLOYEE_PAGE_CAPACITY: Record<PaperSize, { first: number; rest: number }> = {
-    a4: { first: 10, rest: 30 },
+    a4: { first: 15, rest: 30 },
     a5: { first: 0, rest: 12 },
 };
 
@@ -559,7 +559,14 @@ function footer(paperSize: PaperSize) {
 
 // One HTML fragment per physical page (without the page box itself; each renderer adds its own).
 export function renderOtFormPages(form: OtFormDto, paperSize: PaperSize, limits: PrintLimits): string[] {
-    const printable = form.employees.filter((e) => !e.isRemoved);
+    // "Ăn sau" only matters when there is a meal ticket to defer; production forms have no ate-later concept.
+    const printable = form.employees
+        .filter((e) => !e.isRemoved)
+        .map((e) =>
+            !form.isProductionForm && !e.didEat && e.mealTicketType > 0
+                ? { ...e, noteVn: [e.noteVn, "Ăn sau"].filter(Boolean).join("; ") }
+                : e
+        );
     const chunks = buildEmployeePages(printable, paperSize);
     const capacity = EMPLOYEE_PAGE_CAPACITY[paperSize];
     const rowHeight = EMPLOYEE_ROW_HEIGHT[paperSize];
