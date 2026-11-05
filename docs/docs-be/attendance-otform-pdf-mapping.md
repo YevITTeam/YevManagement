@@ -8,7 +8,7 @@ FE dựng phiếu từ `GET /api/OtForm/{id}` bằng **một mẫu HTML** `yev-f
 |---|---|
 | Mã / tên | `YEV-22-024` — GIẤY ĐỀ NGHỊ LÀM NGOÀI GIỜ (残業申請書) |
 | Lần ban hành | Lần 5, cải chính 03/02/2024 (in ở footer) |
-| File nguồn | `docs/Data/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO (A4).doc` (tối đa 40 NV, 2 trang: 10 + 30 dòng) và bản `(A5).doc` (tối đa 12 NV, 1 trang) |
+| File nguồn | `docs/Data/YEV-22-024 (LBH5)-GIAY DE NGHI LAM NGOAI GIO (A4).doc` (2 trang: 15 + 30 dòng — mẫu gốc 10 dòng trang 1, đã nới cho đỡ trống) và bản `(A5).doc` (tối đa 12 NV, 1 trang) |
 | A4 vs A5 | Chỉ khác số dòng danh sách NV; field giống hệt nhau |
 
 - Đổi mẫu phiếu: giữ lại mục lần ban hành cũ (đổi tên thành "cũ") để tra đơn đã in; so từng ô với §1–§6, ô hoàn toàn mới thì hỏi nghiệp vụ trước (AGENTS §2 luật 2), không tự nhét dữ liệu có sẵn.
@@ -67,7 +67,7 @@ Phiếu giấy không có ô cho số phiếu ăn. Khi `isEat=true`, ô "Ăn" **
 | Thời gian / 時間 | `startTime – endTime` (`HH:mm - HH:mm`); `startTime` = giờ đầu đơn |
 | Lũy kế — Tháng / 月間 | `employees[i].monthToDate` (BE đã cộng giờ của chính đơn) |
 | Lũy kế — Năm / 年間 | `employees[i].yearToDate` (như trên) |
-| Ghi chú / 備考 | `employees[i].noteVn` (+ `noteJp`) |
+| Ghi chú / 備考 | `employees[i].noteVn` (+ `noteJp`); form thường + `didEat = false` + `mealTicketType > 0` → nối thêm "Ăn sau" |
 
 ## 6. Chú thích TH1/TH2/TH3 (footer)
 
