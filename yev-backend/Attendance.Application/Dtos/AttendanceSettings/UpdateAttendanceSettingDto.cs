@@ -46,5 +46,11 @@ namespace Attendance.Application.Dtos.AttendanceSettings
 
         [Range(0, 31, ErrorMessage = "Số ngày được tạo đơn lùi phải từ 0 đến 31")]
         public int BackdateDays { get; set; }
+
+        [Required(ErrorMessage = "Giờ gửi Tổng vụ không được để trống")]
+        public TimeOnly GeneralAffairsSendTime { get; set; }
+
+        // Names are ignored; unknown workshop/department pairs are skipped and blank emails remove the pair.
+        public List<GeneralAffairsRecipientDto> GeneralAffairsRecipients { get; set; } = [];
     }
 }

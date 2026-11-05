@@ -1,3 +1,4 @@
+using Attendance.Application.Dtos.ProductionEmployees;
 using Attendance.Application.Dtos.Reports;
 using Attendance.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Mvc;
@@ -48,6 +49,23 @@ namespace Attendance.Api.Controllers
         {
             var (content, fileName) = await _productionOtReportService.ExportQryExportExcelAsync(date, departmentId, workshopId);
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        [RequirePermission("Attendance.ProductionOtReport.View")]
+        [HttpGet("office-qry-export-excel")]
+        public async Task<IActionResult> ExportOfficeQryExportExcel([FromQuery] DateOnly fromDate, [FromQuery] DateOnly toDate, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null, [FromQuery] int[]? groupIds = null)
+        {
+            var (content, fileName) = await _productionOtReportService.ExportOfficeQryExportExcelAsync(fromDate, toDate, departmentId, workshopId, groupIds);
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        // Own route so report viewers without Attendance.Group.View can still pick groups.
+        [RequirePermission("Attendance.ProductionOtReport.View")]
+        [HttpGet("office-productivity-groups")]
+        public async Task<ActionResult<ApiResponse<IReadOnlyList<ProductionOptionDto>>>> GetOfficeProductivityGroups([FromQuery] int? workshopId, [FromQuery] int? departmentId)
+        {
+            var result = await _productionOtReportService.GetOfficeProductivityGroupsAsync(workshopId, departmentId);
+            return Success(result);
         }
 
         [RequirePermission("Attendance.ProductionOtReport.View")]

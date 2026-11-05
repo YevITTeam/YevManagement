@@ -10,6 +10,7 @@ import autoTable from "jspdf-autotable";
 import { ROBOTO_REGULAR_BASE64, ROBOTO_BOLD_BASE64 } from "@/modules/pc-management/lib/pdf-fonts";
 import { buildProductionTicketZip } from "@/modules/attendance/lib/productionTicketBatchPdf";
 import { ProductionOtReportApi } from "@/modules/attendance/api/production-ot-report.api";
+import { GeneralAffairsReportApi } from "@/modules/attendance/api/general-affairs-report.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
 import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
@@ -19,6 +20,9 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import { MultiSelect } from "@/components/ui/MultiSelect";
+import type { ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 import ActionMenu from "@/components/ui/ActionMenu";
 import InfoTooltip from "@/components/ui/InfoTooltip";
 
@@ -99,6 +103,15 @@ function todayIso() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
+
+function lastDayOfMonth(month: string) {
+    const [year, monthIndex] = month.split("-").map(Number);
+    return `${month}-${String(new Date(year, monthIndex, 0).getDate()).padStart(2, "0")}`;
+}
+
+const labelClassName = "mb-1.5 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+const fieldClassName =
+    "h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
 function formatDateVn(iso: string) {
     const [y, m, d] = iso.split("-");
@@ -267,11 +280,17 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
     ref
 ) {
     const t = useTranslations("Attendance.ProductionOtReport");
+    const [scope, setScope] = useState<"office" | "production">("office");
+    const [period, setPeriod] = useState<"day" | "month">("day");
+    const [month, setMonth] = useState(() => todayIso().slice(0, 7));
+    const [isExportingOffice, setIsExportingOffice] = useState(false);
     const [date, setDate] = useState(todayIso());
     const [departmentId, setDepartmentId] = useState<number | "">("");
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [workshopId, setWorkshopId] = useState<number | "">("");
     const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
+    const [productivityGroups, setProductivityGroups] = useState<ProductionOptionDto[]>([]);
+    const [groupIds, setGroupIds] = useState<number[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isExportingExcel, setIsExportingExcel] = useState(false);
     const [isExportingTimes, setIsExportingTimes] = useState(false);
@@ -298,6 +317,15 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         (result) => setWorkshops(result),
         t("loadDepartmentsError")
     );
+    useFetchEffect(
+        () => ProductionOtReportApi.getOfficeProductivityGroups(workshopId === "" ? undefined : workshopId, departmentId === "" ? undefined : departmentId),
+        [workshopId, departmentId],
+        (result) => {
+            setProductivityGroups(result);
+            setGroupIds((prev) => prev.filter((id) => result.some((g) => g.id === id)));
+        },
+        t("loadDepartmentsError")
+    );
 
     const handleSearch = async () => {
         setIsLoading(true);
@@ -313,7 +341,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
 
     useImperativeHandle(ref, () => ({
         refresh: () => {
-            if (report) handleSearch();
+            if (scope === "production" && report) handleSearch();
         },
         openCreate: () => {},
     }));
@@ -439,6 +467,30 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         }
     };
 
+    // Both office files take the same range and filters: the General Affairs mail Excel, or Qry_EXPORT_EXCEL of the picked groups.
+    const handleExportOffice = async (exporter: typeof GeneralAffairsReportApi.exportExcel) => {
+        const [fromDate, toDate] = period === "month" ? [`${month}-01`, lastDayOfMonth(month)] : [date, date];
+        setIsExportingOffice(true);
+        try {
+            const { blob, fileName } = await exporter(
+                fromDate,
+                toDate,
+                workshopId === "" ? undefined : workshopId,
+                departmentId === "" ? undefined : departmentId
+            );
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName ?? `Du lieu tang ca ${period === "month" ? month : date}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            toast.error(getApiErrorMessage(err, t("officeExportError")));
+        } finally {
+            setIsExportingOffice(false);
+        }
+    };
+
     const departmentOptions: SelectOption[] = departments.map((dept) => ({
         value: dept.id,
         label: dept.departmentNameVn,
@@ -465,23 +517,46 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
     return (
         <div className="space-y-4">
             <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-end gap-3">
-                    <label className="block">
-                        <span className="mb-1.5 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            {t("fieldDateLabel")}
-                            <InfoTooltip text={t("searchHint")} />
-                        </span>
-                        <input
-                            type="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            className="h-10 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                {/* Top-aligned because the group picker grows with its chips; action buttons offset by one label height. */}
+                <div className="flex flex-wrap items-start gap-3">
+                    <label className="block w-36">
+                        <span className={labelClassName}>{t("scopeLabel")}</span>
+                        <StyledSelect
+                            value={scope}
+                            onChange={(value) => setScope(value as "office" | "production")}
+                            triggerClassName={`${fieldClassName} w-full pr-8`}
+                            options={[
+                                { value: "office", label: t("scopeOffice") },
+                                { value: "production", label: t("scopeProduction") },
+                            ]}
                         />
                     </label>
-                    <label className="block w-44">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            {t("fieldWorkshopLabel")}
+                    <div>
+                        <span className={labelClassName}>
+                            {t("fieldDateLabel")}
+                            <InfoTooltip text={scope === "office" ? t("officeExportHint") : t("searchHint")} />
                         </span>
+                        <div className="flex gap-2">
+                            {scope === "office" && (
+                                <StyledSelect
+                                    value={period}
+                                    onChange={(value) => setPeriod(value as "day" | "month")}
+                                    triggerClassName={`${fieldClassName} w-32 pr-8`}
+                                    options={[
+                                        { value: "day", label: t("periodDay") },
+                                        { value: "month", label: t("periodMonth") },
+                                    ]}
+                                />
+                            )}
+                            {scope === "office" && period === "month" ? (
+                                <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label={t("periodMonth")} className={`${fieldClassName} w-40`} />
+                            ) : (
+                                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label={t("fieldDateLabel")} className={`${fieldClassName} w-40`} />
+                            )}
+                        </div>
+                    </div>
+                    <label className="block w-44">
+                        <span className={labelClassName}>{t("fieldWorkshopLabel")}</span>
                         <SearchableSelect
                             options={workshops.map((w) => ({ value: w.id, label: w.workshopNameVn, searchText: w.workshopNameVn.toLowerCase() }))}
                             value={workshopId}
@@ -490,8 +565,8 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                         />
                     </label>
                     <label className="block w-56">
-                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            {t("fieldDepartmentLabel")}
+                        <span className={labelClassName}>
+                            {scope === "office" ? t("fieldOfficeDepartmentLabel") : t("fieldDepartmentLabel")}
                         </span>
                         <SearchableSelect
                             options={departmentOptions}
@@ -500,7 +575,38 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                             placeholder={t("filterAllDepartment")}
                         />
                     </label>
-                    <div className="flex gap-2">
+                    {scope === "office" && (
+                        <div className="w-64">
+                            <span className={labelClassName}>
+                                {t("fieldProductivityGroupLabel")}
+                                <InfoTooltip text={t("productivityGroupHint")} />
+                            </span>
+                            <MultiSelect
+                                options={productivityGroups.map((g) => ({ value: g.id, label: g.nameVn ?? g.code, searchText: `${g.nameVn ?? ""} ${g.code}`.toLowerCase() }))}
+                                values={groupIds}
+                                onChange={setGroupIds}
+                                placeholder={t("filterAllDepartment")}
+                            />
+                        </div>
+                    )}
+                    {scope === "office" ? (
+                        <div className="mt-[22px]">
+                        <ActionMenu
+                            label={isExportingOffice ? t("exporting") : t("exportMenuLabel")}
+                            icon={isExportingOffice ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                            items={[
+                                { label: t("officeExportGeneralAffairs"), onClick: () => handleExportOffice(GeneralAffairsReportApi.exportExcel), icon: excelIcon },
+                                {
+                                    label: t("officeExportProductivity"),
+                                    onClick: () => handleExportOffice((from, to, ws, dept) => ProductionOtReportApi.exportOfficeQryExportExcel(from, to, ws, dept, groupIds)),
+                                    icon: excelIcon,
+                                },
+                            ]}
+                            disabled={isExportingOffice || !(period === "month" ? month : date)}
+                        />
+                        </div>
+                    ) : (
+                    <div className="mt-[22px] flex gap-2">
                         <button
                             type="button"
                             onClick={handleSearch}
@@ -516,10 +622,11 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                             disabled={isAnyExporting || !date}
                         />
                     </div>
+                    )}
                 </div>
             </div>
 
-            {report && (
+            {scope === "production" && report && (
                 <div className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3">
                         <div className="flex flex-wrap gap-6 text-sm text-[#5e3f3a]">

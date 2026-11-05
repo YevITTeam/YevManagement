@@ -53,6 +53,9 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<ApprovalDelegation> ApprovalDelegations { get; set; }
     public virtual DbSet<AttendanceAuditTrail> AttendanceAuditTrails { get; set; }
     public virtual DbSet<AttendanceMailLog> AttendanceMailLogs { get; set; }
+    public virtual DbSet<GeneralAffairsDispatch> GeneralAffairsDispatches { get; set; }
+
+    public virtual DbSet<GeneralAffairsRecipient> GeneralAffairsRecipients { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -416,6 +419,19 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.LastError).HasMaxLength(1000);
             entity.Property(e => e.RequestedBy).HasMaxLength(100);
             entity.HasIndex(e => e.CreatedAt, "IX_AttendanceMailLogs_CreatedAt");
+        });
+
+        modelBuilder.Entity<GeneralAffairsDispatch>(entity =>
+        {
+            entity.HasIndex(e => e.OtDate, "IX_GeneralAffairsDispatches_OtDate");
+        });
+
+        modelBuilder.Entity<GeneralAffairsRecipient>(entity =>
+        {
+            entity.HasIndex(e => new { e.WorkshopId, e.DepartmentId }, "IX_GeneralAffairsRecipients_WorkshopId_DepartmentId").IsUnique();
+            entity.Property(e => e.Emails).HasMaxLength(1000);
+            entity.HasOne<Workshop>().WithMany().HasForeignKey(e => e.WorkshopId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Department>().WithMany().HasForeignKey(e => e.DepartmentId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<OtFormEditLog>(entity =>

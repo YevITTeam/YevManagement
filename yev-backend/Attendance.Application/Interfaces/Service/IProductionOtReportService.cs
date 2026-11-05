@@ -1,3 +1,4 @@
+using Attendance.Application.Dtos.ProductionEmployees;
 using Attendance.Application.Dtos.Reports;
 
 namespace Attendance.Application.Interfaces.Service
@@ -20,6 +21,8 @@ namespace Attendance.Application.Interfaces.Service
 
         // 17 columns, one row per person per day.
         Task<(byte[] Content, string FileName)> ExportQryExportExcelAsync(DateOnly date, int? departmentId, int? workshopId = null);
+        Task<(byte[] Content, string FileName)> ExportOfficeQryExportExcelAsync(DateOnly fromDate, DateOnly toDate, int? departmentId, int? workshopId = null, int[]? groupIds = null);
+        Task<IReadOnlyList<ProductionOptionDto>> GetOfficeProductivityGroupsAsync(int? workshopId, int? departmentId);
 
         // Separate purpose from Qry_EXPORT_EXCEL, not a reduced version of it.
         Task<(byte[] Content, string FileName)> ExportSumExportDataAsync(DateOnly date, int? departmentId, int? workshopId = null);

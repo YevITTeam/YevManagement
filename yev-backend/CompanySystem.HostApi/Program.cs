@@ -83,6 +83,7 @@ builder.Services.AddDIConfig(builder.Configuration);
 // Only soft-deletes Liquidated devices; status transitions are manual or via import.
 builder.Services.AddHostedService<DeviceLiquidationBackgroundService>();
 builder.Services.AddHostedService<OtFormBatchBackgroundService>();
+builder.Services.AddHostedService<GeneralAffairsBackgroundService>();
 builder.Services.AddHostedService<QueuedHostedService>();
 builder.Services.AddHostedService<EmailOutboxBackgroundService>();
 

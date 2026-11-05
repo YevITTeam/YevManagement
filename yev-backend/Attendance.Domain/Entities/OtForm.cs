@@ -63,6 +63,12 @@ public partial class OtForm
 
     public string? DeleteReason { get; set; }
 
+    // OT date under which General Affairs last received this form; null = not in their data.
+    public DateOnly? GeneralAffairsSentDate { get; set; }
+
+    // Set when a form already sent is re-submitted, so its day is sent again once the outcome is final.
+    public bool GeneralAffairsResendPending { get; set; }
+
     // Null until the daily batch sweep picks the form up.
     public int? OtFormBatchId { get; set; }
 

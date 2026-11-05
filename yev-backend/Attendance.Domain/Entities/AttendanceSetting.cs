@@ -43,4 +43,9 @@ public partial class AttendanceSetting
 
     // How many days back a new form's date may be. Default 7.
     public int BackdateDays { get; set; }
+
+    // Vietnam local time of the daily OT data mail to General Affairs.
+    public TimeOnly GeneralAffairsSendTime { get; set; }
+
+    public DateOnly? LastGeneralAffairsSendDate { get; set; }
 }

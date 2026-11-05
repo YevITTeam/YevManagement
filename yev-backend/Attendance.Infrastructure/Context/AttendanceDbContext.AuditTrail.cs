@@ -21,6 +21,7 @@ public partial class AttendanceDbContext
     {
         typeof(AttendanceAuditTrail),
         typeof(AttendanceMailLog),
+        typeof(GeneralAffairsDispatch),
         typeof(OtFormApprovalHistory),
         typeof(OtFormEditLog),
         typeof(OtFormApprovalEmailToken),

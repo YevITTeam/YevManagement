@@ -184,7 +184,13 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<TimeOnly>("EarlyMealWindowStartTime")
                         .HasColumnType("time");
 
+                    b.Property<TimeOnly>("GeneralAffairsSendTime")
+                        .HasColumnType("time");
+
                     b.Property<DateOnly?>("LastBatchSweepDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("LastGeneralAffairsSendDate")
                         .HasColumnType("date");
 
                     b.Property<decimal>("MainMealTicketMinHours")
@@ -428,6 +434,74 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "WorkshopId", "DepartmentId" }, "IX_EmployeeApprovalScopes_Workshop_Department");
 
                     b.ToTable("EmployeeApprovalScopes");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.GeneralAffairsDispatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("FormCount")
+                        .HasColumnType("int");
+
+                    b.Property<long?>("MailLogId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateOnly>("OtDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Snapshot")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WorkshopId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "OtDate" }, "IX_GeneralAffairsDispatches_OtDate");
+
+                    b.ToTable("GeneralAffairsDispatches");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.GeneralAffairsRecipient", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Emails")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("WorkshopId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.HasIndex(new[] { "WorkshopId", "DepartmentId" }, "IX_GeneralAffairsRecipients_WorkshopId_DepartmentId")
+                        .IsUnique();
+
+                    b.ToTable("GeneralAffairsRecipients");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Group", b =>
@@ -742,6 +816,12 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time");
+
+                    b.Property<bool>("GeneralAffairsResendPending")
+                        .HasColumnType("bit");
+
+                    b.Property<DateOnly?>("GeneralAffairsSentDate")
+                        .HasColumnType("date");
 
                     b.Property<int?>("GroupId")
                         .HasColumnType("int");
@@ -1829,6 +1909,21 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("Employee");
 
                     b.Navigation("Workshop");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.GeneralAffairsRecipient", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Department", null)
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Attendance.Domain.Entities.Workshop", null)
+                        .WithMany()
+                        .HasForeignKey("WorkshopId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Group", b =>

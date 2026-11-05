@@ -90,7 +90,7 @@ namespace CompanySystem.HostApi.BackgroundServices
                 {
                     mail = JsonSerializer.Deserialize<OutboxMail>(await File.ReadAllTextAsync(claimed, ct));
                     if (mail == null) throw new JsonException("Empty outbox file.");
-                    await EmailService.SmtpSendAsync(_configuration, _logger, mail.To, mail.Subject, mail.HtmlBody, ct);
+                    await EmailService.SmtpSendAsync(_configuration, _logger, mail.To, mail.Subject, mail.HtmlBody, ct, mail.Attachments);
                     File.Delete(claimed);
                     await TrackAsync(mail.TrackingId, sent: true, permanent: true, mail.Attempts + 1, null);
                 }

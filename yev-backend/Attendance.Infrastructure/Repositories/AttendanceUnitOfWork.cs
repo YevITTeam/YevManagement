@@ -48,11 +48,15 @@ namespace Attendance.Infrastructure.Repositories
             IOtFormEditLogRepository otFormEditLogs,
             IApprovalDelegationRepository approvalDelegations,
             IAttendanceAuditTrailRepository attendanceAuditTrails,
-            IAttendanceMailLogRepository attendanceMailLogs) : base(dbContext)
+            IAttendanceMailLogRepository attendanceMailLogs,
+            IGeneralAffairsDispatchRepository generalAffairsDispatches,
+            IGeneralAffairsRecipientRepository generalAffairsRecipients) : base(dbContext)
         {
             ApprovalDelegations = approvalDelegations;
             AttendanceAuditTrails = attendanceAuditTrails;
             AttendanceMailLogs = attendanceMailLogs;
+            GeneralAffairsDispatches = generalAffairsDispatches;
+            GeneralAffairsRecipients = generalAffairsRecipients;
             OtFormEditLogs = otFormEditLogs;
             EmployeeAccumulationHistories = employeeAccumulationHistories;
             ProductionLines = productionLines;
@@ -134,5 +138,7 @@ namespace Attendance.Infrastructure.Repositories
         public IApprovalDelegationRepository ApprovalDelegations { get; }
         public IAttendanceAuditTrailRepository AttendanceAuditTrails { get; }
         public IAttendanceMailLogRepository AttendanceMailLogs { get; }
+        public IGeneralAffairsDispatchRepository GeneralAffairsDispatches { get; }
+        public IGeneralAffairsRecipientRepository GeneralAffairsRecipients { get; }
     }
 }

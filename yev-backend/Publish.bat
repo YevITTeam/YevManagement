@@ -14,6 +14,19 @@ echo   BUILD BACKEND - CompanySystem.HostApi
 echo ============================================
 
 echo.
+echo [0/2] Dang dong goi bo tao PDF phieu tang ca (pdf-renderer + node.exe)...
+call pnpm --dir ..\yev-frontend install
+if errorlevel 1 (
+    echo [LOI] pnpm install that bai.
+    exit /b 1
+)
+call pnpm --dir ..\yev-frontend run build:pdf-renderer --with-node
+if errorlevel 1 (
+    echo [LOI] Dong goi pdf-renderer that bai.
+    exit /b 1
+)
+
+echo.
 echo [1/2] Dang publish (Release) vao %OUT_DIR% ...
 dotnet publish "CompanySystem.HostApi\CompanySystem.HostApi.csproj" -c Release -o "%OUT_DIR%"
 if errorlevel 1 (

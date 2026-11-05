@@ -17,6 +17,8 @@ namespace Shared.Infrastructure.Services
         public int Attempts { get; set; }
         public string? LastError { get; set; }
         public string? TrackingId { get; set; }
+        // Kept inside the JSON (base64) so a queued mail stays a single file.
+        public List<MailAttachment>? Attachments { get; set; }
     }
 
     // Mail is queued as one JSON file per message (not a DB table) because every module sends mail and each has its own DB.
@@ -33,7 +35,7 @@ namespace Shared.Infrastructure.Services
             _logger = logger;
         }
 
-        public async Task<bool> SendAsync(string toEmail, string subject, string htmlBody, string? trackingId = null)
+        public async Task<bool> SendAsync(string toEmail, string subject, string htmlBody, string? trackingId = null, IReadOnlyList<MailAttachment>? attachments = null)
         {
             if (string.IsNullOrWhiteSpace(_configuration["EmailSettings:SmtpHost"]) || string.IsNullOrWhiteSpace(toEmail))
                 return false;
@@ -41,7 +43,7 @@ namespace Shared.Infrastructure.Services
             try
             {
                 await WriteOutboxFileAsync(GetOutboxPath(_configuration), DateTime.UtcNow,
-                    new OutboxMail { To = toEmail, Subject = subject, HtmlBody = htmlBody, TrackingId = trackingId });
+                    new OutboxMail { To = toEmail, Subject = subject, HtmlBody = htmlBody, TrackingId = trackingId, Attachments = attachments?.ToList() });
                 return true;
             }
             catch (Exception ex)
@@ -85,7 +87,8 @@ namespace Shared.Infrastructure.Services
             File.Move(path + ".tmp", path);
         }
 
-        public static async Task SmtpSendAsync(IConfiguration configuration, ILogger logger, string toEmail, string subject, string htmlBody, CancellationToken ct)
+        public static async Task SmtpSendAsync(IConfiguration configuration, ILogger logger, string toEmail, string subject, string htmlBody, CancellationToken ct,
+            IReadOnlyList<MailAttachment>? attachments = null)
         {
             var host = configuration["EmailSettings:SmtpHost"];
             var port = int.Parse(configuration["EmailSettings:SmtpPort"] ?? "587");
@@ -97,9 +100,12 @@ namespace Shared.Infrastructure.Services
 
             var message = new MimeMessage();
             message.From.Add(new MailboxAddress(fromDisplayName, fromAddress));
-            message.To.Add(MailboxAddress.Parse(toEmail));
+            message.To.AddRange(InternetAddressList.Parse(toEmail.Replace(';', ',')));
             message.Subject = subject;
-            message.Body = new TextPart("html") { Text = htmlBody };
+            var body = new BodyBuilder { HtmlBody = htmlBody };
+            foreach (var attachment in attachments ?? [])
+                body.Attachments.Add(attachment.FileName, attachment.Content);
+            message.Body = body.ToMessageBody();
 
             using var client = new SmtpClient();
             await client.ConnectAsync(host, port, enableSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.None, ct);

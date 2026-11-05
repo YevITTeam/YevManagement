@@ -32,5 +32,25 @@ namespace Attendance.Application.Dtos.AttendanceSettings
         public int ResubmitWindowDays { get; set; }
 
         public int BackdateDays { get; set; }
+
+        // Daily OT data mail to General Affairs (Vietnam time).
+        public TimeOnly GeneralAffairsSendTime { get; set; }
+
+        // One row per active workshop x department.
+        public List<GeneralAffairsRecipientDto> GeneralAffairsRecipients { get; set; } = [];
+    }
+
+    public class GeneralAffairsRecipientDto
+    {
+        public int WorkshopId { get; set; }
+
+        public string WorkshopName { get; set; } = "";
+
+        public int DepartmentId { get; set; }
+
+        public string DepartmentName { get; set; } = "";
+
+        // "a@x; b@y"; null holds this pair's mail back.
+        public string? Emails { get; set; }
     }
 }

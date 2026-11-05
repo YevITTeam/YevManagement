@@ -11,6 +11,8 @@ namespace Attendance.Application.Interfaces.Service
         // Daily auto-send time for OtFormBatchBackgroundService.
         Task<(TimeOnly RunAt, DateOnly? LastRunDate)> GetBatchScheduleAsync();
 
+        Task<(TimeOnly RunAt, DateOnly? LastRunDate)> GetGeneralAffairsScheduleAsync();
+
         // Returns false instead of throwing, matching IEmailService.SendAsync, so the controller picks the message.
         Task<bool> SendTestEmailAsync(SendTestEmailDto request, string senderDisplayName);
     }

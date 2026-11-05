@@ -116,3 +116,6 @@ Thumbs.db
 *~
 # Local AD exports and report (employee personal data)
 docs/Data/Identity/
+
+# Built by yev-frontend `pnpm build:pdf-renderer` (BE Publish.bat runs it)
+yev-backend/CompanySystem.HostApi/pdf-renderer/

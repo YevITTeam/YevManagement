@@ -1,6 +1,9 @@
 using System.Globalization;
+using System.Linq.Expressions;
+using Attendance.Application.Dtos.ProductionEmployees;
 using Attendance.Application.Dtos.Reports;
 using Attendance.Application.Interfaces.Service;
+using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
 using ClosedXML.Excel;
 using Shared.Application.Services;
@@ -372,7 +375,35 @@ namespace Attendance.Application.Services
         public async Task<(byte[] Content, string FileName)> ExportQryExportExcelAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var settings = await _attendanceSettingService.GetAsync();
-            var grouped = await BuildGroupedDailyRowsAsync(date, departmentId, workshopId, settings);
+            var grouped = await BuildGroupedDailyRowsAsync(x => x.OtForm.IsProductionForm && x.OtForm.Date == date, departmentId, workshopId, settings);
+            return (await BuildQryExportExcelAsync(grouped), await BuildRealFileNameAsync("Qry_EXPORT_EXCEL", date, departmentId));
+        }
+
+        // Same file for office forms: the picked groups (any name), or every Green/Orange group when none is picked.
+        public async Task<(byte[] Content, string FileName)> ExportOfficeQryExportExcelAsync(DateOnly fromDate, DateOnly toDate, int? departmentId, int? workshopId = null, int[]? groupIds = null)
+        {
+            var settings = await _attendanceSettingService.GetAsync();
+            var anyGroup = groupIds is not { Length: > 0 };
+            var grouped = await BuildGroupedDailyRowsAsync(
+                x => !x.OtForm.IsProductionForm && x.OtForm.Date >= fromDate && x.OtForm.Date <= toDate
+                     && (anyGroup
+                         ? x.OtForm.Group!.GroupNameVn.Contains("GREEN") || x.OtForm.Group.GroupNameVn.Contains("ORANGE")
+                         : groupIds!.Contains(x.OtForm.GroupId!.Value)),
+                departmentId, workshopId, settings);
+            return (await BuildQryExportExcelAsync(grouped), await BuildRealFileNameAsync("Qry_EXPORT_EXCEL", fromDate, departmentId, toDate));
+        }
+
+        public async Task<IReadOnlyList<ProductionOptionDto>> GetOfficeProductivityGroupsAsync(int? workshopId, int? departmentId)
+        {
+            var groups = await _unitOfWork.Groups.SelectAsync(
+                x => !x.IsDeleted
+                     && (!workshopId.HasValue || x.WorkshopId == workshopId) && (!departmentId.HasValue || x.DepartmentId == departmentId),
+                x => new ProductionOptionDto { Id = x.Id, Code = x.GroupCode, NameVn = x.GroupNameVn });
+            return groups.OrderBy(x => x.NameVn).ToList();
+        }
+
+        private async Task<byte[]> BuildQryExportExcelAsync(List<GroupedDailyRow> grouped)
+        {
             var otFormIds = grouped.SelectMany(x => x.OtFormIds).Distinct().ToList();
 
             // QUAN_LY_TC_SX: code of the approver at the "TL" (Team Leader) step; MNV_TP: the DepartmentManager step approver.
@@ -394,14 +425,12 @@ namespace Attendance.Application.Services
             var rowIndex = 2;
             foreach (var item in grouped)
             {
-                var teamLeaderCode = ResolveDistinctCode(item.OtFormIds, teamLeaderCodeByForm);
-                var managerCode = ResolveDistinctCode(item.OtFormIds, managerCodeByForm);
-
                 sheet.Cell(rowIndex, 1).Value = item.EmployeeCode;
                 sheet.Cell(rowIndex, 2).Value = item.CongDoan;
                 sheet.Cell(rowIndex, 3).Value = item.LastName;
                 sheet.Cell(rowIndex, 4).Value = item.FirstName;
-                sheet.Cell(rowIndex, 5).Value = date.ToString("dd/MM/yyyy");
+                sheet.Cell(rowIndex, 5).Value = item.Date.ToDateTime(TimeOnly.MinValue);
+                sheet.Cell(rowIndex, 5).Style.DateFormat.Format = "dd-MMM-yy";
                 sheet.Cell(rowIndex, 6).Value = item.StartTime.ToString("HH:mm");
                 sheet.Cell(rowIndex, 7).Value = item.EndTime.ToString("HH:mm");
                 sheet.Cell(rowIndex, 8).Value = item.Reason;
@@ -412,8 +441,8 @@ namespace Attendance.Application.Services
                 sheet.Cell(rowIndex, 13).Value = item.Note;
                 sheet.Cell(rowIndex, 14).Value = item.TotalHours;
                 sheet.Cell(rowIndex, 15).Value = item.DepartmentCode;
-                sheet.Cell(rowIndex, 16).Value = teamLeaderCode;
-                sheet.Cell(rowIndex, 17).Value = managerCode;
+                sheet.Cell(rowIndex, 16).Value = ResolveDistinctCode(item.OtFormIds, teamLeaderCodeByForm);
+                sheet.Cell(rowIndex, 17).Value = ResolveDistinctCode(item.OtFormIds, managerCodeByForm);
                 rowIndex++;
             }
 
@@ -421,16 +450,14 @@ namespace Attendance.Application.Services
 
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
-
-            var fileName = await BuildRealFileNameAsync("Qry_EXPORT_EXCEL", date, departmentId);
-            return (stream.ToArray(), fileName);
+            return stream.ToArray();
         }
 
         // 7-column summary; a separate report, not a reduced Qry_EXPORT_EXCEL.
         public async Task<(byte[] Content, string FileName)> ExportSumExportDataAsync(DateOnly date, int? departmentId, int? workshopId = null)
         {
             var settings = await _attendanceSettingService.GetAsync();
-            var grouped = await BuildGroupedDailyRowsAsync(date, departmentId, workshopId, settings);
+            var grouped = await BuildGroupedDailyRowsAsync(x => x.OtForm.IsProductionForm && x.OtForm.Date == date, departmentId, workshopId, settings);
 
             using var workbook = new XLWorkbook();
             var sheet = workbook.Worksheets.Add("SUM_EXPORT_DATA");
@@ -466,6 +493,7 @@ namespace Attendance.Application.Services
         {
             public List<int> OtFormIds { get; set; } = new();
             public string EmployeeCode { get; set; } = null!;
+            public DateOnly Date { get; set; }
             public string LastName { get; set; } = null!;
             public string FirstName { get; set; } = null!;
             public string CongDoan { get; set; } = null!;
@@ -483,13 +511,15 @@ namespace Attendance.Application.Services
 
         // Shared base for the per-person-per-day reports; ExportHoursReportAsync keeps its own grouping on purpose to avoid
         // touching stable logic, accepting some duplication.
-        private async Task<List<GroupedDailyRow>> BuildGroupedDailyRowsAsync(DateOnly date, int? departmentId, int? workshopId, Dtos.AttendanceSettings.AttendanceSettingDto settings)
+        private async Task<List<GroupedDailyRow>> BuildGroupedDailyRowsAsync(Expression<Func<OtFormEmployee, bool>> scope, int? departmentId, int? workshopId, Dtos.AttendanceSettings.AttendanceSettingDto settings)
         {
-            var entries = await _unitOfWork.OtFormEmployees.SelectAsync(
-                x => x.OtForm.IsProductionForm && !x.OtForm.IsDeleted
-                     && x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date == date && !x.IsRemoved
-                     && (departmentId == null || x.OtForm.DepartmentId == departmentId)
-                     && (workshopId == null || x.OtForm.WorkshopId == workshopId),
+            // Office forms keep no production snapshot, so they read the current production roster instead.
+            var roster = _unitOfWork.ProductionEmployees.GetQueryable().Where(p => !p.IsDeleted);
+            var entries = await _unitOfWork.OtFormEmployees.ToListAsync(
+                _unitOfWork.OtFormEmployees.GetQueryable().Where(scope).Where(
+                    x => !x.OtForm.IsDeleted && x.OtForm.Status == (int)OtFormStatus.Completed && !x.IsRemoved
+                         && (departmentId == null || x.OtForm.DepartmentId == departmentId)
+                         && (workshopId == null || x.OtForm.WorkshopId == workshopId)),
                 x => new
                 {
                     x.OtFormId,
@@ -497,20 +527,27 @@ namespace Attendance.Application.Services
                     EmployeeCode = x.Employee.Code,
                     x.Employee.LastName,
                     x.Employee.FirstName,
+                    x.OtForm.Date,
                     x.StartTime,
                     x.EndTime,
                     x.DidEat,
                     x.NoteVn,
-                    x.CongDoanSnapshot,
-                    x.BlockCodeSnapshot,
-                    x.ShiftTeamCodeSnapshot,
+                    CongDoanSnapshot = x.OtForm.IsProductionForm ? x.CongDoanSnapshot
+                        : roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.CongDoan).FirstOrDefault(),
+                    BlockCodeSnapshot = x.OtForm.IsProductionForm ? x.BlockCodeSnapshot
+                        : roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.BlockCode).FirstOrDefault(),
+                    // Office: non-Green/Orange groups are always HC; Green/Orange use the roster, else G/O from the name.
+                    ShiftTeamCodeSnapshot = x.OtForm.IsProductionForm ? x.ShiftTeamCodeSnapshot
+                        : !x.OtForm.Group!.GroupNameVn.Contains("GREEN") && !x.OtForm.Group.GroupNameVn.Contains("ORANGE") ? "HC"
+                        : roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.ShiftTeamCode).FirstOrDefault()
+                          ?? (x.OtForm.Group.GroupNameVn.Contains("GREEN") ? "G" : "O"),
                     ReasonNameVn = x.OtForm.Reason.ReasonNameVn,
                     x.OtForm.SubReason,
                     DepartmentCode = x.OtForm.Department.DepartmentCode,
                 });
 
             return entries
-                .GroupBy(x => x.EmployeeId)
+                .GroupBy(x => new { x.EmployeeId, x.Date })
                 .Select(g =>
                 {
                     var first = g.First();
@@ -518,6 +555,7 @@ namespace Attendance.Application.Services
                     {
                         OtFormIds = g.Select(x => x.OtFormId).Distinct().ToList(),
                         EmployeeCode = first.EmployeeCode,
+                        Date = first.Date,
                         LastName = first.LastName,
                         FirstName = first.FirstName,
                         CongDoan = g.Select(x => x.CongDoanSnapshot).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? UnknownLabel,
@@ -533,7 +571,7 @@ namespace Attendance.Application.Services
                         DepartmentCode = string.Join("; ", g.Select(x => x.DepartmentCode).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()),
                     };
                 })
-                .OrderBy(x => x.EmployeeCode, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x.EmployeeCode, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Date)
                 .ToList();
         }
 
@@ -591,10 +629,10 @@ namespace Attendance.Application.Services
         }
 
         // File name format "{QueryName}_{yyyy-MM-d}_{DeptCode}.xlsx" (day without leading zero); suffix omitted when not
-        // filtered by department.
-        private async Task<string> BuildRealFileNameAsync(string queryName, DateOnly date, int? departmentId)
+        // filtered by department. A range appends "_{toDate}".
+        private async Task<string> BuildRealFileNameAsync(string queryName, DateOnly date, int? departmentId, DateOnly? toDate = null)
         {
-            var datePart = date.ToString("yyyy-MM-d");
+            var datePart = date.ToString("yyyy-MM-d") + (toDate > date ? $"_{toDate:yyyy-MM-d}" : "");
             var suffix = "";
             if (departmentId.HasValue)
             {

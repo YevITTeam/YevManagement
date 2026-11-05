@@ -15,7 +15,7 @@ import {
     renderOtFormPages,
     type PaperSize,
 } from "@/modules/attendance/lib/otFormPrintTemplate";
-import { renderPagesToPdfBlob } from "@/modules/attendance/lib/otFormPdf";
+import { otFormPdfFileName, renderPagesToPdfBlob } from "@/modules/attendance/lib/otFormPdf";
 
 interface OtFormPrintViewProps {
     onClose?: () => void;
@@ -84,11 +84,10 @@ export default function OtFormPrintView({ id, onClose }: OtFormPrintViewProps) {
         setIsExporting(true);
         try {
             const blob = await renderPagesToPdfBlob(pages, paperSize);
-            const [year, month, day] = form.date.split("-");
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
-            link.download = `Phieu_TangCa_${form.id}_${day}-${month}-${year}.pdf`;
+            link.download = otFormPdfFileName(form);
             link.click();
             URL.revokeObjectURL(url);
         } catch (err) {

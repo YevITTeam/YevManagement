@@ -45,5 +45,7 @@ namespace Attendance.Application.Interfaces.Service
         IApprovalDelegationRepository ApprovalDelegations { get; }
         IAttendanceAuditTrailRepository AttendanceAuditTrails { get; }
         IAttendanceMailLogRepository AttendanceMailLogs { get; }
+        IGeneralAffairsDispatchRepository GeneralAffairsDispatches { get; }
+        IGeneralAffairsRecipientRepository GeneralAffairsRecipients { get; }
     }
 }

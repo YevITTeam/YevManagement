@@ -1,5 +1,6 @@
 import { api, getForBlob, type BlobDownloadResult } from "@/lib/client";
 import type { ProductionTicketBatchGroupDto, ProductionTicketReportDto } from "@/modules/attendance/types/production-ot-report.dto";
+import type { ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {
@@ -8,6 +9,8 @@ const ENDPOINTS = {
         hoursReportExcel: "/ProductionOtReport/hours-report-excel",
         timesReportExcel: "/ProductionOtReport/times-report-excel",
         qryExportExcel: "/ProductionOtReport/qry-export-excel",
+        officeQryExportExcel: "/ProductionOtReport/office-qry-export-excel",
+        officeProductivityGroups: "/ProductionOtReport/office-productivity-groups",
         sumExportData: "/ProductionOtReport/sum-export-data",
         ticketBatch: "/ProductionOtReport/ticket-batch",
     },
@@ -41,6 +44,23 @@ export const ProductionOtReportApi = {
         if (departmentId !== undefined) params.set("departmentId", String(departmentId));
         if (workshopId !== undefined) params.set("workshopId", String(workshopId));
         return getForBlob(`${ENDPOINTS.PRODUCTION_OT_REPORT.qryExportExcel}?${params.toString()}`);
+    },
+    // Empty groupIds = every Green/Orange group; other picked groups export with NHOM = HC.
+    exportOfficeQryExportExcel: async (fromDate: string, toDate: string, workshopId?: number, departmentId?: number, groupIds: number[] = []): Promise<BlobDownloadResult> => {
+        const params = new URLSearchParams({ fromDate, toDate });
+        if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        if (workshopId !== undefined) params.set("workshopId", String(workshopId));
+        groupIds.forEach((id) => params.append("groupIds", String(id)));
+        return getForBlob(`${ENDPOINTS.PRODUCTION_OT_REPORT.officeQryExportExcel}?${params.toString()}`);
+    },
+    getOfficeProductivityGroups: async (workshopId?: number, departmentId?: number) => {
+        const params = new URLSearchParams();
+        if (departmentId !== undefined) params.set("departmentId", String(departmentId));
+        if (workshopId !== undefined) params.set("workshopId", String(workshopId));
+        const response = await api.get<ApiResponse<ProductionOptionDto[]>>(
+            `${ENDPOINTS.PRODUCTION_OT_REPORT.officeProductivityGroups}?${params.toString()}`
+        );
+        return response.data;
     },
     exportSumExportData: async (date: string, departmentId?: number, workshopId?: number): Promise<BlobDownloadResult> => {
         const params = new URLSearchParams({ date });

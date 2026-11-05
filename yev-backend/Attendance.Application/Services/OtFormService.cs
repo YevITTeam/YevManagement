@@ -419,6 +419,7 @@ namespace Attendance.Application.Services
                 GroupNameJp = otForm.Group?.GroupNameJp,
                 IsProductionForm = otForm.IsProductionForm,
                 DepartmentId = otForm.DepartmentId,
+                DepartmentCode = otForm.Department.DepartmentCode,
                 DepartmentNameVn = otForm.Department.DepartmentNameVn,
                 DepartmentNameJp = otForm.Department.DepartmentNameJp,
                 ReasonId = otForm.ReasonId,
@@ -1200,7 +1201,10 @@ namespace Attendance.Application.Services
 
             // A completed form leaves the ledger until it is signed off again; a later rejection then counts nothing.
             if (otForm.Status == (int)OtFormStatus.Completed)
+            {
                 await AccumulateEmployeeHoursAsync(otForm, activeEmployees, sign: -1);
+                otForm.GeneralAffairsResendPending = otForm.GeneralAffairsSentDate != null;
+            }
 
             var forceMeal = otForm.IsProductionForm
                 || (await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == otForm.GroupId))?.AllowEatLater == false;

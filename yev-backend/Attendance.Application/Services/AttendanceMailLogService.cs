@@ -34,20 +34,25 @@ namespace Attendance.Application.Services
             _logger = logger;
         }
 
-        public async Task SendAsync(string? recipientUserName, string toEmail, string subject, string htmlBody)
+        public async Task<long?> SendAsync(string? recipientUserName, string toEmail, string subject, string htmlBody, IReadOnlyList<MailAttachment>? attachments = null)
         {
             var logId = await InsertLogAsync(recipientUserName, toEmail, subject, MailLogStatus.Queued, null);
-            var queued = await _emailService.SendAsync(toEmail, subject, htmlBody, logId is null ? null : TrackingPrefix + logId);
-            if (!queued && logId is not null)
+            var queued = await _emailService.SendAsync(toEmail, subject, htmlBody, logId is null ? null : TrackingPrefix + logId, attachments);
+            if (queued) return logId;
+            if (logId is not null)
                 await UpdateAsync(logId.Value, MailLogStatus.Failed, 0, "Không đưa được vào hàng đợi gửi (SMTP chưa cấu hình hoặc lỗi ghi file).", null);
+            return null;
         }
+
+        public static long? ParseTrackingId(string trackingId) =>
+            trackingId.StartsWith(TrackingPrefix) && long.TryParse(trackingId[TrackingPrefix.Length..], out var id) ? id : null;
 
         public async Task LogSkippedAsync(string recipientUserName, string subject)
             => await InsertLogAsync(recipientUserName, null, subject, MailLogStatus.Skipped, "Người nhận chưa có email.");
 
         public async Task TrackAsync(string trackingId, bool sent, bool permanent, int attempts, string? error)
         {
-            if (!trackingId.StartsWith(TrackingPrefix) || !long.TryParse(trackingId[TrackingPrefix.Length..], out var id)) return;
+            if (ParseTrackingId(trackingId) is not { } id) return;
             var status = sent ? MailLogStatus.Sent : permanent ? MailLogStatus.Failed : MailLogStatus.Queued;
             await UpdateAsync(id, status, attempts, error, sent ? TimeHelper.GetCurrentUtcTime() : null);
         }
@@ -97,7 +102,7 @@ namespace Attendance.Application.Services
                 var log = new AttendanceMailLog
                 {
                     RecipientUserName = recipientUserName,
-                    ToEmail = toEmail,
+                    ToEmail = toEmail?.Length > 255 ? toEmail[..255] : toEmail,
                     Subject = subject.Length > 500 ? subject[..500] : subject,
                     Status = (int)status,
                     LastError = error,

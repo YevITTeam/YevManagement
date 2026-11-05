@@ -22,6 +22,19 @@ export interface AttendanceSettingDto {
     resubmitWindowDays: number;
     // How many days back a new form's date may be.
     backdateDays: number;
+    // TimeOnly "HH:mm:ss" of the daily OT data mail to General Affairs.
+    generalAffairsSendTime: string;
+    // One row per active workshop x department; each pair gets its own mail.
+    generalAffairsRecipients: GeneralAffairsRecipientDto[];
+}
+
+export interface GeneralAffairsRecipientDto {
+    workshopId: number;
+    workshopName: string;
+    departmentId: number;
+    departmentName: string;
+    // "a@x; b@y"; null holds this pair's mail back until set.
+    emails: string | null;
 }
 
 export type UpdateAttendanceSettingDto = AttendanceSettingDto;

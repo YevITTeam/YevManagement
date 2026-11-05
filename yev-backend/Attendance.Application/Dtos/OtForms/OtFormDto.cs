@@ -11,6 +11,7 @@ namespace Attendance.Application.Dtos.OtForms
 
         public bool IsProductionForm { get; set; }
         public int DepartmentId { get; set; }
+        public string DepartmentCode { get; set; } = null!;
         public string DepartmentNameVn { get; set; } = null!;
         public string? DepartmentNameJp { get; set; }
         public int ReasonId { get; set; }

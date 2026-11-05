@@ -270,6 +270,7 @@ export interface OtFormDto {
     groupNameJp: string | null;
     isProductionForm: boolean;
     departmentId: number;
+    departmentCode: string;
     departmentNameVn: string;
     departmentNameJp: string | null;
     reasonId: number;

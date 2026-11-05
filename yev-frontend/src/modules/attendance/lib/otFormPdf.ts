@@ -1,4 +1,5 @@
 import { PAGE_SPECS, type PaperSize } from "./otFormPrintTemplate";
+import type { OtFormDto } from "@/modules/attendance/types/ot-form.dto";
 
 // Converts the otFormPrintTemplate HTML into vector PDF with pdfmake, entirely in the browser.
 // pdfmake (~1 MB) and the fonts (~2.8 MB) load on the first export only and stay cached for the session.
@@ -124,6 +125,18 @@ function loadEngine() {
         throw error;
     });
     return enginePromise;
+}
+
+// Same rule as GeneralAffairsReportService.BuildPdfFileNames; ASCII because marked names garble in some ZIP tools.
+export function otFormPdfFileName(form: Pick<OtFormDto, "departmentCode" | "groupNameVn" | "date">) {
+    const [year, month, day] = form.date.split("-");
+    return `Phieu Tang Ca ${form.departmentCode}_${form.groupNameVn ?? ""}_${day}-${month}-${year}`
+        .replace(/[đĐ]/g, (c) => (c === "đ" ? "d" : "D"))
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[\\/:*?"<>|]/g, "")
+        .replace(/\s+/g, " ")
+        .trim() + ".pdf";
 }
 
 export async function renderPagesToPdfBlob(pages: string[], paperSize: PaperSize): Promise<Blob> {

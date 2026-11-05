@@ -1,12 +1,13 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { CalendarDays, Download, History, Mail, Save, Send, Ticket, TrendingUp, Upload } from "lucide-react";
+import { Building2, CalendarDays, Download, History, Mail, Save, Send, Ticket, TrendingUp, Upload } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
 import { AttendanceSettingApi } from "@/modules/attendance/api/attendance-setting.api";
 import { OtFormBatchApi } from "@/modules/attendance/api/ot-form-batch.api";
+import { GeneralAffairsReportApi } from "@/modules/attendance/api/general-affairs-report.api";
 import { WorkCalendarApi } from "@/modules/attendance/api/work-calendar.api";
 import type { WorkCalendarDayDto } from "@/modules/attendance/types/work-calendar.dto";
 import WorkCalendarDialog from "./WorkCalendarDialog";
@@ -16,6 +17,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import TimePicker24h from "@/components/ui/TimePicker24h";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 
 // BE sends TimeOnly as "HH:mm:ss"; TimePicker24h reads and writes "HH:mm". Trimmed and re-appended at
@@ -31,7 +33,7 @@ const fieldLabelClassName = "mb-1 block whitespace-nowrap text-[11px]! font-semi
 const secondaryButtonClassName =
     "inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 text-xs! font-semibold! text-[#191c1e] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50";
 type NumberKey = "noMealTicketMaxHours" | "mainMealTicketMinHours" | "mealBreakDeductionHours" | "dailyOtHourLimit" | "monthlyOtHourLimit" | "yearlyOtHourLimit" | "dailyOtHourLimitHoliday" | "resubmitWindowDays" | "backdateDays";
-type TimeKey = "earlyMealWindowStartTime" | "earlyMealWindowEndTime" | "batchAutoSendTime";
+type TimeKey = "earlyMealWindowStartTime" | "earlyMealWindowEndTime" | "batchAutoSendTime" | "generalAffairsSendTime";
 // Width is per-field, matched to the data it holds (DESIGN_SYSTEM.md §4.3) — never w-full in an
 // even-split grid, which stretches a 1-digit value across the whole column.
 const fieldClassName =
@@ -49,6 +51,8 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
     const [values, setValues] = useState<AttendanceSettingDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isRunningNow, setIsRunningNow] = useState(false);
+    const [isSendingGeneralAffairs, setIsSendingGeneralAffairs] = useState(false);
+    const [gaWorkshopId, setGaWorkshopId] = useState(0);
     const [testEmail, setTestEmail] = useState("");
     const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
 
@@ -137,6 +141,19 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
         }
     };
 
+    const handleSendGeneralAffairsNow = async () => {
+        setIsSendingGeneralAffairs(true);
+        try {
+            const sent = await GeneralAffairsReportApi.sendNow();
+            toast.success(sent > 0 ? t("generalAffairsSendNowSuccess", { count: sent }) : t("generalAffairsSendNowNothing"));
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("generalAffairsSendNowError")));
+        } finally {
+            setIsSendingGeneralAffairs(false);
+        }
+    };
+
     if (isLoading || !values) {
         return <div className="py-16 text-center text-sm text-[#5e3f3a]">{isLoading ? t("loading") : null}</div>;
     }
@@ -145,6 +162,16 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
         setValues((current) => current && { ...current, [key]: Number(event.target.value) });
     const setTime = (key: TimeKey) => (value: string) =>
         setValues((current) => current && { ...current, [key]: fromTimeInputValue(value) });
+
+    // Unfilled departments are counted per workshop so a gap shows without opening each one.
+    const gaWorkshops = [...new Map(values.generalAffairsRecipients.map((item) => [item.workshopId, item.workshopName])).entries()].map(
+        ([workshopId, workshopName]) => ({
+            workshopId,
+            workshopName,
+            missing: values.generalAffairsRecipients.filter((item) => item.workshopId === workshopId && !item.emails?.trim()).length,
+        })
+    );
+    const selectedGaWorkshopId = gaWorkshops.some((w) => w.workshopId === gaWorkshopId) ? gaWorkshopId : (gaWorkshops[0]?.workshopId ?? 0);
 
     return (
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -226,6 +253,66 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                             <Mail className="h-3.5 w-3.5" />
                             {isSendingTestEmail ? t("testEmailSending") : t("testEmailButton")}
                         </button>
+                    </div>
+                </SettingCard>
+
+                <SettingCard icon={<Building2 size={15} />} title={t("generalAffairsSectionTitle")} desc={t("generalAffairsSectionDesc")} className="lg:col-span-2">
+                    <div className="flex flex-wrap items-end gap-3">
+                        <Field label={t("fieldGeneralAffairsSendTime")}>
+                            <TimePicker24h value={toTimeInputValue(values.generalAffairsSendTime)} onChange={setTime("generalAffairsSendTime")} disabled={isSaving} />
+                        </Field>
+                        <div className="block">
+                            <span className={fieldLabelClassName}>{t("fieldGeneralAffairsWorkshop")}</span>
+                            <StyledSelect
+                                value={selectedGaWorkshopId}
+                                onChange={setGaWorkshopId}
+                                options={gaWorkshops.map((w) => ({
+                                    value: w.workshopId,
+                                    label: w.missing > 0 ? t("generalAffairsWorkshopMissing", { workshop: w.workshopName, count: w.missing }) : w.workshopName,
+                                }))}
+                                triggerClassName={`${fieldClassName} w-52 pr-8`}
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleSendGeneralAffairsNow}
+                            disabled={isSendingGeneralAffairs}
+                            title={t("generalAffairsSendNowHint")}
+                            className={secondaryButtonClassName}
+                        >
+                            <Send className="h-3.5 w-3.5" />
+                            {isSendingGeneralAffairs ? t("runNowRunning") : t("runNowButton")}
+                        </button>
+                    </div>
+                    {/* Two columns of "department | emails" rows: 8 departments stacked one per line made the card twice as tall. */}
+                    <div className="mt-3 grid gap-x-6 gap-y-2 md:grid-cols-2">
+                        {values.generalAffairsRecipients
+                            .filter((item) => item.workshopId === selectedGaWorkshopId)
+                            .map((recipient) => (
+                                <label key={recipient.departmentId} className="flex items-center gap-3">
+                                    <span className="w-40 shrink-0 text-sm leading-tight text-[#191c1e]">{recipient.departmentName}</span>
+                                    <input
+                                        value={recipient.emails ?? ""}
+                                        onChange={(event) =>
+                                            setValues(
+                                                (current) =>
+                                                    current && {
+                                                        ...current,
+                                                        generalAffairsRecipients: current.generalAffairsRecipients.map((item) =>
+                                                            item.workshopId === recipient.workshopId && item.departmentId === recipient.departmentId
+                                                                ? { ...item, emails: event.target.value }
+                                                                : item
+                                                        ),
+                                                    }
+                                            )
+                                        }
+                                        placeholder={t("fieldGeneralAffairsEmailsPlaceholder")}
+                                        title={t("fieldGeneralAffairsEmailsHint")}
+                                        disabled={isSaving}
+                                        className={`${fieldClassName} min-w-0 flex-1`}
+                                    />
+                                </label>
+                            ))}
                     </div>
                 </SettingCard>
             </div>
@@ -343,9 +430,21 @@ function WorkCalendarCard() {
 
 // `desc` explains the whole section; it rides the title as a tooltip instead of a permanent paragraph
 // (DESIGN_SYSTEM.md §4.10). The dotted underline is the affordance telling the user to hover.
-function SettingCard({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) {
+function SettingCard({
+    icon,
+    title,
+    desc,
+    className = "",
+    children,
+}: {
+    icon: React.ReactNode;
+    title: string;
+    desc?: string;
+    className?: string;
+    children: React.ReactNode;
+}) {
     return (
-        <section className="rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+        <section className={`rounded-xl border border-[#e0e3e5] bg-white shadow-sm ${className}`}>
             <header className="flex items-center gap-2 border-b border-[#f1f5f9] px-4 py-2.5">
                 <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#fff4f2] text-[#e3000f]">{icon}</span>
                 <h2

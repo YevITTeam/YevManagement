@@ -20,6 +20,8 @@ export const DEFAULT_ATTENDANCE_SETTING: AttendanceSettingDto = {
     batchAutoSendTime: "15:00:00",
     resubmitWindowDays: 3,
     backdateDays: 7,
+    generalAffairsSendTime: "17:00:00",
+    generalAffairsRecipients: [],
 };
 
 // Module-level promise cache: needed by many screens, so concurrent mounts share one request.
