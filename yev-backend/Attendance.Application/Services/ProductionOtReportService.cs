@@ -532,8 +532,9 @@ namespace Attendance.Application.Services
                     x.EndTime,
                     x.DidEat,
                     x.NoteVn,
+                    // Office staff are mostly not on the production roster; their group name stands in for the process.
                     CongDoanSnapshot = x.OtForm.IsProductionForm ? x.CongDoanSnapshot
-                        : roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.CongDoan).FirstOrDefault(),
+                        : roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.CongDoan).FirstOrDefault() ?? x.OtForm.Group!.GroupNameVn,
                     BlockCodeSnapshot = x.OtForm.IsProductionForm ? x.BlockCodeSnapshot
                         : roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.BlockCode).FirstOrDefault(),
                     // Office: non-Green/Orange groups are always HC; Green/Orange use the roster, else G/O from the name.
