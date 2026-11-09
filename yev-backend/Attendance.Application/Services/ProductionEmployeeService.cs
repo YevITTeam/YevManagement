@@ -169,6 +169,8 @@ namespace Attendance.Application.Services
             entity!.ProductionLineId = request.ProductionLineId;
             entity.TeamId = request.TeamId;
             entity.ShiftTeamId = request.ShiftTeamId;
+            entity.CongDoan = string.IsNullOrWhiteSpace(request.CongDoan) ? null : request.CongDoan.Trim();
+            entity.TaskName = string.IsNullOrWhiteSpace(request.TaskName) ? null : request.TaskName.Trim();
             await _unitOfWork.SaveChangesAsync();
         }
     }

@@ -19,10 +19,10 @@ export interface GroupApprovalStepDto {
     terminalLevel: number;
 }
 
-// A Team Leader of another Group (same Department) who approves this Group's Team Leader step.
+// Someone from elsewhere in the Department lent to this Group: creates its forms and approves steps matching their title.
 export interface GroupBorrowedApproverDto {
     employeeId: number;
-    jobTitleId: number;
+    jobTitleId: number | null;
     employeeCode: string;
     lastName: string;
     firstName: string;
@@ -30,25 +30,10 @@ export interface GroupBorrowedApproverDto {
     groupNameJp: string | null;
 }
 
-// approvers = already borrowed; candidates = intermediate-title holders of the other Groups in the same Department.
+// approvers = already lent; candidates = everyone else in the Department with an account, outside this Group.
 export interface GroupBorrowedApproversDto {
     approvers: GroupBorrowedApproverDto[];
     candidates: GroupBorrowedApproverDto[];
-}
-
-// Someone outside the Group (same Department, has an account) allowed to create its office OT forms.
-export interface GroupOtFormCreatorDto {
-    employeeId: number;
-    employeeCode: string;
-    lastName: string;
-    firstName: string;
-    groupNameVn: string | null;
-}
-
-// creators = already granted; candidates = everyone else eligible.
-export interface GroupOtFormCreatorsDto {
-    creators: GroupOtFormCreatorDto[];
-    candidates: GroupOtFormCreatorDto[];
 }
 
 // Array order is the StepOrder.

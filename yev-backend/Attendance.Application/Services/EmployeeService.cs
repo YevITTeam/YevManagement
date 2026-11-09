@@ -213,7 +213,7 @@ namespace Attendance.Application.Services
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
                     DepartmentId = x.DepartmentId,
-                    DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
+                    DepartmentNameVn = x.Group != null ? x.Group.Department.DepartmentNameVn : x.Department != null ? x.Department.DepartmentNameVn : null,
                     JobTitleId = x.JobTitleId,
                     JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
                     WorkshopId = x.Group != null ? x.Group.WorkshopId : (int?)null,

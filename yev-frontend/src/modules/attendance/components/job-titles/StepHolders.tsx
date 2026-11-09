@@ -18,6 +18,8 @@ interface HolderItem {
     firstName: string;
     code: string;
     badge?: string | null;
+    // Managed elsewhere, so this list only shows them.
+    locked?: boolean;
 }
 
 export default function StepHolders({
@@ -61,7 +63,7 @@ export default function StepHolders({
                                 {holder.lastName} {holder.firstName}
                                 <span className="rounded bg-[#f2f4f6] px-1.5 py-px text-[11px] text-[#5e3f3a]">{holder.code}</span>
                                 {holder.badge && <span className="rounded bg-[#fff4f2] px-1.5 py-px text-[11px] text-[#930006]">{holder.badge}</span>}
-                                {!readOnly && <button
+                                {!readOnly && !holder.locked && <button
                                     type="button"
                                     onClick={() => onRemoveHolder(holder)}
                                     disabled={removingHolderId === holder.id}

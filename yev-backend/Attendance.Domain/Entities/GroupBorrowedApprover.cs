@@ -1,7 +1,7 @@
 namespace Attendance.Domain.Entities;
 
-// A Team Leader of another Group (same Department) who approves this Group's Team Leader step;
-// their own GroupId/JobTitle stay untouched.
+// Someone from elsewhere in the Department lent to this Group: may create its forms and, when their title is one of
+// its steps, approve them. Their own GroupId/JobTitle stay untouched and the chain still skips steps by their rank.
 public partial class GroupBorrowedApprover
 {
     public int Id { get; set; }

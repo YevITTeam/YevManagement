@@ -207,7 +207,6 @@ public partial class AttendanceDbContext
             case EmployeeAccumulationHistory x: yield return x.EmployeeId; break;
             case EmployeeApprovalScope x: yield return x.EmployeeId; break;
             case GroupBorrowedApprover x: yield return x.EmployeeId; break;
-            case GroupOtFormCreator x: yield return x.EmployeeId; break;
             case DepartmentApprovalStepCoordinator x: yield return x.EmployeeId; break;
             case GroupApprovalStepCoordinator x: yield return x.EmployeeId; break;
             case ApprovalDelegation x:
@@ -290,7 +289,6 @@ public partial class AttendanceDbContext
             EmployeeAccumulationHistory x => $"{Emp(x.EmployeeId)} - {(x.Month == 0 ? "đầu kỳ" : $"T{x.Month}")}/{x.Year}",
             EmployeeApprovalScope x => $"{Emp(x.EmployeeId)} - Xưởng #{x.WorkshopId}, Phòng ban #{x.DepartmentId}",
             GroupBorrowedApprover x => $"Nhóm #{x.GroupId} - {Emp(x.EmployeeId)}",
-            GroupOtFormCreator x => $"Nhóm #{x.GroupId} - {Emp(x.EmployeeId)}",
             DepartmentApprovalStepCoordinator x => $"Phòng ban #{x.DepartmentId} - {Emp(x.EmployeeId)}",
             GroupApprovalStepCoordinator x => $"Nhóm #{x.GroupId} - {Emp(x.EmployeeId)}",
             ApprovalDelegation x => $"{Emp(x.DelegatorEmployeeId)} → {Emp(x.DelegateEmployeeId)}",

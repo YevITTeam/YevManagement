@@ -664,30 +664,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("GroupBorrowedApprovers");
                 });
 
-            modelBuilder.Entity("Attendance.Domain.Entities.GroupOtFormCreator", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("EmployeeId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("GroupId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex(new[] { "EmployeeId" }, "IX_GroupOtFormCreators_EmployeeId");
-
-                    b.HasIndex(new[] { "GroupId", "EmployeeId" }, "IX_GroupOtFormCreators_GroupId_EmployeeId")
-                        .IsUnique();
-
-                    b.ToTable("GroupOtFormCreators");
-                });
-
             modelBuilder.Entity("Attendance.Domain.Entities.JobTitle", b =>
                 {
                     b.Property<int>("Id")
@@ -1976,27 +1952,6 @@ namespace Attendance.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_GroupBorrowedApprovers_Groups_GroupId");
-
-                    b.Navigation("Employee");
-
-                    b.Navigation("Group");
-                });
-
-            modelBuilder.Entity("Attendance.Domain.Entities.GroupOtFormCreator", b =>
-                {
-                    b.HasOne("Attendance.Domain.Entities.Employee", "Employee")
-                        .WithMany()
-                        .HasForeignKey("EmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_GroupOtFormCreators_Employees_EmployeeId");
-
-                    b.HasOne("Attendance.Domain.Entities.Group", "Group")
-                        .WithMany()
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_GroupOtFormCreators_Groups_GroupId");
 
                     b.Navigation("Employee");
 

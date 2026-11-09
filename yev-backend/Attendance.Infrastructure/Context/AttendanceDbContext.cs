@@ -42,7 +42,6 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<GroupApprovalStepCoordinator> GroupApprovalStepCoordinators { get; set; }
     public virtual DbSet<GroupBorrowedApprover> GroupBorrowedApprovers { get; set; }
 
-    public virtual DbSet<GroupOtFormCreator> GroupOtFormCreators { get; set; }
     public virtual DbSet<EmployeeAccumulationHistory> EmployeeAccumulationHistories { get; set; }
     public virtual DbSet<ProductionLine> ProductionLines { get; set; }
     public virtual DbSet<ProductionShiftTeam> ProductionShiftTeams { get; set; }
@@ -276,22 +275,6 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.EmployeeId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_GroupBorrowedApprovers_Employees_EmployeeId");
-        });
-
-        modelBuilder.Entity<GroupOtFormCreator>(entity =>
-        {
-            entity.HasIndex(e => new { e.GroupId, e.EmployeeId }, "IX_GroupOtFormCreators_GroupId_EmployeeId").IsUnique();
-            entity.HasIndex(e => e.EmployeeId, "IX_GroupOtFormCreators_EmployeeId");
-
-            entity.HasOne(d => d.Group).WithMany()
-                .HasForeignKey(d => d.GroupId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_GroupOtFormCreators_Groups_GroupId");
-
-            entity.HasOne(d => d.Employee).WithMany()
-                .HasForeignKey(d => d.EmployeeId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_GroupOtFormCreators_Employees_EmployeeId");
         });
 
         modelBuilder.Entity<EmployeeAccumulationHistory>(entity =>

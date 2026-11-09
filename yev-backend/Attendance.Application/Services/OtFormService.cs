@@ -923,7 +923,7 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(newOtForm.Id);
         }
 
-        // Returns the employee when they belong to the group or were granted it (GroupOtFormCreator), null for Admin
+        // Returns the employee when they belong to the group or were lent to it (GroupBorrowedApprover), null for Admin
         // (treated as lowest level in chain resolution).
         private async Task<Employee?> EnsureCanCreateOrEditForScopeAsync(string userName, bool isAdmin, int groupId)
         {
@@ -931,7 +931,7 @@ namespace Attendance.Application.Services
                 x => x.UserName == userName && !x.IsDeleted, x => x.JobTitle!);
 
             var allowed = callerEmployee != null && (callerEmployee.GroupId == groupId
-                || (await _unitOfWork.GroupOtFormCreators.SelectAsync(
+                || (await _unitOfWork.GroupBorrowedApprovers.SelectAsync(
                     x => x.GroupId == groupId && x.EmployeeId == callerEmployee.Id, x => x.Id)).Count > 0);
 
             if (!allowed && !isAdmin)
@@ -940,7 +940,7 @@ namespace Attendance.Application.Services
             return allowed ? callerEmployee : null;
         }
 
-        // The caller's own group plus groups granted through GroupOtFormCreator.
+        // The caller's own group plus groups they were lent to.
         public async Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin)
         {
             if (isAdmin) return new List<MyCreateScopeItemDto>();
@@ -948,7 +948,7 @@ namespace Attendance.Application.Services
             var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted);
             if (callerEmployee == null) return new List<MyCreateScopeItemDto>();
 
-            var grantedGroupIds = await _unitOfWork.GroupOtFormCreators.SelectAsync(x => x.EmployeeId == callerEmployee.Id, x => x.GroupId);
+            var grantedGroupIds = await _unitOfWork.GroupBorrowedApprovers.SelectAsync(x => x.EmployeeId == callerEmployee.Id, x => x.GroupId);
             var groupIds = grantedGroupIds.Append(callerEmployee.GroupId ?? 0).ToList();
 
             var scopes = await _unitOfWork.Groups.SelectAsync(

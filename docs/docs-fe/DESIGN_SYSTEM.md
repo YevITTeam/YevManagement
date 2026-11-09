@@ -83,6 +83,7 @@ Nút header trang cỡ nhỏ `px-3 py-1.5 text-xs`. Tự viết class (không c�
 
 ### 4.4. Bảng
 Mẫu `BranchList.tsx`: `overflow-x-auto` > `table.min-w-full.text-left.text-sm`; thead `bg-[#f8fafc]` overline; hàng `border-b border-[#f1f5f9] bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]` (zebra + hover của `BranchList`); cột chính `font-semibold text-[#191c1e]`, cột phụ `text-[#5e3f3a]`; thao tác dạng text/icon (`Sửa` xám, `Xoá` `#930006`).
+- Bảng nhiều cột (mẫu `DeviceList`, attendance `EmployeeList`): thao tác gộp vào `ui/RowActionsMenu.tsx` trong cột `sticky right-0 w-10 bg-inherit`, tiêu đề cột `sr-only`; kéo chuột cuộn ngang bằng `useDragScroll` + `cursor-grab`; ô `px-2 py-1.5`, thead `tracking-[0.06em]`. Toolbar nhiều bộ lọc: placeholder chỉ là tên trường (`Team`), bề rộng theo giá trị.
 - Rỗng: `EmptyState` trong `<td colSpan>`; đang tải: `TableSkeletonRows rows columns` (khối lẻ: `Skeleton`).
 - Bảng chọn nhiều dòng (vd. chọn nhân viên tạo đơn): bấm **cả dòng** để tick (`cursor-pointer`, bỏ qua click từ `input/button/select/textarea/a/label`); checkbox phụ trong ô và ô "chọn tất cả" ở tiêu đề thì bọc `<label>` phủ cả ô (`td/th h-px p-0` > `label h-full px-3 py-2`); dòng tiêu đề nhóm (chọn nhiều Nhóm) bấm cả dòng để chọn/bỏ cả nhóm. Danh sách dài thêm ô tìm (`normalizeText` từ `@/lib/normalizeText`, không phân biệt dấu); tìm chỉ lọc hiển thị, không bỏ chọn dòng bị ẩn, chọn tất cả chỉ áp cho dòng đang hiện. Bảng kéo-cuộn bằng `useDragScroll` đã tự nuốt click sau khi kéo.
 
@@ -147,6 +148,6 @@ Bỏ indigo còn sót → `#fff4f2`/`#e3000f`; thêm bo góc + `shadow-sm` cho s
 | Chú thích dài (icon `i`, hover) | `ui/InfoTooltip.tsx` |
 | Tab · Phân trang · Badge | `ui/Tabs.tsx` · `ui/Pagination.tsx` · `ui/Badge.tsx` |
 | Skeleton | `ui/Skeleton.tsx`, `common/TableSkeletonRows.tsx` |
-| Menu thao tác · chồng avatar | `ui/ActionMenu.tsx` · `ui/AvatarStack.tsx` |
+| Menu thao tác (toolbar) · menu ba chấm trên dòng bảng · chồng avatar | `ui/ActionMenu.tsx` · `ui/RowActionsMenu.tsx` · `ui/AvatarStack.tsx` |
 | Trạng thái rỗng | `common/EmptyState.tsx` |
 | Xác nhận xoá · modal nhỏ "chọn vài field rồi xác nhận" | `common/ConfirmDialog.tsx` · `common/FormDialog.tsx` |

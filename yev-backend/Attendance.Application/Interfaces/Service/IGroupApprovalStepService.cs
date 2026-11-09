@@ -10,8 +10,6 @@ namespace Attendance.Application.Interfaces.Service
         Task<List<GroupApprovalStepDto>> ReplaceAsync(string userName, bool isAdmin, int groupId, ReplaceGroupApprovalStepsDto request);
 
         Task<GroupBorrowedApproversDto> GetBorrowedApproversAsync(string userName, bool isAdmin, int groupId);
-        Task<GroupOtFormCreatorsDto> GetOtFormCreatorsAsync(string userName, bool isAdmin, int groupId);
-        Task<GroupOtFormCreatorsDto> ReplaceOtFormCreatorsAsync(string userName, bool isAdmin, int groupId, ReplaceGroupOtFormCreatorsDto request);
         Task<GroupBorrowedApproversDto> ReplaceBorrowedApproversAsync(string userName, bool isAdmin, int groupId, ReplaceGroupBorrowedApproversDto request);
     }
 }

@@ -30,20 +30,26 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
     const [teamId, setTeamId] = useState<number | "">("");
     const [productionLineId, setProductionLineId] = useState<number | "">("");
     const [shiftTeamId, setShiftTeamId] = useState<number | "">("");
+    const [congDoan, setCongDoan] = useState("");
+    const [taskName, setTaskName] = useState("");
     const [isSaving, setIsSaving] = useState(false);
 
     const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
     const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
     const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
+    const [congDoanOptions, setCongDoanOptions] = useState<string[]>([]);
 
     useEffect(() => {
         ProductionEmployeeApi.getTeamOptions().then(setTeamOptions).catch((err) => console.error(err));
+        ProductionEmployeeApi.getCongDoanOptions().then(setCongDoanOptions).catch((err) => console.error(err));
     }, []);
 
     useDialogReset(item !== null, item, (current) => {
         setTeamId(current?.teamId ?? "");
         setProductionLineId(current?.productionLineId ?? "");
         setShiftTeamId(current?.shiftTeamId ?? "");
+        setCongDoan(current?.congDoan ?? "");
+        setTaskName(current?.taskName ?? "");
         ProductionEmployeeApi.getLineOptions(current?.teamId ?? undefined).then(setLineOptions).catch((err) => console.error(err));
         ProductionEmployeeApi.getShiftTeamOptions(current?.productionLineId ?? undefined, current?.teamId ?? undefined)
             .then(setShiftTeamOptions)
@@ -85,6 +91,8 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
                 productionLineId: productionLineId === "" ? null : productionLineId,
                 teamId: teamId === "" ? null : teamId,
                 shiftTeamId: shiftTeamId === "" ? null : shiftTeamId,
+                congDoan: congDoan.trim() || null,
+                taskName: taskName.trim() || null,
             });
             toast.success(t("editSuccess"));
             onSaved();
@@ -122,7 +130,7 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
                                 options={toOptions(teamOptions)}
                                 value={teamId}
                                 onChange={handleSelectTeam}
-                                placeholder={t("filterTeamPlaceholder")}
+                                placeholder=""
                                 disabled={isSaving}
                             />
                         </label>
@@ -133,7 +141,7 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
                                 options={toOptions(lineOptions)}
                                 value={productionLineId}
                                 onChange={handleSelectLine}
-                                placeholder={t("filterBlockPlaceholder")}
+                                placeholder=""
                                 disabled={isSaving}
                             />
                         </label>
@@ -144,8 +152,39 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
                                 options={toOptions(shiftTeamOptions)}
                                 value={shiftTeamId}
                                 onChange={setShiftTeamId}
-                                placeholder={t("filterShiftTeamPlaceholder")}
+                                placeholder=""
                                 disabled={isSaving}
+                            />
+                        </label>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-3">
+                        <label className="block">
+                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("colCongDoan")}</span>
+                            <input
+                                value={congDoan}
+                                onChange={(event) => setCongDoan(event.target.value)}
+                                list="production-cong-doan-options"
+                                maxLength={50}
+                                disabled={isSaving}
+                                className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                            />
+                            {/* Reports group by exact text, so suggest existing values to avoid near-duplicates. */}
+                            <datalist id="production-cong-doan-options">
+                                {congDoanOptions.map((option) => (
+                                    <option key={option} value={option} />
+                                ))}
+                            </datalist>
+                        </label>
+
+                        <label className="block sm:col-span-2">
+                            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("colTaskName")}</span>
+                            <input
+                                value={taskName}
+                                onChange={(event) => setTaskName(event.target.value)}
+                                maxLength={255}
+                                disabled={isSaving}
+                                className="h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                             />
                         </label>
                     </div>

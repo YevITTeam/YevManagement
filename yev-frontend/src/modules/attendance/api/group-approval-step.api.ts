@@ -1,5 +1,5 @@
 import { api } from "@/lib/client";
-import type { GroupApprovalStepDto, GroupBorrowedApproversDto, GroupOtFormCreatorsDto, ReplaceGroupApprovalStepItem } from "@/modules/attendance/types/group-approval-step.dto";
+import type { GroupApprovalStepDto, GroupBorrowedApproversDto, ReplaceGroupApprovalStepItem } from "@/modules/attendance/types/group-approval-step.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { ApiResponse } from "@/types/api";
 
@@ -9,7 +9,6 @@ const ENDPOINTS = {
         getByGroup: (groupId: number) => `/GroupApprovalStep/by-group/${groupId}`,
         replaceByGroup: (groupId: number) => `/GroupApprovalStep/by-group/${groupId}`,
         borrowedApprovers: (groupId: number) => `/GroupApprovalStep/by-group/${groupId}/borrowed-approvers`,
-        otFormCreators: (groupId: number) => `/GroupApprovalStep/by-group/${groupId}/ot-form-creators`,
     },
 } as const;
 
@@ -37,18 +36,9 @@ export const GroupApprovalStepApi = {
         const response = await api.get<ApiResponse<GroupBorrowedApproversDto>>(ENDPOINTS.GROUP_APPROVAL_STEP.borrowedApprovers(groupId));
         return response.data;
     },
-    // employeeIds = the FULL list of borrowed Team Leaders after the change.
+    // employeeIds = the FULL list after the change.
     replaceBorrowedApprovers: async (groupId: number, employeeIds: number[]) => {
         const response = await api.put<ApiResponse<GroupBorrowedApproversDto>>(ENDPOINTS.GROUP_APPROVAL_STEP.borrowedApprovers(groupId), { employeeIds });
-        return response.data;
-    },
-    getOtFormCreators: async (groupId: number) => {
-        const response = await api.get<ApiResponse<GroupOtFormCreatorsDto>>(ENDPOINTS.GROUP_APPROVAL_STEP.otFormCreators(groupId));
-        return response.data;
-    },
-    // employeeIds = the FULL list of granted creators after the change.
-    replaceOtFormCreators: async (groupId: number, employeeIds: number[]) => {
-        const response = await api.put<ApiResponse<GroupOtFormCreatorsDto>>(ENDPOINTS.GROUP_APPROVAL_STEP.otFormCreators(groupId), { employeeIds });
         return response.data;
     },
 };

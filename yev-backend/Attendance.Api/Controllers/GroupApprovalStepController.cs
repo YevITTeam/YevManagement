@@ -56,23 +56,7 @@ namespace Attendance.Api.Controllers
             int groupId, [FromBody] ReplaceGroupBorrowedApproversDto request)
         {
             var result = await _groupApprovalStepService.ReplaceBorrowedApproversAsync(CurrentUserName, User.IsInRole(AdminRole), groupId, request);
-            return Success(result, "Cập nhật người duyệt thành công.");
-        }
-        [RequirePermission("Attendance.GroupApprovalStep.View")]
-        [HttpGet("by-group/{groupId}/ot-form-creators")]
-        public async Task<ActionResult<ApiResponse<GroupOtFormCreatorsDto>>> GetOtFormCreators(int groupId)
-        {
-            var result = await _groupApprovalStepService.GetOtFormCreatorsAsync(CurrentUserName, User.IsInRole(AdminRole), groupId);
-            return Success(result);
-        }
-
-        [RequirePermission("Attendance.GroupApprovalStep.Update")]
-        [HttpPut("by-group/{groupId}/ot-form-creators")]
-        public async Task<ActionResult<ApiResponse<GroupOtFormCreatorsDto>>> ReplaceOtFormCreators(
-            int groupId, [FromBody] ReplaceGroupOtFormCreatorsDto request)
-        {
-            var result = await _groupApprovalStepService.ReplaceOtFormCreatorsAsync(CurrentUserName, User.IsInRole(AdminRole), groupId, request);
-            return Success(result, "Cập nhật người tạo đơn thành công.");
+            return Success(result, "Cập nhật danh sách thành công.");
         }
     }
 }

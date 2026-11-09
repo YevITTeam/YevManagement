@@ -30,6 +30,7 @@ import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import ActionMenu from "@/components/ui/ActionMenu";
+import RowActionsMenu, { type RowAction } from "@/components/ui/RowActionsMenu";
 import { Badge } from "@/components/ui/Badge";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
 import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
@@ -45,6 +46,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { useDragScroll } from "@/modules/common/hooks/useDragScroll";
 import { Pagination } from "@/components/ui/Pagination";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
@@ -52,9 +54,9 @@ import type { ProductionOptionDto } from "@/modules/attendance/types/production-
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 
-const PAGE_SIZE = 10;
-const FILTER_TRIGGER_CLASS =
-    "h-9 w-36 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+const PAGE_SIZE = 15;
+const filterTrigger = (width: string) =>
+    `h-9 ${width} rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]`;
 
 const toProductionOptions = (options: ProductionOptionDto[]): SelectOption[] =>
     options.map((o) => ({ value: o.id, label: o.nameVn ? `${o.code} - ${o.nameVn}` : o.code, searchText: o.code.toLowerCase() }));
@@ -124,6 +126,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [otHourLimitImportOpen, setOtHourLimitImportOpen] = useState(false);
     const [monthlyAccumulationImportOpen, setMonthlyAccumulationImportOpen] = useState(false);
     const { setting } = useAttendanceSetting();
+    const [tableScrollRef, onTableScrollMouseDown] = useDragScroll<HTMLDivElement>();
 
     useEffect(() => {
         ProductionEmployeeApi.getTeamOptions().then(setTeamOptions).catch((err) => console.error(err));
@@ -383,17 +386,34 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
             <ActionMenu label={t("excelActionsLabel")} icon={<FileSpreadsheet className="h-3.5 w-3.5" />} items={employeeExcelItems} />
         ) : null;
 
+    const getRowActions = (employee: EmployeeDto): RowAction[] => [
+        ...(canUpdateEmployee ? [{ label: tCommon("edit"), icon: Pencil, onClick: () => openEditForm(employee) }] : []),
+        ...(canUpdateProduction
+            ? [{ label: tProduction("editAction"), icon: Factory, onClick: () => setProductionEditEmployee(employee) }]
+            : []),
+        ...(canUpdateOtLimit && !canUpdateEmployee
+            ? [{ label: t("otLimitEditAction"), icon: SlidersHorizontal, onClick: () => setOtLimitEmployee(employee) }]
+            : []),
+        { label: t("viewAccumulationHistory"), icon: History, onClick: () => setHistoryEmployee(employee) },
+        ...(isAdmin && employee.userName
+            ? [{ label: t("signatureEditAction"), icon: PenLine, onClick: () => setSignatureEmployee(employee) }]
+            : []),
+        ...(canDeleteEmployee
+            ? [{ label: tCommon("delete"), icon: Trash2, onClick: () => setDeletingEmployee(employee), variant: "danger" as const }]
+            : []),
+    ];
+
     return (
-        <div className="space-y-4">
+        <div className="space-y-3">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 md:flex-row md:items-center md:justify-between">
                     <div className="flex flex-wrap items-center gap-2">
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
-                            className="h-9 w-52 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-48 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
@@ -409,7 +429,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             value={workshopId}
                             onChange={handleSelectWorkshop}
                             placeholder={t("filterWorkshopPlaceholder")}
-                            triggerClassName="h-9 w-36 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            triggerClassName={filterTrigger("w-24")}
                         />
                         {showDepartmentFilter && (
                             <SearchableSelect
@@ -417,7 +437,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                 value={departmentId}
                                 onChange={handleSelectDepartment}
                                 placeholder={t("filterDepartmentPlaceholder")}
-                                triggerClassName="h-9 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                triggerClassName={filterTrigger("w-36")}
                             />
                         )}
                         <SearchableSelect
@@ -425,35 +445,35 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             value={groupId}
                             onChange={handleSelectGroup}
                             placeholder={t("filterGroupPlaceholder")}
-                            triggerClassName="h-9 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            triggerClassName={filterTrigger("w-36")}
                         />
                         <SearchableSelect
                             options={toProductionOptions(teamOptions)}
                             value={teamId}
                             onChange={handleSelectTeam}
                             placeholder={tProduction("filterTeamPlaceholder")}
-                            triggerClassName={FILTER_TRIGGER_CLASS}
+                            triggerClassName={filterTrigger("w-24")}
                         />
                         <SearchableSelect
                             options={toProductionOptions(lineOptions)}
                             value={productionLineId}
                             onChange={handleSelectLine}
                             placeholder={tProduction("filterBlockPlaceholder")}
-                            triggerClassName={FILTER_TRIGGER_CLASS}
+                            triggerClassName={filterTrigger("w-24")}
                         />
                         <SearchableSelect
                             options={toProductionOptions(shiftTeamOptions)}
                             value={shiftTeamId}
                             onChange={handleSelectShiftTeam}
                             placeholder={tProduction("filterShiftTeamPlaceholder")}
-                            triggerClassName={FILTER_TRIGGER_CLASS}
+                            triggerClassName={filterTrigger("w-28")}
                         />
                         <SearchableSelect
                             options={congDoanSelectOptions}
                             value={congDoan}
                             onChange={handleSelectCongDoan}
                             placeholder={tProduction("filterCongDoanPlaceholder")}
-                            triggerClassName={FILTER_TRIGGER_CLASS}
+                            triggerClassName={filterTrigger("w-32")}
                         />
                         {employeeExcelActions}
                     </div>
@@ -463,24 +483,26 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <div ref={tableScrollRef} onMouseDown={onTableScrollMouseDown} className="cursor-grab overflow-x-auto">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="whitespace-nowrap border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-3 py-2">{t("colCode")}</th>
-                                <th className="px-3 py-2">{t("colFullName")}</th>
-                                <th className="px-3 py-2">{t("colUserName")}</th>
-                                <th className="px-3 py-2">{t("colWorkshop")}</th>
-                                <th className="px-3 py-2">{t("colGroup")}</th>
-                                <th className="px-3 py-2">{t("colJobTitle")}</th>
-                                <th className="px-3 py-2">{tProduction("colBlock")}</th>
-                                <th className="px-3 py-2">{tProduction("colTeam")}</th>
-                                <th className="px-3 py-2">{tProduction("colShiftTeam")}</th>
-                                <th className="px-3 py-2">{tProduction("colCongDoan")}</th>
-                                <th className="px-3 py-2">{tProduction("colTaskName")}</th>
-                                <th className="px-3 py-2">{t("colMonthToDate")}</th>
-                                <th className="px-3 py-2">{t("colYearToDate")}</th>
-                                <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
+                            <tr className="whitespace-nowrap border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                <th className="py-1.5 pl-3 pr-2">{t("colCode")}</th>
+                                <th className="px-2 py-1.5">{t("colFullName")}</th>
+                                <th className="px-2 py-1.5">{t("colUserName")}</th>
+                                <th className="px-2 py-1.5">{t("colWorkshop")}</th>
+                                <th className="px-2 py-1.5">{t("colGroup")}</th>
+                                <th className="px-2 py-1.5">{t("colJobTitle")}</th>
+                                <th className="px-2 py-1.5">{tProduction("colBlock")}</th>
+                                <th className="px-2 py-1.5">{tProduction("colTeam")}</th>
+                                <th className="px-2 py-1.5">{tProduction("colShiftTeam")}</th>
+                                <th className="px-2 py-1.5">{tProduction("colCongDoan")}</th>
+                                <th className="px-2 py-1.5">{tProduction("colTaskName")}</th>
+                                <th className="px-2 py-1.5">{t("colMonthToDate")}</th>
+                                <th className="px-2 py-1.5">{t("colYearToDate")}</th>
+                                <th className="sticky right-0 z-10 w-10 bg-[#f8fafc] px-2 py-1.5 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
+                                    <span className="sr-only">{tCommon("actions")}</span>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -505,112 +527,53 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     }`;
                                 return (
                                 <tr key={employee.id} className="whitespace-nowrap border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                    <td className="py-1.5 pl-3 pr-2 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
+                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
                                         {employee.lastName} {employee.firstName}
                                     </td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
+                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
                                         {employee.workshopNameVn ??
                                             (employee.approvalScopes.length > 0
                                                 ? [...new Set(employee.approvalScopes.map((s) => s.workshopNameVn))].join(", ")
                                                 : "-")}
                                     </td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
-                                        {employee.groupNameVn ??
-                                            (employee.approvalScopes.length > 0
-                                                ? employee.approvalScopes.map((s) => `${s.departmentNameVn} (${s.workshopNameVn})`).join(", ")
-                                                : employee.departmentNameVn) ?? (
+                                    <td className="px-2 py-1 text-sm leading-4 text-[#191c1e]">
+                                        {(!employee.groupNameVn && employee.approvalScopes.length > 0
+                                            ? employee.approvalScopes.map((s) => `${s.departmentNameVn} (${s.workshopNameVn})`).join(", ")
+                                            : employee.departmentNameVn) ?? (
                                             <span className="text-xs italic text-[#8a8f94]">{t("orgUnitCompanyWide")}</span>
                                         )}
+                                        {employee.groupNameVn && <div className="text-xs text-[#5e3f3a]">{employee.groupNameVn}</div>}
                                     </td>
-                                    <td className="px-3 py-2 text-sm">
+                                    <td className="px-2 py-1.5 text-sm">
                                         {employee.jobTitleName ? (
                                             <Badge variant="info">{employee.jobTitleName}</Badge>
                                         ) : (
                                             <span className="text-xs italic text-[#8a8f94]">{t("noJobTitle")}</span>
                                         )}
                                     </td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
                                         {employee.lineCode ?? "-"}
                                     </td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.teamCode ?? "-"}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.shiftTeamCode ?? "-"}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.congDoan ?? "-"}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.taskName ?? "-"}</td>
-                                    <td className="px-3 py-2 text-sm">
+                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.teamCode ?? "-"}</td>
+                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.shiftTeamCode ?? "-"}</td>
+                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.congDoan ?? "-"}</td>
+                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.taskName ?? "-"}</td>
+                                    <td className="px-2 py-1.5 text-sm">
                                         <span className={accumulationBadgeClass(isMonthOverLimit)}>
                                             {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
                                             {employee.monthToDate}h
                                         </span>
                                     </td>
-                                    <td className="px-3 py-2 text-sm">
+                                    <td className="px-2 py-1.5 text-sm">
                                         <span className={accumulationBadgeClass(isYearOverLimit)}>
                                             {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
                                             {employee.yearToDate}h
                                         </span>
                                     </td>
-                                    <td className="px-3 py-2 text-right text-sm">
-                                        <div className="inline-flex items-center gap-1.5">
-                                            <button
-                                                onClick={() => setHistoryEmployee(employee)}
-                                                className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                title={t("viewAccumulationHistory")}
-                                                aria-label={t("viewAccumulationHistory")}
-                                            >
-                                                <History className="h-3.5 w-3.5" />
-                                            </button>
-                                            {canUpdateProduction && (
-                                                <button
-                                                    onClick={() => setProductionEditEmployee(employee)}
-                                                    className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                    title={tProduction("editAction")}
-                                                    aria-label={tProduction("editAction")}
-                                                >
-                                                    <Factory className="h-3.5 w-3.5" />
-                                                </button>
-                                            )}
-                                            {canUpdateOtLimit && !canUpdateEmployee && (
-                                                <button
-                                                    onClick={() => setOtLimitEmployee(employee)}
-                                                    className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                    title={t("otLimitEditAction")}
-                                                    aria-label={t("otLimitEditAction")}
-                                                >
-                                                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                                                </button>
-                                            )}
-                                            {isAdmin && employee.userName && (
-                                                <button
-                                                    onClick={() => setSignatureEmployee(employee)}
-                                                    className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                    title={t("signatureEditAction")}
-                                                    aria-label={t("signatureEditAction")}
-                                                >
-                                                    <PenLine className="h-3.5 w-3.5" />
-                                                </button>
-                                            )}
-                                            {canUpdateEmployee && (
-                                                <button
-                                                    onClick={() => openEditForm(employee)}
-                                                    className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                    title={tCommon("edit")}
-                                                    aria-label={tCommon("edit")}
-                                                >
-                                                    <Pencil className="h-3.5 w-3.5" />
-                                                </button>
-                                            )}
-                                            {canDeleteEmployee && (
-                                                <button
-                                                    onClick={() => setDeletingEmployee(employee)}
-                                                    className="cursor-pointer rounded-md border border-[#e9bcb6] p-2 text-[#930006] transition hover:bg-[#fff4f2]"
-                                                    title={tCommon("delete")}
-                                                    aria-label={tCommon("delete")}
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </button>
-                                            )}
-                                        </div>
+                                    <td className="sticky right-0 w-10 bg-inherit px-2 py-1.5 text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
+                                        <RowActionsMenu actions={getRowActions(employee)} />
                                     </td>
                                 </tr>
                                 );

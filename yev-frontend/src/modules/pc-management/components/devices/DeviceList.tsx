@@ -4,7 +4,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ArrowDownAZ, ArrowUpAZ, ArrowRightLeft, ArrowUpDown, ChevronDown, Copy, Eye, Pencil, FileBarChart, Plus, Printer, RefreshCw, Trash2, Upload, X } from "lucide-react";
-import RowActionsMenu, { type RowAction } from "@/modules/pc-management/components/RowActionsMenu";
+import RowActionsMenu, { type RowAction } from "@/components/ui/RowActionsMenu";
 import DeviceFilterBar, { type DeviceFilters } from "@/modules/pc-management/components/DeviceFilterBar";
 import PrintDeviceQrLabelsDialog from "@/modules/pc-management/components/PrintDeviceQrLabelsDialog";
 import DeviceForm, { type DeviceFormValues } from "@/modules/pc-management/components/devices/DeviceForm";

@@ -210,13 +210,29 @@ export default function CategoryManagement() {
     );
 
     return (
-        <div className="space-y-4">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-xl font-semibold text-[#191c1e]">{t("title")}</h1>
+        <div className="space-y-3">
+            <h1 className="sr-only">{t("title")}</h1>
+            <div className="flex flex-col-reverse gap-2 border-b border-[#e0e3e5] md:flex-row md:items-end md:gap-3">
+                <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+                    {topTabs.map((tab) => {
+                        const isActive = tab.group ? activeGroup === tab.group : activeTab === tab.key;
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => selectTab(tab.key)}
+                                className={`shrink-0 cursor-pointer whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition ${
+                                    isActive
+                                        ? "border-[#e3000f] text-[#191c1e]"
+                                        : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
+                                }`}
+                            >
+                                {tab.group ? groupLabels[tab.group] : tab.label}
+                            </button>
+                        );
+                    })}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2 md:pb-1.5">
                     <button
                         onClick={() => activeRef.current?.refresh()}
                         disabled={loading}
@@ -233,25 +249,6 @@ export default function CategoryManagement() {
                         </button>
                     )}
                 </div>
-            </div>
-
-            <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">
-                {topTabs.map((tab) => {
-                    const isActive = tab.group ? activeGroup === tab.group : activeTab === tab.key;
-                    return (
-                        <button
-                            key={tab.key}
-                            onClick={() => selectTab(tab.key)}
-                            className={`cursor-pointer border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
-                                isActive
-                                    ? "border-[#e3000f] text-[#191c1e]"
-                                    : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
-                            }`}
-                        >
-                            {tab.group ? groupLabels[tab.group] : tab.label}
-                        </button>
-                    );
-                })}
             </div>
 
             {groupTabs.length > 1 && <Tabs tabs={groupTabs} activeKey={activeTab} onChange={selectTab} />}
