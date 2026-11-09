@@ -1,5 +1,6 @@
 "use client";
 
+import { Pagination } from "@/components/ui/Pagination";
 import { Fragment, useState, type ReactNode } from "react";
 import { FilterX, RefreshCw, Search } from "lucide-react";
 import { toast } from "react-toastify";
@@ -65,8 +66,6 @@ export default function AuditTrailList({
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const { isLoading, error, refetch: fetchRows } = useFetchEffect(
         () =>
@@ -86,8 +85,6 @@ export default function AuditTrailList({
             setRows(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
         "Không thể tải lịch sử thao tác.",
         (message) => toast.error(message),
@@ -135,7 +132,7 @@ export default function AuditTrailList({
             </div>
 
             <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
-                <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-full sm:[&>label]:w-36">
+                <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-[calc(50%-0.25rem)] sm:[&>label]:w-36">
                     <label className="block">
                         <span className={fieldLabelClassName}>Bảng dữ liệu</span>
                         <input
@@ -218,9 +215,6 @@ export default function AuditTrailList({
             </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-[#e0e3e5] bg-[#f8fafc] p-4 text-sm text-[#5e3f3a]">
-                    {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} bản ghi`}
-                </div>
 
                 {error && <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
 
@@ -228,7 +222,7 @@ export default function AuditTrailList({
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-3 py-2">Bảng</th>
+                                <th className="hidden lg:table-cell px-3 py-2">Bảng</th>
                                 <th className="px-3 py-2">Đối tượng</th>
                                 <th className="px-3 py-2">Hành động</th>
                                 <th className="px-3 py-2">Người thao tác</th>
@@ -247,7 +241,7 @@ export default function AuditTrailList({
                             {rows.map((row) => (
                                 <Fragment key={row.id}>
                                     <tr className="border-b border-[#f1f5f9]">
-                                        <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{row.tableName}</td>
+                                        <td className="hidden lg:table-cell px-3 py-2 text-sm font-semibold text-[#191c1e]">{row.tableName}</td>
                                         <td className="px-3 py-2 text-sm text-[#191c1e]">
                                             <div className="flex items-center gap-2">
                                                 <span>{row.recordName || "-"}</span>
@@ -261,7 +255,7 @@ export default function AuditTrailList({
                                         </td>
                                         <td className="px-3 py-2">
                                             <span
-                                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${auditActionClasses[row.action] ?? "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"}`}
+                                                className={`inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${auditActionClasses[row.action] ?? "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"}`}
                                             >
                                                 {auditActionLabels[row.action] ?? row.action}
                                             </span>
@@ -294,25 +288,14 @@ export default function AuditTrailList({
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        Trang trước
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        Trang sau
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} bản ghi`}
+                    compactSummary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} bản ghi`}
+                />
             </section>
         </div>
     );

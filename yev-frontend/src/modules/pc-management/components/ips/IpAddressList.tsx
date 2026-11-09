@@ -1,4 +1,5 @@
 "use client";
+import { Pagination } from "@/components/ui/Pagination";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { X, Pencil } from "lucide-react";
 import { toast } from "react-toastify";
@@ -29,8 +30,6 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
     const [editingIp, setEditingIp] = useState<IpAddressDto | null>(null);
@@ -54,8 +53,6 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
             setIpAddresses(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
         "Không thể tải danh sách địa chỉ IP.",
         (message) => toast.error(message),
@@ -214,9 +211,6 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                             </button>
                         )}
                     </div>
-                    <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${ipAddresses.length} / ${totalCount} bản ghi`}
-                    </div>
                 </div>
 
                 {error && (
@@ -261,10 +255,10 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                     </th>
                                 )}
                                 <th className="whitespace-nowrap px-3 py-2">Địa chỉ IP</th>
-                                <th className="whitespace-nowrap px-3 py-2">Dải mạng</th>
+                                <th className="hidden whitespace-nowrap px-3 py-2 lg:table-cell">Dải mạng</th>
                                 <th className="whitespace-nowrap px-3 py-2">Thiết bị</th>
                                 <th className="whitespace-nowrap px-3 py-2">Trạng thái</th>
-                                <th className="whitespace-nowrap px-3 py-2">Ghi chú</th>
+                                <th className="hidden whitespace-nowrap px-3 py-2 lg:table-cell">Ghi chú</th>
                                 <th className="whitespace-nowrap px-3 py-2 text-right">Thao tác</th>
                             </tr>
                         </thead>
@@ -290,7 +284,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                         </td>
                                     )}
                                     <td className="whitespace-nowrap px-3 py-2 text-sm font-semibold text-[#191c1e]">{ip.ipAddress}</td>
-                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{ip.prefix ?? "—"}</td>
+                                    <td className="hidden whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a] lg:table-cell">{ip.prefix ?? "—"}</td>
                                     <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{ip.deviceCode ?? "—"}</td>
                                     <td className="whitespace-nowrap px-3 py-2">
                                         <span
@@ -302,7 +296,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                                             {ip.statusText || "Không xác định"}
                                         </span>
                                     </td>
-                                    <td className="max-w-[220px] truncate px-3 py-2 text-sm text-[#5e3f3a]" title={ip.note ?? undefined}>
+                                    <td className="hidden max-w-[220px] truncate px-3 py-2 text-sm text-[#5e3f3a] lg:table-cell" title={ip.note ?? undefined}>
                                         {ip.note ?? "—"}
                                     </td>
                                     <td className="whitespace-nowrap px-3 py-2 text-right text-sm">
@@ -321,25 +315,14 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        Trang trước
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        Trang sau
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${ipAddresses.length} / ${totalCount} bản ghi`}
+                    compactSummary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${ipAddresses.length} / ${totalCount} bản ghi`}
+                />
             </section>
 
             <IpForm

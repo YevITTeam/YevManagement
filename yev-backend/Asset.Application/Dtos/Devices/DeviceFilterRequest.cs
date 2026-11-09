@@ -11,6 +11,8 @@ namespace Asset.Application.Dtos.Devices
 
         public string? DeviceCode { get; set; }
         public string? Manager { get; set; }
+        // Contains match on DOMAIN\user, so "nam.nguyen" and "YEV\nam" both work.
+        public string? ManagerDomainAccount { get; set; }
         public string? PurchaseDate { get; set; }
         public string? IpAddress { get; set; }
         public string? Email { get; set; }

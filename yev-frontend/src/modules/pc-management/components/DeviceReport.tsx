@@ -1,4 +1,5 @@
 "use client";
+import { Pagination } from "@/components/ui/Pagination";
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { Link } from "@/navigation";
@@ -238,9 +239,9 @@ export default function DeviceReport() {
                 <div className="rounded-xl border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
                 {kpis.map((kpi) => (
-                    <div key={kpi.label} className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
+                    <div key={kpi.label} className="rounded-xl border border-[#e0e3e5] bg-white p-3 shadow-sm md:p-5">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-[#5e3f3a]">{kpi.label}</p>
@@ -248,7 +249,7 @@ export default function DeviceReport() {
                                     {isLoading ? "—" : kpi.value}
                                 </h2>
                             </div>
-                            <div className="rounded-md bg-[#fff4f2] p-3 text-[#e3000f]">
+                            <div className="hidden rounded-md bg-[#fff4f2] p-3 text-[#e3000f] sm:block">
                                 <kpi.icon size={20} />
                             </div>
                         </div>
@@ -350,25 +351,13 @@ export default function DeviceReport() {
                 </div>
 
                 {expiringTotalPages > 1 && (
-                    <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                        <button
-                            className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                            disabled={expiringPageIndex <= 1}
-                            onClick={() => setExpiringPageIndex((current) => Math.max(1, current - 1))}
-                        >
-                            Trang trước
-                        </button>
-                        <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                            Trang {expiringPageIndex} / {expiringTotalPages}
-                        </div>
-                        <button
-                            className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                            disabled={expiringPageIndex >= expiringTotalPages}
-                            onClick={() => setExpiringPageIndex((current) => Math.min(expiringTotalPages, current + 1))}
-                        >
-                            Trang sau
-                        </button>
-                    </div>
+                    <Pagination
+                        pageIndex={expiringPageIndex}
+                        totalPages={expiringTotalPages}
+                        onPageChange={setExpiringPageIndex}
+                        summary={`${summary.expiringDevices.length} thiết bị`}
+                        compactSummary={`${summary.expiringDevices.length} thiết bị`}
+                    />
                 )}
             </section>
 

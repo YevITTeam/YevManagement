@@ -1,4 +1,5 @@
 "use client";
+import { Pagination } from "@/components/ui/Pagination";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 
@@ -22,8 +23,6 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -40,8 +39,6 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
             setPrefixes(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
         "Không thể tải danh sách dải mạng.",
         (message) => toast.error(message),
@@ -152,9 +149,6 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                             Tìm kiếm
                         </button>
                     </div>
-                    <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${prefixes.length} / ${totalCount} bản ghi`}
-                    </div>
                 </div>
 
                 {error && (
@@ -167,10 +161,10 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
                                 <th className="whitespace-nowrap px-3 py-2">Dải mạng</th>
                                 <th className="whitespace-nowrap px-3 py-2">Chi nhánh</th>
-                                <th className="whitespace-nowrap px-3 py-2">Subnet mask</th>
-                                <th className="whitespace-nowrap px-3 py-2">Gateway</th>
-                                <th className="whitespace-nowrap px-3 py-2">DNS</th>
-                                <th className="whitespace-nowrap px-3 py-2">Mô tả</th>
+                                <th className="hidden lg:table-cell whitespace-nowrap px-3 py-2">Subnet mask</th>
+                                <th className="hidden lg:table-cell whitespace-nowrap px-3 py-2">Gateway</th>
+                                <th className="hidden lg:table-cell whitespace-nowrap px-3 py-2">DNS</th>
+                                <th className="hidden lg:table-cell whitespace-nowrap px-3 py-2">Mô tả</th>
                                 <th className="whitespace-nowrap px-3 py-2 text-center">IP đã dùng/ còn trống</th>
                                 <th className="whitespace-nowrap px-3 py-2 text-right">Thao tác</th>
                             </tr>
@@ -187,14 +181,14 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                                 <tr key={prefix.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="whitespace-nowrap px-3 py-2 text-sm font-semibold text-[#191c1e]">{prefix.prefix}</td>
                                     <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{prefix.branchName ?? "—"}</td>
-                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{prefix.subnetMask ?? "—"}</td>
-                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{prefix.gateway ?? "—"}</td>
-                                    <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">
+                                    <td className="hidden lg:table-cell whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{prefix.subnetMask ?? "—"}</td>
+                                    <td className="hidden lg:table-cell whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{prefix.gateway ?? "—"}</td>
+                                    <td className="hidden lg:table-cell whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">
                                         {prefix.preferredDns || prefix.alternateDns
                                             ? [prefix.preferredDns, prefix.alternateDns].filter(Boolean).join(" / ")
                                             : "—"}
                                     </td>
-                                    <td className="max-w-[220px] truncate px-3 py-2 text-sm text-[#5e3f3a]" title={prefix.description ?? undefined}>
+                                    <td className="hidden lg:table-cell max-w-[220px] truncate px-3 py-2 text-sm text-[#5e3f3a]" title={prefix.description ?? undefined}>
                                         {prefix.description ?? "—"}
                                     </td>
                                     <td className="whitespace-nowrap px-3 py-2 text-center text-sm text-[#5e3f3a]">
@@ -226,25 +220,14 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        Trang trước
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        Trang sau
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${prefixes.length} / ${totalCount} bản ghi`}
+                    compactSummary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${prefixes.length} / ${totalCount} bản ghi`}
+                />
             </section>
 
             <IpPrefixForm

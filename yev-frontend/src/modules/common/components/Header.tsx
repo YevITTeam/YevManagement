@@ -93,9 +93,9 @@ export default function Header() {
               No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404. */}
           <Link href="/" prefetch={false} title={t("productName")} className="flex items-center gap-3">
             <BrandLogo className="h-8 w-10" />
-            <div className={`leading-tight ${hasSidebar ? "hidden md:block" : ""}`}>
-              <div className="text-sm font-semibold text-[#191c1e]">{t("productName")}</div>
-              <div className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-[#5e3f3a] sm:block">
+            <div className={`leading-tight ${hasSidebar ? "hidden lg:block" : ""}`}>
+              <div className="whitespace-nowrap text-sm font-semibold text-[#191c1e]">{t("productName")}</div>
+              <div className="hidden whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.2em] text-[#5e3f3a] lg:block">
                 {t("tagline")}
               </div>
             </div>
@@ -117,7 +117,7 @@ export default function Header() {
                 className="cursor-pointer flex items-center gap-2 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#5e3f3a] transition hover:border-[#e3000f]/30 hover:text-[#e3000f] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">{t("refreshPermissions")}</span>
+                <span className="hidden whitespace-nowrap xl:inline">{t("refreshPermissions")}</span>
               </button>
 
               {canSeeAdmin && (
@@ -133,7 +133,7 @@ export default function Header() {
               )}
 
               <div className="flex items-center gap-2 border-l border-[#e0e3e5] pl-2 sm:gap-3 sm:pl-3">
-                <div className="hidden text-right sm:block">
+                <div className="hidden whitespace-nowrap text-right lg:block">
                   <p className="text-xs font-semibold leading-tight text-[#191c1e]">{user.fullName}</p>
                   <p className="text-[11px] leading-tight text-[#5e3f3a]">{user.userName}</p>
                 </div>

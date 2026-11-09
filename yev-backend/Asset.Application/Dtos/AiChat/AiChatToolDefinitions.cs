@@ -33,6 +33,7 @@ namespace Asset.Application.Dtos.AiChat
                 "properties": {
                   "deviceCode": { "type": "string", "description": "Mã thiết bị (tìm gần đúng)" },
                   "manager": { "type": "string", "description": "Tên người quản lý/đang sử dụng thiết bị" },
+                  "managerDomainAccount": { "type": "string", "description": "Tài khoản domain của người dùng máy, dạng DOMAIN\\user (vd \"YEV\\nam.nguyen\" hoặc chỉ \"nam.nguyen\") — khớp gần đúng" },
                   "ipAddress": { "type": "string", "description": "Địa chỉ IP của thiết bị" },
                   "email": { "type": "string", "description": "Email gắn với thiết bị" },
                   "supplierName": { "type": "string", "description": "Tên nhà cung cấp (nhập thẳng tên, không cần id)" },
@@ -42,7 +43,7 @@ namespace Asset.Application.Dtos.AiChat
                   "branchName": { "type": "string", "description": "Tên chi nhánh, truyền thẳng tên người dùng nói (vd \"Dĩ An\", \"Củ Chi\", \"Mỹ Phước\") — khớp gần đúng, không cần id" },
                   "groupName": { "type": "string", "description": "Tên Nhóm thiết bị, truyền thẳng tên người dùng nói (vd \"Công vụ\", \"Kế toán\") — khớp gần đúng, KHÔNG cần đổi sang id trước" },
                   "departmentName": { "type": "string", "description": "Tên Bộ phận quản lý, truyền thẳng tên người dùng nói — khớp gần đúng, KHÔNG cần đổi sang id trước" },
-                  "status": { "type": "integer", "description": "Trạng thái thiết bị: 0 = chờ sử dụng, 1 = đang sử dụng, 2 = chờ thanh lý, 3 = đã thanh lý" },
+                  "status": { "type": "integer", "description": "Trạng thái thiết bị: 0 = chờ sử dụng, 1 = đang sử dụng, 2 = chờ thanh lý, 3 = đã thanh lý, 4 = đang sửa chữa" },
                   "groupId": { "type": "integer", "description": "Id Nhóm thiết bị — chỉ dùng khi đã có id sẵn; bình thường hãy dùng groupName" },
                   "departmentId": { "type": "integer", "description": "Id Bộ phận quản lý — chỉ dùng khi đã có id sẵn; bình thường hãy dùng departmentName" },
                   "isOutsourced": { "type": "boolean", "description": "true = chỉ máy thuê ngoài, false = chỉ máy của công ty, bỏ trống = cả hai" },

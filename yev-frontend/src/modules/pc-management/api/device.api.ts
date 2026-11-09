@@ -23,6 +23,8 @@ export interface GetDevicePageNationParams {
     pageSize?: number;
     deviceCode?: string;
     manager?: string;
+    // Contains match on DOMAIN\user.
+    managerDomainAccount?: string;
     purchaseDate?: string;
     ipAddress?: string;
     email?: string;
@@ -38,7 +40,7 @@ export interface GetDevicePageNationParams {
     requiresDailyCheck?: boolean;
     branchId?: number;
     deviceTypeId?: number;
-    // 0=Unused, 1=In use, 2=Pending liquidation, 3=Liquidated (Asset.Domain.Enums.DeviceStatus).
+    // 0=Unused, 1=In use, 2=Pending liquidation, 3=Liquidated, 4=Under repair (Asset.Domain.Enums.DeviceStatus).
     status?: number;
     // Expiring on or before this date (yyyy-MM-dd).
     expiryDate?: string;
@@ -53,6 +55,7 @@ export const DeviceApi = {
         if (params?.pageSize) query.set("PageSize", String(params.pageSize));
         if (params?.deviceCode) query.set("DeviceCode", params.deviceCode);
         if (params?.manager) query.set("Manager", params.manager);
+        if (params?.managerDomainAccount) query.set("ManagerDomainAccount", params.managerDomainAccount);
         if (params?.purchaseDate) query.set("PurchaseDate", params.purchaseDate);
         if (params?.ipAddress) query.set("IpAddress", params.ipAddress);
         if (params?.email) query.set("Email", params.email);

@@ -140,10 +140,10 @@ export default function ServerCheckReportPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-4 print:hidden md:flex-row md:items-center md:justify-between">
-                <h1 className="whitespace-nowrap text-xl font-semibold text-[#191c1e]">{t("reportTitle")}</h1>
-                {/* Below 2xl the three text buttons collapse to icons so the toolbar stays on one row. */}
-                <div className="flex flex-wrap items-center gap-2 md:flex-nowrap">
+            <div className="flex flex-col gap-3 print:hidden xl:flex-row xl:items-center xl:justify-between">
+                <h1 className="whitespace-nowrap text-lg font-semibold text-[#191c1e]">{t("reportTitle")}</h1>
+                {/* Below 2xl the text buttons collapse to icons; below xl the toolbar must wrap or it pushes the page sideways. */}
+                <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
                     {canScan && (
                         <Link
                             href="/pc/server-check/scan"

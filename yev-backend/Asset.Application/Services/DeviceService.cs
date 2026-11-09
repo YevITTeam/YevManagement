@@ -63,6 +63,11 @@ namespace Asset.Application.Services
                 query = query.Where(d => d.Manager.Contains(request.Manager));
             }
 
+            if (!string.IsNullOrWhiteSpace(request.ManagerDomainAccount))
+            {
+                query = query.Where(d => d.ManagerDomainAccount != null && d.ManagerDomainAccount.Contains(request.ManagerDomainAccount));
+            }
+
             if (!string.IsNullOrWhiteSpace(request.SupplierName))
             {
                 query = query.Where(d => d.Supplier.SupplierName.Contains(request.SupplierName));

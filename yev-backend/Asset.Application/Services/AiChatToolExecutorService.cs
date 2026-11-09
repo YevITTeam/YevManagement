@@ -123,6 +123,7 @@ namespace Asset.Application.Services
                 PageSize = MaxResults,
                 DeviceCode = GetDeviceCodeArg(args, "deviceCode"),
                 Manager = GetStringArg(args, "manager"),
+                ManagerDomainAccount = GetStringArg(args, "managerDomainAccount"),
                 IpAddress = GetStringArg(args, "ipAddress"),
                 Email = GetStringArg(args, "email"),
                 SupplierName = GetStringArg(args, "supplierName"),

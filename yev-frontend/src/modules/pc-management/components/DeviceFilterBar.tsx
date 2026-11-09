@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Building2, Calendar, ChevronDown, ChevronUp, Filter, Layers, Mail, MapPin, QrCode, Search, Tag, Truck, User, Users, X } from "lucide-react";
+import { AtSign, Building2, Calendar, ChevronDown, ChevronUp, Filter, Layers, Mail, MapPin, QrCode, Search, Tag, Truck, User, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
@@ -17,6 +17,8 @@ import { StyledSelect } from "@/components/ui/StyledSelect";
 export interface DeviceFilters {
     deviceCode: string;
     manager: string;
+    // DOMAIN\user of the machine user (contains match).
+    managerDomainAccount: string;
     ipAddress: string;
     email: string;
     supplierName: string;
@@ -42,6 +44,7 @@ export interface DeviceFilterBarProps {
 const defaultFilters: DeviceFilters = {
     deviceCode: "",
     manager: "",
+    managerDomainAccount: "",
     ipAddress: "",
     email: "",
     supplierName: "",
@@ -60,6 +63,7 @@ const defaultFilters: DeviceFilters = {
 const filterLabels: Record<keyof DeviceFilters, string> = {
     deviceCode: "Mã thiết bị",
     manager: "Người quản lý",
+    managerDomainAccount: "Tài khoản domain",
     ipAddress: "IP",
     email: "Email",
     supplierName: "Nhà cung cấp",
@@ -86,6 +90,7 @@ const advancedFields: (keyof DeviceFilters)[] = [
     "requiresDailyCheck",
     "groupId",
     "manager",
+    "managerDomainAccount",
     "departmentId",
 ];
 
@@ -206,19 +211,23 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
         onFilter(next);
     };
 
+    // On phones only the code search stays open; the other filters join the "Lọc thêm" panel.
+    const secondaryFilterClassName = `order-1 max-sm:w-full sm:order-none ${isAdvancedOpen ? "" : "max-sm:hidden"}`;
+
     return (
-        <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
+        <div>
             <div className="flex flex-col gap-2.5">
-                <div className="flex flex-wrap items-center gap-2 [&>*]:w-full sm:[&>*]:w-44">
+                <div className="flex flex-wrap items-center gap-2 sm:[&>*]:w-44">
                     <IconInput
                         icon={Search}
                         value={filters.deviceCode}
                         onChange={(value) => handleChange("deviceCode", value)}
                         placeholder="Mã thiết bị..."
-                        className="sm:w-56!"
+                        className="min-w-0 flex-1 sm:w-56! sm:flex-none"
                     />
                     <IconSelect
                         icon={Building2}
+                        className={secondaryFilterClassName}
                         options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
                         value={filters.branch}
                         onChange={(value) => handleChange("branch", value)}
@@ -226,6 +235,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                     />
                     <IconSelect
                         icon={Tag}
+                        className={secondaryFilterClassName}
                         options={deviceTypes.map((dt) => ({ value: dt.id, label: dt.typeName, searchText: dt.typeName.toLowerCase() }))}
                         value={filters.deviceType}
                         onChange={(value) => handleChange("deviceType", value)}
@@ -233,10 +243,12 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                     />
                     <IconInput
                         icon={MapPin}
+                        className={secondaryFilterClassName}
                         value={filters.ipAddress}
                         onChange={(value) => handleChange("ipAddress", value)}
                         placeholder="Địa chỉ IP"
                     />
+                    <div className={secondaryFilterClassName}>
                     <NativeSelect
                         value={filters.status}
                         onChange={(value) => handleChange("status", value)}
@@ -251,21 +263,22 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                             { value: "outsourced", label: "Thuê ngoài", dotClassName: "bg-[#2563eb]" },
                         ]}
                     />
+                    </div>
 
                     <div className="flex items-center gap-2 sm:ml-auto! sm:w-auto!">
                         <button
                             type="button"
                             onClick={() => setIsAdvancedOpen((current) => !current)}
-                            className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 text-sm! font-semibold! text-[#191c1e] transition hover:bg-[#f8fafc]"
+                            className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 text-sm! font-semibold! text-[#191c1e] transition hover:bg-[#f8fafc] max-sm:px-2.5"
                         >
                             <Filter className="h-3.5 w-3.5" />
-                            Lọc thêm
+                            <span className="max-sm:sr-only">Lọc thêm</span>
                             {advancedActiveCount > 0 && (
                                 <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#e3000f] px-1 text-[11px] font-semibold text-white">
                                     {advancedActiveCount}
                                 </span>
                             )}
-                            {isAdvancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            {isAdvancedOpen ? <ChevronUp className="h-3.5 w-3.5 max-sm:hidden" /> : <ChevronDown className="h-3.5 w-3.5 max-sm:hidden" />}
                         </button>
                         <button
                             type="button"
@@ -281,9 +294,12 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                 </div>
 
                 {isAdvancedOpen && (
-                    <div className="grid gap-x-3 gap-y-2.5 border-t border-[#e0e3e5] pt-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-2.5 border-t border-[#e0e3e5] pt-2.5 sm:gap-x-3 lg:grid-cols-3 xl:grid-cols-5">
                         <Field label="Người quản lý" icon={User}>
                             <IconInput icon={User} value={filters.manager} onChange={(value) => handleChange("manager", value)} placeholder="Tên người quản lý" />
+                        </Field>
+                        <Field label="Tài khoản domain" icon={AtSign}>
+                            <IconInput icon={AtSign} value={filters.managerDomainAccount} onChange={(value) => handleChange("managerDomainAccount", value)} placeholder="YEV\nam.nguyen" />
                         </Field>
                         <Field label="Bộ phận" icon={Users}>
                             <IconSelect
@@ -381,7 +397,7 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                     </div>
                 )}
             </div>
-        </section>
+        </div>
     );
 }
 
@@ -432,15 +448,17 @@ function IconSelect({
     value,
     onChange,
     placeholder,
+    className = "",
 }: {
     icon: LucideIcon;
     options: { value: number; label: string; searchText: string }[];
     value: string;
     onChange: (value: string) => void;
     placeholder: string;
+    className?: string;
 }) {
     return (
-        <div className="relative">
+        <div className={`relative ${className}`}>
             <Icon className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
             <SearchableSelect
                 options={options}

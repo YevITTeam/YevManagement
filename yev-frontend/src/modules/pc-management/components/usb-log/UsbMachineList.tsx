@@ -1,5 +1,6 @@
 "use client";
 
+import { Pagination } from "@/components/ui/Pagination";
 import { useState } from "react";
 import { FilterX, RefreshCw, Search } from "lucide-react";
 import { toast } from "react-toastify";
@@ -84,8 +85,8 @@ export default function UsbMachineList() {
             </div>
 
             <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
-                <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-full sm:[&>label]:w-40">
-                    <label className="block sm:w-64!">
+                <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-[calc(50%-0.25rem)] sm:[&>label]:w-40">
+                    <label className="block max-sm:w-full! sm:w-64!">
                         <span className={fieldLabelClassName}>Tìm kiếm</span>
                         <input
                             value={draft.keyword}
@@ -147,9 +148,6 @@ export default function UsbMachineList() {
             </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
-                    {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} máy`}
-                </div>
 
                 {error && <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
 
@@ -158,10 +156,10 @@ export default function UsbMachineList() {
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
                                 <th className="px-3 py-2">Máy</th>
-                                <th className="px-3 py-2">Người dùng gần nhất</th>
-                                <th className="px-3 py-2 text-right">USB</th>
+                                <th className="hidden px-3 py-2 lg:table-cell">Người dùng gần nhất</th>
+                                <th className="hidden lg:table-cell px-3 py-2 text-right">USB</th>
                                 <th className="px-3 py-2 text-right">Lần cắm</th>
-                                <th className="px-3 py-2 text-right">Thao tác file</th>
+                                <th className="hidden lg:table-cell px-3 py-2 text-right">Thao tác file</th>
                                 <th className="px-3 py-2">Lần cuối</th>
                             </tr>
                         </thead>
@@ -195,10 +193,10 @@ export default function UsbMachineList() {
                                         </div>
                                         {row.deviceCode && <div className="text-xs text-[#5e3f3a]">{row.machineName}</div>}
                                     </td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.lastWindowsUser || "-"}</td>
-                                    <td className="px-3 py-2 text-right text-sm text-[#191c1e]">{row.usbDeviceCount}</td>
+                                    <td className="hidden px-3 py-2 text-sm text-[#5e3f3a] lg:table-cell">{row.lastWindowsUser || "-"}</td>
+                                    <td className="hidden lg:table-cell px-3 py-2 text-right text-sm text-[#191c1e]">{row.usbDeviceCount}</td>
                                     <td className="px-3 py-2 text-right text-sm text-[#191c1e]">{row.sessionCount}</td>
-                                    <td className="px-3 py-2 text-right text-sm text-[#191c1e]">{row.fileEventCount}</td>
+                                    <td className="hidden lg:table-cell px-3 py-2 text-right text-sm text-[#191c1e]">{row.fileEventCount}</td>
                                     <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{formatDateTime(row.lastConnectedAt)}</td>
                                 </tr>
                             ))}
@@ -206,25 +204,14 @@ export default function UsbMachineList() {
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={pageIndex <= 1 || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        Trang trước
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={pageIndex >= totalPages || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        Trang sau
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} máy`}
+                    compactSummary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} máy`}
+                />
             </section>
         </div>
     );

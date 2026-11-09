@@ -1,4 +1,5 @@
 "use client";
+import { Pagination } from "@/components/ui/Pagination";
 import { useState } from "react";
 import { RefreshCw, Search, Pencil, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
@@ -24,8 +25,6 @@ export default function SupplierList() {
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -42,8 +41,6 @@ export default function SupplierList() {
             setSuppliers(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
         (message) => toast.error(message),
@@ -121,20 +118,20 @@ export default function SupplierList() {
                     <button
                         onClick={() => fetchSuppliers()}
                         disabled={isLoading}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
                         <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
                     </button>
                     <button
                         onClick={openCreateForm}
-                        className="cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                        className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
                     >
                         + {tCommon("add")}
                     </button>
                 </div>
             </div>
 
-            <section className="overflow-hidden border border-[#e0e3e5] bg-white">
+            <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex gap-2">
                         <input
@@ -142,20 +139,17 @@ export default function SupplierList() {
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
-                            className="h-9 w-64 border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
                             title={tCommon("search")}
                             aria-label={tCommon("search")}
-                            className="cursor-pointer border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
+                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
                         >
                             <Search className="h-4 w-4" />
                         </button>
-                    </div>
-                    <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: suppliers.length, total: totalCount })}
                     </div>
                 </div>
 
@@ -212,25 +206,14 @@ export default function SupplierList() {
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        {tCommon("prevPage")}
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        {tCommon("nextPage")}
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: suppliers.length, total: totalCount })}
+                    compactSummary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: suppliers.length, total: totalCount })}
+                />
             </section>
 
             <SupplierForm

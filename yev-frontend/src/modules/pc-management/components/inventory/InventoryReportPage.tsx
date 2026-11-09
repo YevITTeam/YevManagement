@@ -317,20 +317,20 @@ export default function InventoryReportPage() {
                         </span>
                     )}
                 </div>
-                <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 420px)", minHeight: 280 }}>
+                <div className="min-h-[280px] overflow-auto md:max-h-[calc(100vh-420px)]">
                     <table className="w-full text-left text-sm">
                         <thead className="sticky top-0 z-10">
                             <tr className="bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
                                 <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colDeviceCode")}</th>
-                                <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colDeviceName")}</th>
-                                <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colDeviceType")}</th>
-                                <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colManager")}</th>
-                                <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colLocation")}</th>
-                                <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colSerial")}</th>
+                                <th className="hidden border-b border-[#e0e3e5] px-4 py-2.5 sm:table-cell">{t("colDeviceName")}</th>
+                                <th className="hidden lg:table-cell border-b border-[#e0e3e5] px-4 py-2.5">{t("colDeviceType")}</th>
+                                <th className="hidden lg:table-cell border-b border-[#e0e3e5] px-4 py-2.5">{t("colManager")}</th>
+                                <th className="hidden lg:table-cell border-b border-[#e0e3e5] px-4 py-2.5">{t("colLocation")}</th>
+                                <th className="hidden lg:table-cell border-b border-[#e0e3e5] px-4 py-2.5">{t("colSerial")}</th>
                                 <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colStatus")}</th>
-                                <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colCheckedBy")}</th>
-                                <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colCheckedAt")}</th>
-                                <th className="border-b border-[#e0e3e5] px-4 py-2.5">{t("colNote")}</th>
+                                <th className="hidden lg:table-cell border-b border-[#e0e3e5] px-4 py-2.5">{t("colCheckedBy")}</th>
+                                <th className="hidden lg:table-cell border-b border-[#e0e3e5] px-4 py-2.5">{t("colCheckedAt")}</th>
+                                <th className="hidden lg:table-cell border-b border-[#e0e3e5] px-4 py-2.5">{t("colNote")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -353,18 +353,21 @@ export default function InventoryReportPage() {
                             )}
                             {visibleItems.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] last:border-0 bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="px-4 py-2.5 font-semibold text-[#191c1e]">{item.deviceCode}</td>
-                                    <td className="px-4 py-2.5 text-[#191c1e]">{item.deviceName}</td>
-                                    <td className="px-4 py-2.5 text-[#5e3f3a]">{item.deviceTypeName ?? "—"}</td>
-                                    <td className="px-4 py-2.5 text-[#5e3f3a]">{item.manager ?? "—"}</td>
-                                    <td className="px-4 py-2.5 text-[#5e3f3a]">{location(item) || "—"}</td>
-                                    <td className="px-4 py-2.5 text-[#5e3f3a]">{item.serialNumber ?? "—"}</td>
+                                    <td className="whitespace-nowrap px-4 py-2.5 font-semibold text-[#191c1e]">
+                                        {item.deviceCode}
+                                        <div className="whitespace-normal text-xs font-normal text-[#5e3f3a] sm:hidden">{item.deviceName}</div>
+                                    </td>
+                                    <td className="hidden px-4 py-2.5 text-[#191c1e] sm:table-cell">{item.deviceName}</td>
+                                    <td className="hidden lg:table-cell px-4 py-2.5 text-[#5e3f3a]">{item.deviceTypeName ?? "—"}</td>
+                                    <td className="hidden lg:table-cell px-4 py-2.5 text-[#5e3f3a]">{item.manager ?? "—"}</td>
+                                    <td className="hidden lg:table-cell px-4 py-2.5 text-[#5e3f3a]">{location(item) || "—"}</td>
+                                    <td className="hidden lg:table-cell px-4 py-2.5 text-[#5e3f3a]">{item.serialNumber ?? "—"}</td>
                                     <td className="whitespace-nowrap px-4 py-2.5">
                                         <StatusBadge item={item} label={item.status === 1 ? t("statusFound") : item.status === 2 ? t("statusMissing") : t("statusPending")} />
                                     </td>
-                                    <td className="px-4 py-2.5 text-[#5e3f3a]">{item.scannedBy ?? "—"}</td>
-                                    <td className="px-4 py-2.5 text-[#5e3f3a]">{formatDateTime(item.scannedAt)}</td>
-                                    <td className="px-4 py-2.5 text-[#5e3f3a]">{item.note ?? "—"}</td>
+                                    <td className="hidden lg:table-cell px-4 py-2.5 text-[#5e3f3a]">{item.scannedBy ?? "—"}</td>
+                                    <td className="hidden lg:table-cell px-4 py-2.5 text-[#5e3f3a]">{formatDateTime(item.scannedAt)}</td>
+                                    <td className="hidden lg:table-cell px-4 py-2.5 text-[#5e3f3a]">{item.note ?? "—"}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -467,7 +470,7 @@ function SessionPickerField({
             </button>
 
             {isOpen && (
-                <div className="absolute z-50 mt-1 w-full min-w-[380px] overflow-hidden rounded-lg border border-[#e0e3e5] bg-white shadow-lg">
+                <div className="absolute z-50 mt-1 w-full min-w-[min(380px,calc(100vw-2rem))] overflow-hidden rounded-lg border border-[#e0e3e5] bg-white shadow-lg">
                     <div className="flex flex-wrap items-center gap-1.5 border-b border-[#f1f5f9] p-2">
                         <div className="relative flex-1">
                             <Calendar className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />

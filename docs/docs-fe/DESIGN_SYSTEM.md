@@ -33,7 +33,7 @@
 ## 2. Typography · Spacing · Radius
 
 - Font **Inter** (`inter.className` trên `<body>` ở `src/app/[locale]/layout.tsx`).
-- Type scale: tiêu đề trang `text-2xl font-semibold` · tiêu đề card `text-base font-semibold` · body/input `text-sm` · caption `text-xs text-[#5e3f3a]` · overline/thead `text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]`.
+- Type scale: tiêu đề trang danh sách/báo cáo `text-lg font-semibold` (trang chi tiết một bản ghi `text-2xl`, màn quét `text-xl`) · tiêu đề card `text-base font-semibold` · body/input `text-sm` · caption `text-xs text-[#5e3f3a]` · overline/thead `text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]`.
 - ⚠️ CSS viết tay nhắm vào thẻ (`button`, `input`…) trong `globals.css` phải nằm trong `@layer base`; ngoài layer nó thắng mọi utility Tailwind v4 (từng làm chữ nút/ô nhập luôn 16px).
 - Spacing: padding `<main>` `px-3 pb-4 pt-3 md:px-4 lg:px-5` · card `p-6` (KPI `p-5`) · toolbar `p-4` · ô bảng `px-4 py-3` (gọn) hoặc `px-6 py-4` (thưa) · khoảng cách khối `space-y-6`.
 - Radius: `rounded-xl` card/section/modal · `rounded-lg` nút/ô nhập/nav item · `rounded-md` icon button/badge nhỏ · `rounded-full` pill/avatar/dot. Bóng: `shadow-sm` card, `shadow-xl` modal.
@@ -43,7 +43,7 @@ Mẫu: `src/app/[locale]/layout.tsx` (root), `(pc-manager)/layout.tsx` + `PcMana
 - Sidebar `fixed left-0 top-0 z-40 h-screen w-[13.75rem]`, viền phải `#e0e3e5`, nền `#f7f9fb`; logo ô vuông đỏ; nội dung cột chính `mx-auto max-w-[1600px]`.
 - **Khung chiều cao + vùng cuộn chỉ khai ở root layout** (`body flex h-screen flex-col overflow-hidden` + `<main min-h-0 flex-1 overflow-y-auto>`). Layout con CHỈ `min-h-full`: cấm `h-screen`/`min-h-screen`/`calc(100vh-…)`, cấm `overflow-y-auto` bọc toàn trang, cấm lồng `<main>`. Vi phạm → 2 thanh cuộn chồng nhau cắt nội dung (Header `h-16` nằm trong luồng nên `100vh` + header tràn viewport).
 - Mọi flex item làm vùng cuộn (`flex-1 overflow-y-auto`) phải có `min-h-0`. Bảng luôn bọc `overflow-x-auto`.
-- **Dưới `md` sidebar là ngăn kéo**: ẩn sẵn, mở bằng nút ☰ trên `Header`, đóng khi chuyển trang hoặc bấm lớp phủ; `--sidebar-w` về 0 (`globals.css`). Sidebar mới phải gắn `sidebarDrawerClass(mobileOpen)` từ `useSidebarCollapse`. Logo trên `Header` luôn là link về trang chủ (logo trong sidebar chỉ là nút mở rộng); trang có sidebar thì dưới `md` chỉ hiện logo, không kèm chữ.
+- **Dưới `md` sidebar là ngăn kéo**: ẩn sẵn, mở bằng nút ☰ trên `Header`, đóng khi chuyển trang hoặc bấm lớp phủ; `--sidebar-w` về 0 (`globals.css`). Sidebar mới phải gắn `sidebarDrawerClass(mobileOpen)` từ `useSidebarCollapse`. Logo trên `Header` luôn là link về trang chủ (logo trong sidebar chỉ là nút mở rộng); trang có sidebar thì dưới `lg` chỉ hiện logo, không kèm chữ.
 - Nav item sidebar: `border-l-4`, active = `border-[#e3000f] bg-[#eceef0] text-[#191c1e]` + icon đỏ; thường = `border-transparent text-[#5e3f3a] hover:bg-[#eceef0]`. Mẫu `WorkflowManagerSidebar.tsx` (nhóm có overline, `aria-current`).
 
 ## 4. Component
@@ -82,13 +82,13 @@ Nút header trang cỡ nhỏ `px-3 py-1.5 text-xs`. Tự viết class (không c�
 - Dữ liệu dropdown gọi API (cờ `isCancelled`), không hard-code. Dropdown có thể dài → `SearchableSelect` (có ô tìm); enum/ít mục → `StyledSelect`; `<select>` HTML chỉ cho vài mục cố định.
 
 ### 4.4. Bảng
-Mẫu `BranchList.tsx`: `overflow-x-auto` > `table.min-w-full.text-left.text-sm`; thead `bg-[#f8fafc]` overline; hàng `border-b border-[#f1f5f9] hover:bg-[#f8fafc]`; cột chính `font-semibold text-[#191c1e]`, cột phụ `text-[#5e3f3a]`; thao tác dạng text/icon (`Sửa` xám, `Xoá` `#930006`).
+Mẫu `BranchList.tsx`: `overflow-x-auto` > `table.min-w-full.text-left.text-sm`; thead `bg-[#f8fafc]` overline; hàng `border-b border-[#f1f5f9] bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]` (zebra + hover của `BranchList`); cột chính `font-semibold text-[#191c1e]`, cột phụ `text-[#5e3f3a]`; thao tác dạng text/icon (`Sửa` xám, `Xoá` `#930006`).
 - Rỗng: `EmptyState` trong `<td colSpan>`; đang tải: `TableSkeletonRows rows columns` (khối lẻ: `Skeleton`).
 - Bảng chọn nhiều dòng (vd. chọn nhân viên tạo đơn): bấm **cả dòng** để tick (`cursor-pointer`, bỏ qua click từ `input/button/select/textarea/a/label`); checkbox phụ trong ô và ô "chọn tất cả" ở tiêu đề thì bọc `<label>` phủ cả ô (`td/th h-px p-0` > `label h-full px-3 py-2`); dòng tiêu đề nhóm (chọn nhiều Nhóm) bấm cả dòng để chọn/bỏ cả nhóm. Danh sách dài thêm ô tìm (`normalizeText` từ `@/lib/normalizeText`, không phân biệt dấu); tìm chỉ lọc hiển thị, không bỏ chọn dòng bị ẩn, chọn tất cả chỉ áp cho dòng đang hiện. Bảng kéo-cuộn bằng `useDragScroll` đã tự nuốt click sau khi kéo.
 
 ### 4.5. Phân trang
-Dùng `ui/Pagination.tsx` (`pageIndex totalPages onPageChange summary compactSummary`): đếm bên trái, `‹ 1 2 3 … ›` bên phải (7 ô, dưới `sm` còn `‹ 2 / 9 ›`), ẩn khi 1 trang. Mẫu `WorkflowRequestList`, `AppReleaseList`. Luôn phân trang server-side.
-**Danh sách đọc nhiều:** tab + bộ lọc ở đầu card (`px-4 py-2.5`; tab và bộ lọc không vừa một hàng ở 1366px thì tab nằm hàng riêng ngay trên bộ lọc, cùng card), ô bảng `px-4 py-2.5` một dòng, ẩn cột chỉ lặp một giá trị, dưới `md` đổi thành danh sách thẻ (mẫu `OtFormListPage`).
+Dùng `ui/Pagination.tsx` (`pageIndex totalPages onPageChange summary compactSummary`): đếm bên trái, `‹ 1 2 3 … ›` bên phải (7 ô, dưới `sm` còn `‹ 2 / 9 ›`), ẩn khi 1 trang. Mẫu `WorkflowRequestList`, `AppReleaseList`. Luôn phân trang server-side; list CRUD cũng dùng `Pagination` (đếm bản ghi truyền vào `summary`/`compactSummary`, không đặt thêm dòng đếm ở toolbar).
+**Danh sách đọc nhiều:** tab + bộ lọc ở đầu card (`px-4 py-2.5`; tab và bộ lọc không vừa một hàng ở 1366px thì tab nằm hàng riêng ngay trên bộ lọc, cùng card), ô bảng `px-4 py-2.5` một dòng, ẩn cột chỉ lặp một giá trị, dưới `md` đổi thành danh sách thẻ (mẫu `OtFormListPage`; bảng rất nhiều cột cạnh sidebar: dưới `lg`, mẫu `DeviceList`). Bảng ít cột giữ dạng bảng, ẩn cột phụ dưới `lg` bằng `hidden lg:table-cell` (mẫu `IpAddressList`) để cột quyết định (trạng thái) không bị đẩy ra ngoài. Bộ lọc nhiều ô: 2 cột trên điện thoại, không xếp 1 cột.
 Hàng tab không `flex-wrap`: `overflow-x-auto` + nút `shrink-0` để cuộn ngang trên điện thoại.
 
 ### 4.6. Badge

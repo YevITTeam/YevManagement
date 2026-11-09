@@ -86,7 +86,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
         return (
             <div className="space-y-4">
                 {/* No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404. */}
-                <Link href="/pc" prefetch={false} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
+                <Link href="/pc" prefetch={false} className="inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
                     <ArrowLeft className="h-4 w-4" /> Quay lại danh sách
 </Link>
                 <div className="rounded-xl border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
@@ -103,7 +103,7 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
                     {/* No prefetch: with static export + [locale], RSC payload URLs don't match the files in out/ and 404. */}
-                    <Link href="/pc" prefetch={false} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
+                    <Link href="/pc" prefetch={false} className="inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
                         <ArrowLeft className="h-4 w-4" /> Quay lại danh sách
                     </Link>
                     <h1 className="mt-2 text-2xl font-semibold text-[#191c1e]">{device.deviceCode}</h1>
@@ -134,8 +134,8 @@ export default function DeviceDetail({ deviceId }: DeviceDetailProps) {
                 </div>
             </div>
 
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+            <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm md:p-6">
+                <div className="grid grid-cols-2 gap-4 [&>div]:min-w-0 [&>div]:break-words lg:grid-cols-4 xl:grid-cols-6">
                     <div>
                         <div className={infoLabelClassName}>Loại thiết bị</div>
                         <div className="mt-1 text-sm text-[#191c1e]">{device.deviceTypeName}</div>

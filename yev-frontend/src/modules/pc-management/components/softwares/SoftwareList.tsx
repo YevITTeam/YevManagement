@@ -1,4 +1,5 @@
 "use client";
+import { Pagination } from "@/components/ui/Pagination";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Pencil, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
@@ -121,8 +122,6 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
         [filteredSoftwares, pageIndex]
     );
 
-    const hasPreviousPage = pageIndex > 1;
-    const hasNextPage = pageIndex < totalPages;
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -235,9 +234,6 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                             ]}
                         />
                     </div>
-                    <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${pagedSoftwares.length} / ${totalCount} bản ghi`}
-                    </div>
                 </div>
 
                 {error && (
@@ -250,9 +246,9 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
                                 <th className="px-3 py-2">Mã</th>
                                 <th className="px-3 py-2">Tên phần mềm</th>
-                                <th className="px-3 py-2">Nhóm</th>
-                                <th className="px-3 py-2">Loại</th>
-                                <th className="px-3 py-2">Nhà phát hành</th>
+                                <th className="hidden lg:table-cell px-3 py-2">Nhóm</th>
+                                <th className="hidden lg:table-cell px-3 py-2">Loại</th>
+                                <th className="hidden lg:table-cell px-3 py-2">Nhà phát hành</th>
                                 <th className="px-3 py-2 text-right">Số lượng</th>
                                 <th className="px-3 py-2 text-right">
                                     <button
@@ -281,9 +277,9 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                                 <tr key={software.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{software.softwareCode}</td>
                                     <td className="px-3 py-2 text-sm text-[#191c1e]">{software.softwareName}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{software.softwareGroupName}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{software.softwareType ?? "—"}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{software.publisher ?? "—"}</td>
+                                    <td className="hidden lg:table-cell px-3 py-2 text-sm text-[#5e3f3a]">{software.softwareGroupName}</td>
+                                    <td className="hidden lg:table-cell px-3 py-2 text-sm text-[#5e3f3a]">{software.softwareType ?? "—"}</td>
+                                    <td className="hidden lg:table-cell px-3 py-2 text-sm text-[#5e3f3a]">{software.publisher ?? "—"}</td>
                                     <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{software.softwareQuantity ?? "—"}</td>
                                     <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{software.softwarePriority ?? "—"}</td>
                                     <td className="px-3 py-2 text-right text-sm">
@@ -312,25 +308,14 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        Trang trước
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        Trang sau
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${pagedSoftwares.length} / ${totalCount} bản ghi`}
+                    compactSummary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${pagedSoftwares.length} / ${totalCount} bản ghi`}
+                />
             </section>
 
             <SoftwareForm

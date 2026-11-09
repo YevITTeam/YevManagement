@@ -268,7 +268,7 @@ export default function DeviceSoftwarePanel({ deviceId, deviceStatus, softwares,
                     <div
                         role="dialog"
                         aria-modal="true"
-                        className="z-60 mx-4 w-full max-w-sm rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                        className="z-60 mx-4 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
                     >
                         <h3 className="mb-4 text-lg font-semibold text-[#191c1e]">Sửa: {editingItem.softwareName}</h3>
                         <form onSubmit={handleSaveEdit} className="space-y-4">

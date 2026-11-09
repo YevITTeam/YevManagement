@@ -1,9 +1,10 @@
 "use client";
 
+import { Pagination } from "@/components/ui/Pagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { ArrowDownAZ, ArrowUpAZ, ArrowRightLeft, ArrowUpDown, ChevronDown, Copy, Eye, Pencil, ChevronLeft, ChevronRight, FileBarChart, Plus, Printer, RefreshCw, Trash2, Upload, X } from "lucide-react";
-import RowActionsMenu from "@/modules/pc-management/components/RowActionsMenu";
+import { ArrowDownAZ, ArrowUpAZ, ArrowRightLeft, ArrowUpDown, ChevronDown, Copy, Eye, Pencil, FileBarChart, Plus, Printer, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import RowActionsMenu, { type RowAction } from "@/modules/pc-management/components/RowActionsMenu";
 import DeviceFilterBar, { type DeviceFilters } from "@/modules/pc-management/components/DeviceFilterBar";
 import PrintDeviceQrLabelsDialog from "@/modules/pc-management/components/PrintDeviceQrLabelsDialog";
 import DeviceForm, { type DeviceFormValues } from "@/modules/pc-management/components/devices/DeviceForm";
@@ -36,6 +37,7 @@ const statusClasses: Record<number, string> = {
 const defaultFilters: DeviceFilters = {
   deviceCode: "",
   manager: "",
+  managerDomainAccount: "",
   ipAddress: "",
   email: "",
   supplierName: "",
@@ -76,8 +78,6 @@ export default function DeviceList() {
   const [pageSize] = useState(50);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [hasPreviousPage, setHasPreviousPage] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isTaniumImportOpen, setIsTaniumImportOpen] = useState(false);
   const [isLiquidationImportOpen, setIsLiquidationImportOpen] = useState(false);
@@ -170,6 +170,7 @@ export default function DeviceList() {
   const filtersKey = JSON.stringify([
     filters.deviceCode,
     filters.manager,
+    filters.managerDomainAccount,
     filters.ipAddress,
     filters.email,
     filters.supplierName,
@@ -200,6 +201,7 @@ export default function DeviceList() {
         pageSize,
         deviceCode: filters.deviceCode || undefined,
         manager: filters.manager || undefined,
+        managerDomainAccount: filters.managerDomainAccount || undefined,
         ipAddress: filters.ipAddress || undefined,
         email: filters.email || undefined,
         supplierName: filters.supplierName || undefined,
@@ -223,8 +225,6 @@ export default function DeviceList() {
       setDevices(result.data);
       setTotalCount(result.totalCount);
       setTotalPages(result.totalPages);
-      setHasNextPage(result.hasNextPage);
-      setHasPreviousPage(result.hasPreviousPage);
     },
     "Không thể tải danh sách thiết bị.",
     undefined,
@@ -382,10 +382,26 @@ export default function DeviceList() {
     setQrPrintDeviceIds(selectedIds);
   };
 
+  const getRowActions = (device: DeviceDto): RowAction[] => [
+    { label: "Chi tiết", icon: Eye, onClick: () => router.push({ pathname: "/pc/devices", query: { id: String(device.id) } }) },
+    { label: "Sửa", icon: Pencil, onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
+    { label: "Nhân bản", icon: Copy, onClick: () => openDuplicateForm(device), disabled: isLoadingEditTarget },
+    {
+      label: "Chuyển máy",
+      icon: ArrowRightLeft,
+      onClick: () => {
+        setTransferPresetNewDeviceId(null);
+        setTransferringDevice(device);
+      },
+      disabled: device.status === 3,
+    },
+    { label: "Xoá", icon: Trash2, onClick: () => setDeletingDevice(device), variant: "danger" },
+  ];
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold text-[#191c1e]" title="Quản lý và theo dõi thiết bị phần cứng qua các văn phòng.">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="whitespace-nowrap text-lg font-semibold text-[#191c1e]" title="Quản lý và theo dõi thiết bị phần cứng qua các văn phòng.">
           Quản lý Thiết bị
         </h1>
 
@@ -458,20 +474,14 @@ export default function DeviceList() {
         </div>
       </div>
 
-      <section className="overflow-hidden border border-[#e0e3e5] bg-white">
+      <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
         <div className="border-b border-[#e0e3e5] bg-[#f8fafc] p-2.5">
           <DeviceFilterBar onFilter={setFilters} />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] bg-white px-3 py-1.5">
-          <div className="text-xs font-medium text-[#5e3f3a]">
-            {isLoading
-              ? "Đang tải dữ liệu..."
-              : `Hiển thị ${devices.length} bản ghi (trang ${pageIndex}/${totalPages}, tổng ${totalCount})`}
-          </div>
-
-          {selectedIds.length > 0 && (
-            <div className="flex items-center gap-2">
+        {selectedIds.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-[#e0e3e5] bg-white px-3 py-1.5">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium text-[#5e3f3a]">Đã chọn {selectedIds.length} thiết bị</span>
               <button
                 onClick={() => setSelectedDevices(new Map())}
@@ -492,8 +502,8 @@ export default function DeviceList() {
                 <Trash2 className="h-3.5 w-3.5" /> Xoá đã chọn
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Selection persists across searches/pages, so show it as removable badges even when off-screen. */}
         {selectedIds.length > 0 && (
@@ -521,13 +531,77 @@ export default function DeviceList() {
           <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-xs text-[#930006]">{error}</div>
         )}
 
+        <div className="divide-y divide-[#f1f5f9] lg:hidden">
+          {devices.length > 0 && (
+            <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-xs font-semibold text-[#5e3f3a]">
+              <input
+                type="checkbox"
+                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                checked={devices.every((device) => selectedDevices.has(device.id))}
+                onChange={toggleSelectAll}
+              />
+              Chọn tất cả
+            </label>
+          )}
+          {!isLoading && devices.length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-[#5e3f3a]">Không có dữ liệu thiết bị.</div>
+          )}
+          {devices.map((device) => (
+            <div key={device.id} className="flex items-start gap-3 px-3 py-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[#e3000f]"
+                checked={selectedDevices.has(device.id)}
+                onChange={() => toggleSelectDevice(device)}
+                aria-label={`Chọn thiết bị ${device.deviceCode}`}
+              />
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 break-words text-sm font-semibold text-[#191c1e]">{device.deviceCode}</div>
+                  <span
+                    className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusClasses[device.status] ?? statusClasses[0]}`}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+                    {statusLabels[device.status] ?? "Không xác định"}
+                  </span>
+                </div>
+                <div className="break-words text-xs text-[#5e3f3a]">{device.deviceName}</div>
+                <div className="text-xs text-[#5e3f3a]">
+                  {[device.deviceTypeName, device.supplierName, device.branchName, device.departmentName, device.groupName].filter(Boolean).join(" · ")}
+                </div>
+                {device.ipAddresses.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {device.ipAddresses.map((ip, index) => (
+                      <span key={index} className="rounded-md border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-medium text-[#191c1e]">
+                        {ip}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(device.manager || device.managerDomainAccount) && (
+                  <div className="text-xs text-[#191c1e]">
+                    {device.manager}
+                    {device.managerDomainAccount && <span className="text-[#8a8f94]"> · {device.managerDomainAccount}</span>}
+                  </div>
+                )}
+                {device.emails.length > 0 && <div className="break-all text-xs text-[#5e3f3a]">{device.emails.join(", ")}</div>}
+                <div className="text-xs text-[#5e3f3a]">
+                  Mua: {formatDate(device.purchaseDate)} · HSD: {formatDate(device.expirationDate)}
+                </div>
+                {device.note && <div className="line-clamp-2 text-xs text-[#5e3f3a]">{device.note}</div>}
+              </div>
+              <RowActionsMenu actions={getRowActions(device)} />
+            </div>
+          ))}
+        </div>
+
         <div
           ref={scrollContainerRef}
           onMouseDown={handleDragStart}
           onMouseMove={handleDragMove}
           onMouseUp={handleDragEnd}
           onMouseLeave={handleDragEnd}
-          className={`overflow-x-auto overflow-y-auto ${isDragScrolling ? "cursor-grabbing select-none" : "cursor-grab"}`}
+          className={`hidden overflow-x-auto overflow-y-auto lg:block ${isDragScrolling ? "cursor-grabbing select-none" : "cursor-grab"}`}
           style={{ maxHeight: "calc(100vh - 250px)", minHeight: 320 }}
         >
           <table className="w-auto border-collapse text-left">
@@ -678,23 +752,7 @@ export default function DeviceList() {
                   </td>
                   <td className="sticky right-0 w-10 whitespace-nowrap bg-inherit px-2 py-1.5 align-top text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                     <div className="inline-flex justify-end">
-                      <RowActionsMenu
-                        actions={[
-                          { label: "Chi tiết", icon: Eye, onClick: () => router.push({ pathname: "/pc/devices", query: { id: String(device.id) } }) },
-                          { label: "Sửa", icon: Pencil, onClick: () => openEditForm(device), disabled: isLoadingEditTarget },
-                          { label: "Nhân bản", icon: Copy, onClick: () => openDuplicateForm(device), disabled: isLoadingEditTarget },
-                          {
-                            label: "Chuyển máy",
-                            icon: ArrowRightLeft,
-                            onClick: () => {
-                              setTransferPresetNewDeviceId(null);
-                              setTransferringDevice(device);
-                            },
-                            disabled: device.status === 3,
-                          },
-                          { label: "Xoá", icon: Trash2, onClick: () => setDeletingDevice(device), variant: "danger" },
-                        ]}
-                      />
+                      <RowActionsMenu actions={getRowActions(device)} />
                     </div>
                   </td>
                 </tr>
@@ -702,25 +760,14 @@ export default function DeviceList() {
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between border-t border-[#e0e3e5] px-3 py-1.5">
-          <button
-            className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs! text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!hasPreviousPage || isLoading}
-            onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-          >
-            <ChevronLeft className="h-3.5 w-3.5" /> Trang trước
-          </button>
-          <div className="text-xs font-semibold text-[#191c1e]">
-            Trang {pageIndex} / {totalPages}
-          </div>
-          <button
-            className="flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs! text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={!hasNextPage || isLoading}
-            onClick={() => setPageIndex((current) => current + 1)}
-          >
-            Trang sau <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <Pagination
+            pageIndex={pageIndex}
+            totalPages={totalPages}
+            onPageChange={setPageIndex}
+            disabled={isLoading}
+            summary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${devices.length} / ${totalCount} bản ghi`}
+            compactSummary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${devices.length} / ${totalCount} bản ghi`}
+        />
       </section>
 
       <ImportDeviceDialog

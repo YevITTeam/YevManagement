@@ -89,11 +89,11 @@ export default function ServerCheckAssignmentPage() {
             <div>
                 <Link
                     href="/pc/server-check"
-                    className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-[#5e3f3a] transition hover:text-[#191c1e]"
+                    className="mb-1 inline-flex items-center gap-1.5 py-1 text-sm font-medium text-[#5e3f3a] transition hover:text-[#191c1e]"
                 >
                     <ArrowLeft className="h-3.5 w-3.5" /> {t("backToReport")}
                 </Link>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("assignmentTitle")}</h1>
+                <h1 className="text-lg font-semibold text-[#191c1e]">{t("assignmentTitle")}</h1>
             </div>
 
             <section className="flex flex-wrap items-end gap-3 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
@@ -133,7 +133,8 @@ export default function ServerCheckAssignmentPage() {
             </section>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto">
+                <table className="min-w-[36rem] w-full text-left text-sm">
                     <thead>
                         <tr className="bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
                             <th className="border-b border-[#e0e3e5] px-4 py-3">{t("assignmentColUser")}</th>
@@ -176,6 +177,7 @@ export default function ServerCheckAssignmentPage() {
                         )}
                     </tbody>
                 </table>
+                </div>
             </section>
         </div>
     );

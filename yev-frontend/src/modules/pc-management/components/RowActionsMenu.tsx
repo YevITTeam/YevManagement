@@ -16,6 +16,9 @@ interface RowActionsMenuProps {
     actions: RowAction[];
 }
 
+const MENU_ITEM_HEIGHT = 28;
+const MENU_CHROME_HEIGHT = 10;
+
 // Dropdown is portaled to document.body so sticky cells of other rows can't overlap it, even with fixed + z-50.
 export default function RowActionsMenu({ actions }: RowActionsMenuProps) {
     const [open, setOpen] = useState(false);
@@ -26,7 +29,10 @@ export default function RowActionsMenu({ actions }: RowActionsMenuProps) {
     const updatePosition = () => {
         const rect = buttonRef.current?.getBoundingClientRect();
         if (!rect) return;
-        setCoords({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+        // The menu is fixed, so nothing clips or scrolls it: open upward when it would run past the bottom edge.
+        const menuHeight = actions.length * MENU_ITEM_HEIGHT + MENU_CHROME_HEIGHT;
+        const opensUp = rect.bottom + 4 + menuHeight > window.innerHeight;
+        setCoords({ top: opensUp ? Math.max(4, rect.top - 4 - menuHeight) : rect.bottom + 4, right: window.innerWidth - rect.right });
     };
 
     const toggle = () => {
@@ -62,7 +68,7 @@ export default function RowActionsMenu({ actions }: RowActionsMenuProps) {
             <button
                 ref={buttonRef}
                 onClick={toggle}
-                className="cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                className="cursor-pointer rounded-md p-1 text-[#5e3f3a] max-lg:p-2 transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                 title="Thao tác"
                 aria-haspopup="menu"
                 aria-expanded={open}
