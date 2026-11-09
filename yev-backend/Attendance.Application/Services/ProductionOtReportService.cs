@@ -390,7 +390,7 @@ namespace Attendance.Application.Services
                          ? x.OtForm.Group!.GroupNameVn.Contains("GREEN") || x.OtForm.Group.GroupNameVn.Contains("ORANGE")
                          : groupIds!.Contains(x.OtForm.GroupId!.Value)),
                 departmentId, workshopId, settings);
-            return (await BuildQryExportExcelAsync(grouped), await BuildRealFileNameAsync("Qry_EXPORT_EXCEL", fromDate, departmentId, toDate));
+            return (await BuildQryExportExcelAsync(grouped, isOffice: true), await BuildRealFileNameAsync("Qry_EXPORT_EXCEL", fromDate, departmentId, toDate));
         }
 
         public async Task<IReadOnlyList<ProductionOptionDto>> GetOfficeProductivityGroupsAsync(int? workshopId, int? departmentId)
@@ -402,12 +402,14 @@ namespace Attendance.Application.Services
             return groups.OrderBy(x => x.NameVn).ToList();
         }
 
-        private async Task<byte[]> BuildQryExportExcelAsync(List<GroupedDailyRow> grouped)
+        private async Task<byte[]> BuildQryExportExcelAsync(List<GroupedDailyRow> grouped, bool isOffice = false)
         {
             var otFormIds = grouped.SelectMany(x => x.OtFormIds).Distinct().ToList();
 
-            // QUAN_LY_TC_SX: code of the approver at the "TL" (Team Leader) step; MNV_TP: the DepartmentManager step approver.
-            var teamLeaderCodeByForm = await ResolveApprovalCodesByJobTitleCodeAsync(otFormIds, "TL");
+            // QUAN_LY_TC_SX: the "TL" step approver, or on office forms the last approver before the Manager; MNV_TP: the DepartmentManager step approver.
+            var teamLeaderCodeByForm = isOffice
+                ? await ResolveLastApproverBeforeManagerAsync(otFormIds)
+                : await ResolveApprovalCodesByJobTitleCodeAsync(otFormIds, "TL");
             var managerCodeByForm = await ResolveApprovalCodesByTerminalLevelAsync(otFormIds, (int)JobTitleTerminalLevel.DepartmentManager);
 
             using var workbook = new XLWorkbook();
@@ -425,14 +427,16 @@ namespace Attendance.Application.Services
             var rowIndex = 2;
             foreach (var item in grouped)
             {
-                sheet.Cell(rowIndex, 1).Value = item.EmployeeCode;
+                sheet.Cell(rowIndex, 1).Value = ExcelCodeCell.From(item.EmployeeCode);
                 sheet.Cell(rowIndex, 2).Value = item.CongDoan;
                 sheet.Cell(rowIndex, 3).Value = item.LastName;
                 sheet.Cell(rowIndex, 4).Value = item.FirstName;
                 sheet.Cell(rowIndex, 5).Value = item.Date.ToDateTime(TimeOnly.MinValue);
                 sheet.Cell(rowIndex, 5).Style.DateFormat.Format = "dd-MMM-yy";
-                sheet.Cell(rowIndex, 6).Value = item.StartTime.ToString("HH:mm");
-                sheet.Cell(rowIndex, 7).Value = item.EndTime.ToString("HH:mm");
+                sheet.Cell(rowIndex, 6).Value = item.StartTime.ToTimeSpan();
+                sheet.Cell(rowIndex, 6).Style.DateFormat.Format = "h:mm";
+                sheet.Cell(rowIndex, 7).Value = item.EndTime.ToTimeSpan();
+                sheet.Cell(rowIndex, 7).Style.DateFormat.Format = "h:mm";
                 sheet.Cell(rowIndex, 8).Value = item.Reason;
                 sheet.Cell(rowIndex, 9).Value = item.SubReason;
                 sheet.Cell(rowIndex, 10).Value = item.DidEat;
@@ -441,11 +445,13 @@ namespace Attendance.Application.Services
                 sheet.Cell(rowIndex, 13).Value = item.Note;
                 sheet.Cell(rowIndex, 14).Value = item.TotalHours;
                 sheet.Cell(rowIndex, 15).Value = item.DepartmentCode;
-                sheet.Cell(rowIndex, 16).Value = ResolveDistinctCode(item.OtFormIds, teamLeaderCodeByForm);
-                sheet.Cell(rowIndex, 17).Value = ResolveDistinctCode(item.OtFormIds, managerCodeByForm);
+                sheet.Cell(rowIndex, 16).Value = ExcelCodeCell.From(ResolveDistinctCode(item.OtFormIds, teamLeaderCodeByForm));
+                sheet.Cell(rowIndex, 17).Value = ExcelCodeCell.From(ResolveDistinctCode(item.OtFormIds, managerCodeByForm));
                 rowIndex++;
             }
 
+            foreach (var column in new[] { 1, 16, 17 })
+                sheet.Range(2, column, Math.Max(rowIndex - 1, 2), column).Style.NumberFormat.Format = "00000";
             sheet.Columns().AdjustToContents();
 
             using var stream = new MemoryStream();
@@ -513,7 +519,7 @@ namespace Attendance.Application.Services
         // touching stable logic, accepting some duplication.
         private async Task<List<GroupedDailyRow>> BuildGroupedDailyRowsAsync(Expression<Func<OtFormEmployee, bool>> scope, int? departmentId, int? workshopId, Dtos.AttendanceSettings.AttendanceSettingDto settings)
         {
-            // Office forms keep no production snapshot, so they read the current production roster instead.
+            // Office forms created before they got a production snapshot read the current production roster instead.
             var roster = _unitOfWork.ProductionEmployees.GetQueryable().Where(p => !p.IsDeleted);
             var entries = await _unitOfWork.OtFormEmployees.ToListAsync(
                 _unitOfWork.OtFormEmployees.GetQueryable().Where(scope).Where(
@@ -534,13 +540,13 @@ namespace Attendance.Application.Services
                     x.NoteVn,
                     // Office staff are mostly not on the production roster; their group name stands in for the process.
                     CongDoanSnapshot = x.OtForm.IsProductionForm ? x.CongDoanSnapshot
-                        : roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.CongDoan).FirstOrDefault() ?? x.OtForm.Group!.GroupNameVn,
+                        : x.CongDoanSnapshot ?? roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.CongDoan).FirstOrDefault() ?? x.OtForm.Group!.GroupNameVn,
                     BlockCodeSnapshot = x.OtForm.IsProductionForm ? x.BlockCodeSnapshot
-                        : roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.BlockCode).FirstOrDefault(),
+                        : x.BlockCodeSnapshot ?? roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.BlockCode).FirstOrDefault(),
                     // Office: non-Green/Orange groups are always HC; Green/Orange use the roster, else G/O from the name.
                     ShiftTeamCodeSnapshot = x.OtForm.IsProductionForm ? x.ShiftTeamCodeSnapshot
                         : !x.OtForm.Group!.GroupNameVn.Contains("GREEN") && !x.OtForm.Group.GroupNameVn.Contains("ORANGE") ? "HC"
-                        : roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.ShiftTeamCode).FirstOrDefault()
+                        : x.ShiftTeamCodeSnapshot ?? roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.ShiftTeamCode).FirstOrDefault()
                           ?? (x.OtForm.Group.GroupNameVn.Contains("GREEN") ? "G" : "O"),
                     ReasonNameVn = x.OtForm.Reason.ReasonNameVn,
                     x.OtForm.SubReason,
@@ -587,6 +593,21 @@ namespace Attendance.Application.Services
                 h => new { h.OtFormId, h.ApproverUserName }))
                 .GroupBy(h => h.OtFormId)
                 .ToDictionary(g => g.Key, g => g.First().ApproverUserName);
+
+            return await ResolveUserNamesToEmployeeCodesAsync(approvals);
+        }
+
+        // Steps run from the lowest rank up, so the highest approved step below the Manager levels is the one right before them.
+        private async Task<Dictionary<int, string>> ResolveLastApproverBeforeManagerAsync(List<int> otFormIds)
+        {
+            if (otFormIds.Count == 0) return new Dictionary<int, string>();
+
+            var approvals = (await _unitOfWork.OtFormApprovalHistories.SelectAsync(
+                h => otFormIds.Contains(h.OtFormId) && h.Action == (int)ApprovalAction.Approved && !h.OtFormApprovalStep.IsDeleted
+                     && h.OtFormApprovalStep.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None,
+                h => new { h.OtFormId, h.Id, h.OtFormApprovalStep.StepOrder, h.ApproverUserName }))
+                .GroupBy(h => h.OtFormId)
+                .ToDictionary(g => g.Key, g => g.OrderBy(h => h.StepOrder).ThenBy(h => h.Id).Last().ApproverUserName);
 
             return await ResolveUserNamesToEmployeeCodesAsync(approvals);
         }

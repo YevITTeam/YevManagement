@@ -856,7 +856,7 @@
       "runNowSuccess": "Đã chạy gom đơn tổng ngay.",
       "runNowError": "Không thể chạy gom đơn tổng.",
       "generalAffairsSectionTitle": "Gửi Tổng vụ",
-      "generalAffairsSectionDesc": "Mỗi ngày tới giờ gửi, hệ thống gửi dữ liệu tăng ca văn phòng đã hoàn tất của các ngày đã qua (không gồm hôm nay) (Excel + phiếu PDF từng đơn) cho Tổng vụ, mỗi ngày tăng ca × xưởng × phòng ban 1 mail tới email của phòng đó. Ngày nào có đơn mới hoặc đơn bị trình ký lại thì gửi lại cả ngày đó (lần 2, 3…) kèm bảng thay đổi để Tổng vụ thay thế bản cũ.",
+      "generalAffairsSectionDesc": "Mỗi ngày tới giờ gửi, hệ thống gửi dữ liệu tăng ca văn phòng đã hoàn tất của các ngày đã qua (không gồm hôm nay) (Excel + phiếu PDF từng đơn) cho Tổng vụ, mỗi ngày tăng ca × xưởng × phòng ban 1 mail tới email của phòng đó. Đơn ký muộn hoặc đơn đã gửi mà sửa lại thì chỉ gửi bổ sung riêng đơn đó (lần 2, 3…), có ghi chú bổ sung, thay thế hoặc huỷ.",
       "fieldGeneralAffairsSendTime": "Giờ gửi",
       "generalAffairsWorkshopMissing": "{workshop} (thiếu {count})",
       "fieldGeneralAffairsWorkshop": "Xưởng",

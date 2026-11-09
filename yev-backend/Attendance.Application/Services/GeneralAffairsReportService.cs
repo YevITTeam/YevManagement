@@ -17,12 +17,17 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // A mail always carries the whole OT date of one workshop and department (every completed office form of it), so its
-    // General Affairs recipients replace the earlier file instead of adding to it; a form is never counted twice that way.
+    // A mail covers one OT date of one workshop and department but only what General Affairs does not have yet: forms
+    // signed since the last mail, edited forms that replace their earlier copy, and cancellations.
     public class GeneralAffairsReportService : BaseService<IAttendanceUnitOfWork>, IGeneralAffairsReportService, IMailDeliveryTracker
     {
-        // ponytail: in-process lock; two IIS workers during an overlapped recycle could still both send (harmless, same content).
+        // ponytail: in-process lock; two IIS workers during an overlapped recycle could still both send a duplicate mail (same files, same names).
         private static readonly SemaphoreSlim SendGate = new(1, 1);
+
+        private const string NoteAdded = "Bổ sung";
+        private const string NoteReplaced = "Thay thế";
+        private const string NoteCancelled = "Huỷ";
+        private const string MailFont = "font-family:'Times New Roman', 'Liberation Serif', Georgia, serif;";
         private static readonly TimeSpan PdfTimeout = TimeSpan.FromMinutes(5);
 
         private readonly IOtFormService _otFormService;
@@ -110,20 +115,28 @@ namespace Attendance.Application.Services
             }
         }
 
-        // A permanently failed mail puts its date back in the queue, unless a newer mail of that date exists.
+        // A permanently failed mail puts exactly its own forms back in the queue, each under the note it went out with.
         public async Task TrackAsync(string trackingId, bool sent, bool permanent, int attempts, string? error)
         {
             if (sent || !permanent || AttendanceMailLogService.ParseTrackingId(trackingId) is not { } mailLogId) return;
             var dispatch = await _unitOfWork.GeneralAffairsDispatches.FirstOrDefaultAsync(x => x.MailLogId == mailLogId);
-            if (dispatch == null) return;
-            var newer = await _unitOfWork.GeneralAffairsDispatches.FirstOrDefaultAsync(
-                x => x.OtDate == dispatch.OtDate && x.WorkshopId == dispatch.WorkshopId && x.DepartmentId == dispatch.DepartmentId && x.Id > dispatch.Id);
-            if (newer != null) return;
+            if (dispatch?.Snapshot == null) return;
 
-            var forms = await _unitOfWork.OtForms.FindAsync(
-                x => !x.IsProductionForm && x.GeneralAffairsSentDate == dispatch.OtDate && x.WorkshopId == dispatch.WorkshopId
-                     && x.DepartmentId == dispatch.DepartmentId);
-            foreach (var form in forms) form.GeneralAffairsResendPending = true;
+            var notes = JsonSerializer.Deserialize<List<ReportRow>>(dispatch.Snapshot)!
+                .Where(x => x.Note != null).DistinctBy(x => x.OtFormId).ToDictionary(x => x.OtFormId, x => x.Note);
+            var formIds = notes.Keys.ToList();
+            foreach (var form in await _unitOfWork.OtForms.FindAsync(x => formIds.Contains(x.Id)))
+            {
+                form.GeneralAffairsSentDate = notes[form.Id] switch
+                {
+                    NoteAdded => null,
+                    NoteCancelled => dispatch.OtDate,
+                    _ => form.GeneralAffairsSentDate
+                };
+                form.GeneralAffairsResendPending = notes[form.Id] != NoteAdded;
+            }
+            // Never delivered, so it must not count as "the earlier copy" in later comparisons.
+            dispatch.Snapshot = null;
             await _unitOfWork.SaveChangesAsync();
         }
 
@@ -135,65 +148,87 @@ namespace Attendance.Application.Services
             var forms = (await _unitOfWork.OtForms.FindAsync(x => !x.IsProductionForm && !x.IsDeleted && x.Status == (int)OtFormStatus.Completed
                 && x.Date == date && x.WorkshopId == workshop.Id && x.DepartmentId == department.Id)).OrderBy(x => x.Id).ToList();
             var formIds = forms.Select(x => x.Id).ToList();
-            // Sent under this date earlier but no longer a completed form of it (re-submitted, rejected, deleted or moved).
-            var dropped = await _unitOfWork.OtForms.FindAsync(x => !x.IsProductionForm && x.GeneralAffairsSentDate == date
-                && x.WorkshopId == workshop.Id && x.DepartmentId == department.Id && !formIds.Contains(x.Id));
-            var earlier = await _unitOfWork.GeneralAffairsDispatches.FindAsync(
-                x => x.OtDate == date && x.WorkshopId == workshop.Id && x.DepartmentId == department.Id);
-            var version = earlier.Count + 1;
+            var added = forms.Where(x => x.GeneralAffairsSentDate == null).ToList();
+            // A form moved here from another date is announced by this mail alone, as the replacement of its old copy.
+            var replaced = forms.Where(x => x.GeneralAffairsSentDate != null && (x.GeneralAffairsResendPending || x.GeneralAffairsSentDate != date)).ToList();
+            // Forms being re-signed stay out: they are reported once, when their outcome is known.
+            var dropped = (await _unitOfWork.OtForms.FindAsync(x => !x.IsProductionForm && x.GeneralAffairsSentDate == date
+                && x.WorkshopId == workshop.Id && x.DepartmentId == department.Id && !formIds.Contains(x.Id)
+                && (x.IsDeleted || x.Status == (int)OtFormStatus.Rejected))).OrderBy(x => x.Id).ToList();
+            if (added.Count + replaced.Count + dropped.Count == 0) return false;
+            var resigningCount = (await _unitOfWork.OtForms.FindAsync(x => !x.IsProductionForm && !x.IsDeleted && x.Status == (int)OtFormStatus.InApproval
+                && x.GeneralAffairsSentDate == date && x.WorkshopId == workshop.Id && x.DepartmentId == department.Id)).Count;
 
-            if (forms.Count > 0 || version > 1)
+            var sentDates = replaced.Select(x => x.GeneralAffairsSentDate!.Value).Append(date).Distinct().ToList();
+            var dispatches = await _unitOfWork.GeneralAffairsDispatches.FindAsync(
+                x => sentDates.Contains(x.OtDate) && x.WorkshopId == workshop.Id && x.DepartmentId == department.Id);
+            var history = dispatches.Where(x => x.Snapshot != null).OrderByDescending(x => x.Id)
+                .Select(x => new SentCopy(x.OtDate, x.CreatedAt, JsonSerializer.Deserialize<List<ReportRow>>(x.Snapshot!)!)).ToList();
+            // Undelivered mails have no snapshot, so the number follows what General Affairs actually received.
+            var version = history.Count(x => x.OtDate == date) + 1;
+
+            var notes = added.ToDictionary(x => x.Id, _ => NoteAdded);
+            foreach (var form in replaced) notes[form.Id] = NoteReplaced;
+            var rows = (await LoadRowsAsync(formIds)).Select(x => x with { Note = notes.GetValueOrDefault(x.OtFormId) }).ToList();
+            var attachedRows = rows.Where(x => x.Note != null).ToList();
+            var sentFormIds = history.Where(x => x.OtDate == date).SelectMany(x => x.Rows).Select(x => x.OtFormId).Where(x => x > 0).Distinct().ToList();
+            var fileNames = await BuildPdfFileNamesAsync(date, workshop.Id, department, sentFormIds);
+            var isFollowUp = version > 1 || replaced.Count > 0 || dropped.Count > 0;
+
+            var attachments = new List<MailAttachment>();
+            if (notes.Count > 0)
             {
-                var rows = await LoadRowsAsync(formIds);
-                var previous = earlier.MaxBy(x => x.Id);
                 var suffix = version > 1 ? $" (lan {version})" : "";
                 var label = ToAsciiFileName($"{workshop.WorkshopCode} {department.DepartmentCode} {date:dd-MM-yyyy}{suffix}");
-                var attachments = new List<MailAttachment> { new($"Du lieu tang ca {label}.xlsx", BuildExcel(rows)) };
-                if (forms.Count > 0)
-                {
-                    var dtos = new List<OtFormDto>();
-                    foreach (var id in formIds) dtos.Add(await _otFormService.GetByIdAsync(id));
-                    attachments.AddRange(await RenderPdfsAsync(dtos, setting));
-                }
-
-                var subject = $"Dữ liệu tăng ca Phòng {department.DepartmentNameVn} ngày {date:dd/MM/yyyy} - Xưởng {workshop.WorkshopNameVn}"
-                    + (version > 1 ? $" - Cập nhật lần {version} (thay thế bản đã gửi trước)" : "");
-                var html = _templateRenderer.Render("GeneralAffairs/OtDataReport.html", new Dictionary<string, string>
-                {
-                    ["DepartmentName"] = WebUtility.HtmlEncode(department.DepartmentNameVn),
-                    ["WorkshopName"] = WebUtility.HtmlEncode(workshop.WorkshopNameVn),
-                    ["OtDateText"] = date.ToString("dd/MM/yyyy"),
-                    ["FormCount"] = forms.Count.ToString(),
-                    ["EmployeeCount"] = rows.Count.ToString(),
-                    ["VersionNote"] = version > 1
-                        ? $"<strong style=\"color:#8a2432;\">Đây là bản cập nhật lần {version}: vui lòng xoá dữ liệu ngày {date:dd/MM/yyyy} đã nhận trước đó và dùng bản này thay thế.</strong>"
-                        : "",
-                    ["ChangeTable"] = previous?.Snapshot is { } snapshot
-                        ? BuildChangeTable(JsonSerializer.Deserialize<List<ReportRow>>(snapshot)!, rows)
-                        : "",
-                });
-
-                var mailLogId = await _mailLogService.SendAsync(null, emails, subject, html, attachments);
-                if (mailLogId == null)
-                {
-                    _logger.LogError("Không đưa được mail Tổng vụ ngày {Date} xưởng {Workshop} phòng {Department} vào hàng đợi; lượt sau sẽ gửi lại.",
-                        date, workshop.WorkshopCode, department.DepartmentCode);
-                    return false;
-                }
-                await _unitOfWork.GeneralAffairsDispatches.AddAsync(new GeneralAffairsDispatch
-                {
-                    OtDate = date,
-                    WorkshopId = workshop.Id,
-                    DepartmentId = department.Id,
-                    Version = version,
-                    FormCount = forms.Count,
-                    MailLogId = mailLogId,
-                    Snapshot = JsonSerializer.Serialize(rows),
-                    CreatedAt = TimeHelper.GetCurrentUtcTime()
-                });
+                attachments.Add(new($"Du lieu tang ca {label}.xlsx", BuildExcel(attachedRows, showNote: isFollowUp)));
+                var dtos = new List<OtFormDto>();
+                foreach (var id in notes.Keys.Order()) dtos.Add(await _otFormService.GetByIdAsync(id));
+                attachments.AddRange(await RenderPdfsAsync(dtos, fileNames, setting));
             }
 
-            foreach (var form in forms)
+            var replacedIds = replaced.Select(x => x.Id).ToList();
+            var reasons = (await _unitOfWork.OtFormEditLogs.FindAsync(x => replacedIds.Contains(x.OtFormId) && x.ActionType == (int)OtFormEditActionType.Resubmitted))
+                .OrderBy(x => x.Id).GroupBy(x => x.OtFormId).ToDictionary(x => x.Key, x => x.Last().NewValue);
+
+            var subject = $"Dữ liệu tăng ca Phòng {department.DepartmentNameVn} ngày {date:dd/MM/yyyy} - Xưởng {workshop.WorkshopNameVn}"
+                + (version > 1 ? $" - Bổ sung lần {version}" : "");
+            var html = _templateRenderer.Render("GeneralAffairs/OtDataReport.html", new Dictionary<string, string>
+            {
+                ["SendVerb"] = version > 1 ? "gửi bổ sung" : "gửi",
+                ["DepartmentName"] = WebUtility.HtmlEncode(department.DepartmentNameVn),
+                ["WorkshopName"] = WebUtility.HtmlEncode(workshop.WorkshopNameVn),
+                ["OtDateText"] = date.ToString("dd/MM/yyyy"),
+                ["FormCount"] = notes.Count.ToString(),
+                ["EmployeeCount"] = attachedRows.Count.ToString(),
+                ["AttachmentNote"] = notes.Count > 0
+                    ? "Đính kèm: file Excel dữ liệu tăng ca và phiếu tăng ca (PDF) của từng đơn."
+                    : "Mail này không có tệp đính kèm.",
+                ["ChangeSections"] = isFollowUp
+                    ? BuildChangeSections(date, version > 1 ? added : [], replaced, dropped, fileNames, history, rows, reasons, resigningCount)
+                    : "",
+            });
+
+            var mailLogId = await _mailLogService.SendAsync(null, emails, subject, html, attachments);
+            if (mailLogId == null)
+            {
+                _logger.LogError("Không đưa được mail Tổng vụ ngày {Date} xưởng {Workshop} phòng {Department} vào hàng đợi; lượt sau sẽ gửi lại.",
+                    date, workshop.WorkshopCode, department.DepartmentCode);
+                return false;
+            }
+            await _unitOfWork.GeneralAffairsDispatches.AddAsync(new GeneralAffairsDispatch
+            {
+                OtDate = date,
+                WorkshopId = workshop.Id,
+                DepartmentId = department.Id,
+                Version = version,
+                FormCount = forms.Count,
+                MailLogId = mailLogId,
+                // The whole day, so a later edit finds its earlier copy; cancelled forms are marked for TrackAsync only.
+                Snapshot = JsonSerializer.Serialize(rows.Concat(dropped.Select(x => new ReportRow(x.Id, "", null, "", "", date, 0, "", false, false, NoteCancelled)))),
+                CreatedAt = TimeHelper.GetCurrentUtcTime()
+            });
+
+            foreach (var form in added.Concat(replaced))
             {
                 form.GeneralAffairsSentDate = date;
                 form.GeneralAffairsResendPending = false;
@@ -204,13 +239,16 @@ namespace Attendance.Application.Services
                 form.GeneralAffairsResendPending = false;
             }
             await _unitOfWork.SaveChangesAsync();
-            return forms.Count > 0 || version > 1;
+            return true;
         }
 
-        private record ReportRow(string Code, string? GroupName, string LastName, string FirstName, DateOnly Date,
-            decimal Hours, string DepartmentCode, bool HasMeal, bool EatLater);
+        // OtFormId is 0 and Note null in snapshots written before mails became incremental.
+        private record ReportRow(int OtFormId, string Code, string? GroupName, string LastName, string FirstName, DateOnly Date,
+            decimal Hours, string DepartmentCode, bool HasMeal, bool EatLater, string? Note = null);
 
-        // One row per employee per form (not merged per day), so the meal columns stay true to each form.
+        private record SentCopy(DateOnly OtDate, DateTime SentAt, List<ReportRow> Rows);
+
+        // One row per employee per form: edits and before/after tables work per form; BuildExcel merges per day.
         private async Task<List<ReportRow>> LoadRowsAsync(IReadOnlyCollection<int> formIds)
         {
             var settings = await _settingService.GetAsync();
@@ -220,6 +258,7 @@ namespace Attendance.Application.Services
                     .OrderBy(x => x.OtForm.Date).ThenBy(x => x.OtFormId).ThenBy(x => x.Employee.Code),
                 x => new
                 {
+                    x.OtFormId,
                     x.Employee.Code,
                     x.Employee.LastName,
                     x.Employee.FirstName,
@@ -234,13 +273,67 @@ namespace Attendance.Application.Services
             {
                 var hasMeal = MealTicketCalculator.CalculateMealTicketType(row.StartTime, row.EndTime, row.DidEat, settings) != MealTicketType.None;
                 // "Eat later" only applies to someone who gets a meal ticket.
-                return new ReportRow(row.Code, row.GroupName, row.LastName, row.FirstName, row.Date,
+                return new ReportRow(row.OtFormId, row.Code, row.GroupName, row.LastName, row.FirstName, row.Date,
                     MealTicketCalculator.CalculateOtHours(row.StartTime, row.EndTime, row.DidEat, settings),
                     row.DepartmentCode, hasMeal, hasMeal && !row.DidEat);
             }).ToList();
         }
 
-        // Per employee code: added, removed, or changed hours/meal versus the previous mail of the date.
+        private static string BuildChangeSections(DateOnly date, List<OtForm> added, List<OtForm> replaced, List<OtForm> dropped,
+            Dictionary<int, string> fileNames, List<SentCopy> history, List<ReportRow> rows, Dictionary<int, string?> reasons, int resigningCount)
+        {
+            const string titleStyle = $"{MailFont} margin:16px 0 4px 0; font-size:14px; font-weight:bold; color:#16233d;";
+            const string lineStyle = $"{MailFont} margin:0 0 4px 0; font-size:14px; line-height:22px; color:#4a5266;";
+            string Describe(OtForm form) =>
+                $"<strong style=\"{MailFont} color:#16233d;\">{WebUtility.HtmlEncode(fileNames[form.Id])}</strong>: "
+                + $"{form.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture)}–{form.EndTime.ToString("HH:mm", CultureInfo.InvariantCulture)}, {form.NumberOfEmployee} người";
+
+            var html = new StringBuilder();
+            if (added.Count > 0)
+            {
+                html.Append($"<p style=\"{titleStyle}\">Bổ sung {added.Count} đơn:</p>");
+                foreach (var form in added) html.Append($"<p style=\"{lineStyle}\">{Describe(form)}</p>");
+            }
+            if (replaced.Count > 0)
+            {
+                html.Append($"<p style=\"{titleStyle}\">Chỉnh sửa {replaced.Count} đơn:</p>");
+                foreach (var form in replaced)
+                {
+                    var after = rows.Where(x => x.OtFormId == form.Id).ToList();
+                    var (before, sentAt) = FindEarlierCopy(form, after, history);
+                    var moved = form.GeneralAffairsSentDate != date ? $" Chuyển từ ngày {form.GeneralAffairsSentDate:dd/MM/yyyy}." : "";
+                    var sent = sentAt is { } at ? $"Thay thế đơn đã gửi ngày {at:dd/MM/yyyy}." : "Thay thế đơn đã gửi.";
+                    var reason = reasons.GetValueOrDefault(form.Id) is { Length: > 0 } text ? $" Lý do: {WebUtility.HtmlEncode(text)}" : "";
+                    html.Append($"<p style=\"{lineStyle}\">{Describe(form)}. {sent}{moved}{reason}</p>");
+                    if (before.Count > 0) html.Append(BuildChangeTable(before, after));
+                }
+            }
+            if (dropped.Count > 0)
+            {
+                html.Append($"<p style=\"{titleStyle}\">Huỷ {dropped.Count} đơn đã gửi:</p>");
+                foreach (var form in dropped)
+                    html.Append($"<p style=\"{lineStyle}\">{Describe(form)}. {(form.IsDeleted ? "Đơn đã bị xoá." : "Đơn đã bị từ chối.")}</p>");
+            }
+            var dayForms = rows.Select(x => x.OtFormId).Distinct().Count();
+            var resigning = resigningCount > 0 ? $" Chưa tính {resigningCount} đơn đã gửi đang được trình ký lại." : "";
+            html.Append($"<p style=\"{lineStyle} margin-top:16px;\">Tổng ngày {date:dd/MM/yyyy} sau lần gửi này: {dayForms} đơn, {rows.Count} lượt nhân viên.{resigning}</p>");
+            return html.ToString();
+        }
+
+        // Older snapshots have no form ids, so those compare only the employee codes still on the form.
+        private static (List<ReportRow> Rows, DateTime? SentAt) FindEarlierCopy(OtForm form, List<ReportRow> after, List<SentCopy> history)
+        {
+            var codes = after.Select(x => x.Code).ToHashSet();
+            foreach (var copy in history.Where(x => x.OtDate == form.GeneralAffairsSentDate))
+            {
+                var own = copy.Rows.Where(x => x.OtFormId == form.Id && x.Note != NoteCancelled).ToList();
+                if (own.Count > 0) return (own, copy.SentAt);
+                if (copy.Rows.Any(x => x.OtFormId == 0)) return (copy.Rows.Where(x => codes.Contains(x.Code)).ToList(), copy.SentAt);
+            }
+            return ([], null);
+        }
+
+        // Per employee code: added, removed, or changed hours/meal versus the copy General Affairs already has.
         private static string BuildChangeTable(List<ReportRow> before, List<ReportRow> after)
         {
             static string Describe(IEnumerable<ReportRow> rows) => string.Join(" + ", rows
@@ -259,12 +352,11 @@ namespace Attendance.Application.Services
                 changes.Add((code, $"{row.LastName} {row.FirstName}", was == "—" ? "Thêm" : now == "—" ? "Bỏ" : "Thay đổi", was, now));
             }
 
-            const string cell = "padding:6px 8px; border:1px solid #e7e9ee; font-size:13px; color:#16233d;";
+            const string cell = $"{MailFont} padding:6px 8px; border:1px solid #e7e9ee; font-size:13px; color:#16233d;";
             if (changes.Count == 0)
-                return "<p style=\"margin:16px 0 0 0; font-size:14px; line-height:23px; color:#4a5266;\">Không có thay đổi về nhân viên, giờ tăng ca hay suất ăn so với bản trước.</p>";
+                return $"<p style=\"{MailFont} margin:0 0 8px 0; font-size:14px; line-height:22px; color:#4a5266;\">Không có thay đổi về nhân viên, giờ tăng ca hay suất ăn so với bản trước.</p>";
 
-            var html = new StringBuilder("<p style=\"margin:16px 0 6px 0; font-size:14px; font-weight:bold; color:#16233d;\">Thay đổi so với bản trước</p>")
-                .Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;\"><tr>");
+            var html = new StringBuilder("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse; margin:4px 0 12px 0;\"><tr>");
             foreach (var header in new[] { "MNV", "Họ tên", "", "Trước", "Sau" })
                 html.Append($"<td style=\"{cell} background-color:#f7f8fa; font-weight:bold;\">{header}</td>");
             html.Append("</tr>");
@@ -282,19 +374,29 @@ namespace Attendance.Application.Services
             return html.Append("</table>").ToString();
         }
 
-        private static byte[] BuildExcel(List<ReportRow> rows)
+        private static byte[] BuildExcel(List<ReportRow> rows, bool showNote = false)
         {
             using var workbook = new XLWorkbook();
             var sheet = workbook.Worksheets.Add("Du lieu tang ca");
-            string[] headers = ["MNV", "BOPHAN", "HO", "TEN", "Ngay_TC", "Gio_tang_ca", "BP", "Co_an", "An_sau"];
+            string[] headers = ["MNV", "BOPHAN", "HO", "TEN", "Ngay_TC", "Gio_tang_ca", "BP", "Co_an", "An_sau", .. showNote ? new[] { "Ghi_chu" } : []];
             for (var col = 0; col < headers.Length; col++)
                 sheet.Cell(1, col + 1).Value = headers[col];
             sheet.Row(1).Style.Font.Bold = true;
 
-            var rowIndex = 2;
-            foreach (var row in rows)
+            // One line per employee per day. Lines with different notes stay apart: a "Thay thế" amount must replace exactly what it replaced.
+            var lines = rows.GroupBy(x => (x.Code, x.Date, x.Note)).Select(x => x.First() with
             {
-                sheet.Cell(rowIndex, 1).Value = row.Code;
+                GroupName = string.Join("; ", x.Select(y => y.GroupName).Distinct()),
+                DepartmentCode = string.Join("; ", x.Select(y => y.DepartmentCode).Distinct()),
+                Hours = x.Sum(y => y.Hours),
+                HasMeal = x.Any(y => y.HasMeal),
+                EatLater = x.Any(y => y.EatLater),
+            }).ToList();
+
+            var rowIndex = 2;
+            foreach (var row in lines)
+            {
+                sheet.Cell(rowIndex, 1).Value = ExcelCodeCell.From(row.Code);
                 sheet.Cell(rowIndex, 2).Value = row.GroupName;
                 sheet.Cell(rowIndex, 3).Value = row.LastName;
                 sheet.Cell(rowIndex, 4).Value = row.FirstName;
@@ -304,6 +406,7 @@ namespace Attendance.Application.Services
                 sheet.Cell(rowIndex, 7).Value = row.DepartmentCode;
                 sheet.Cell(rowIndex, 8).Value = row.HasMeal ? "x" : "";
                 sheet.Cell(rowIndex, 9).Value = row.EatLater ? "x" : "";
+                if (showNote) sheet.Cell(rowIndex, 10).Value = row.Note;
                 rowIndex++;
             }
             sheet.Range(1, 8, rowIndex - 1, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -318,7 +421,7 @@ namespace Attendance.Application.Services
         // (bundled by yev-frontend `pnpm build:pdf-renderer`; node.exe ships next to it on the server).
         // Everything stays in memory: writing PDFs to disk and deleting them gets the process killed by Trend Micro
         // as "Unauthorized file encryption". One attachment per form: PDFs barely shrink in a ZIP and ZIPs get quarantined.
-        private static async Task<List<MailAttachment>> RenderPdfsAsync(IReadOnlyList<OtFormDto> forms, AttendanceSettingDto setting)
+        private static async Task<List<MailAttachment>> RenderPdfsAsync(IReadOnlyList<OtFormDto> forms, Dictionary<int, string> fileNames, AttendanceSettingDto setting)
         {
             var rendererDir = Path.Combine(AppContext.BaseDirectory, "pdf-renderer");
             var script = Path.Combine(rendererDir, "render.cjs");
@@ -363,19 +466,26 @@ namespace Attendance.Application.Services
             if (process.ExitCode != 0 || pdfs.Length != forms.Count)
                 throw new InvalidOperationException($"Tạo PDF phiếu tăng ca thất bại: {stderr}");
 
-            return BuildPdfFileNames(forms).Select((name, i) => new MailAttachment(name, Convert.FromBase64String(pdfs[i]))).ToList();
+            return forms.Select((form, i) => new MailAttachment(fileNames[form.Id], Convert.FromBase64String(pdfs[i]))).ToList();
         }
 
-        // Same rule as otFormPdfFileName in the web app; repeats within one mail get _2, _3.
-        private static List<string> BuildPdfFileNames(IEnumerable<OtFormDto> forms)
+        // Base name as otFormPdfFileName in the web app. _2, _3 count every form of the group and day, rejected or moved ones
+        // too, so a form keeps its name across mails: an edited form overwrites its old file and a new one never does.
+        private async Task<Dictionary<int, string>> BuildPdfFileNamesAsync(DateOnly date, int workshopId, Department department, List<int> sentFormIds)
         {
+            var forms = await _unitOfWork.OtForms.ToListAsync(
+                _unitOfWork.OtForms.GetQueryable()
+                    .Where(x => !x.IsProductionForm && x.WorkshopId == workshopId && x.DepartmentId == department.Id
+                        && (x.Date == date || x.GeneralAffairsSentDate == date || sentFormIds.Contains(x.Id)))
+                    .OrderBy(x => x.Id),
+                x => new { x.Id, x.Group!.GroupNameVn });
             var used = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            return forms.Select(form =>
+            return forms.ToDictionary(x => x.Id, x =>
             {
-                var name = ToAsciiFileName($"Phieu Tang Ca {form.DepartmentCode}_{form.GroupNameVn}_{form.Date:dd-MM-yyyy}");
+                var name = ToAsciiFileName($"Phieu Tang Ca {department.DepartmentCode}_{x.GroupNameVn}_{date:dd-MM-yyyy}");
                 var count = used[name] = used.GetValueOrDefault(name) + 1;
                 return count == 1 ? $"{name}.pdf" : $"{name}_{count}.pdf";
-            }).ToList();
+            });
         }
 
         // Attachment names with Vietnamese marks show garbled in some mail clients and Windows tools.

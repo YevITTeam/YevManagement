@@ -856,7 +856,7 @@
       "runNowSuccess": "一括申請の集約を実行しました。",
       "runNowError": "一括申請の集約を実行できませんでした。",
       "generalAffairsSectionTitle": "総務への送信",
-      "generalAffairsSectionDesc": "毎日の送信時刻に、前日までの（当日を除く）完了した事務所の残業データ（Excel＋申請ごとのPDF）を総務へ送信します（残業日×工場×部署ごとに1通、その部署のメール宛て）。新しい申請や再申請があった日は、変更一覧を付けてその日全体を再送信（2回目、3回目…）し、総務は前のファイルを置き換えます。",
+      "generalAffairsSectionDesc": "毎日の送信時刻に、前日までの（当日を除く）完了した事務所の残業データ（Excel＋申請ごとのPDF）を総務へ送信します（残業日×工場×部署ごとに1通、その部署のメール宛て）。遅れて完了した申請や送信済み申請の修正は、該当の申請のみを追加送信します（2回目、3回目…）。追加・差し替え・取消の注記を付けます。",
       "fieldGeneralAffairsSendTime": "送信時刻",
       "generalAffairsWorkshopMissing": "{workshop}（未設定 {count}）",
       "fieldGeneralAffairsWorkshop": "工場",

@@ -97,6 +97,9 @@ namespace Attendance.Application.Services
                 ? (await _unitOfWork.ProductionShiftTeams.FirstOrDefaultAsync(x => x.Id == productionShiftTeamId.Value && !x.IsDeleted))?.Code
                 : null;
 
+            // Office forms carry these snapshots for reports only; they are not "on" a line.
+            if (lineCode != null || teamCode != null || shiftTeamCode != null)
+                query = query.Where(x => x.IsProductionForm);
             if (lineCode != null)
                 query = query.Where(x => x.OtFormEmployees.Any(e => !e.IsRemoved && e.BlockCodeSnapshot == lineCode));
             if (teamCode != null)
@@ -675,7 +678,8 @@ namespace Attendance.Application.Services
                 IsDeleted = false
             };
 
-            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId: null, forceMeal: !group.AllowEatLater);
+            var rosterByEmployeeId = await LoadRosterAsync(request.Employees.Select(x => x.EmployeeId).ToList());
+            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, rosterByEmployeeId, forceMeal: !group.AllowEatLater);
         }
 
         // Who may create production forms is decided by the Attendance.OTForm.CreateProduction permission;
@@ -788,13 +792,16 @@ namespace Attendance.Application.Services
                 IsDeleted = false
             };
 
-            // ProductionEmployee changes daily, so its create-time state is snapshotted on OtFormEmployee.
-            var productionEmployeesByEmployeeId = (await _unitOfWork.ProductionEmployees.FindAsync(
-                x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted))
-                .ToDictionary(x => x.EmployeeId!.Value);
+            var productionEmployeesByEmployeeId = await LoadRosterAsync(employeeIds);
 
             return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId, forceMeal: true);
         }
+
+        // ProductionEmployee is reloaded every month, so its create-time state is snapshotted on OtFormEmployee, office forms included.
+        private async Task<Dictionary<int, ProductionEmployee>> LoadRosterAsync(List<int> employeeIds) =>
+            (await _unitOfWork.ProductionEmployees.FindAsync(
+                x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted))
+                .ToDictionary(x => x.EmployeeId!.Value);
 
         // When the creator outranks every mandatory signer, they sign the "requester" box themselves;
         // creation is blocked without a stored signature.
@@ -1165,13 +1172,9 @@ namespace Attendance.Application.Services
 
             // Added employees of a production form must share a Line/shift team with the rest of the form;
             // office forms keep every member inside the form's Group.
-            Dictionary<int, ProductionEmployee> productionEmployeesByEmployeeId = new();
+            Dictionary<int, ProductionEmployee> productionEmployeesByEmployeeId = toAddIds.Count > 0 ? await LoadRosterAsync(toAddIds.ToList()) : new();
             if (otForm.IsProductionForm && toAddIds.Count > 0)
             {
-                productionEmployeesByEmployeeId = (await _unitOfWork.ProductionEmployees.FindAsync(
-                    x => x.EmployeeId.HasValue && toAddIds.Contains(x.EmployeeId.Value) && !x.IsDeleted))
-                    .ToDictionary(x => x.EmployeeId!.Value);
-
                 var baselinePairs = activeEmployees
                     .Where(x => toKeepIds.Contains(x.EmployeeId))
                     .Select(x => (x.BlockCodeSnapshot, x.ShiftTeamCodeSnapshot))
