@@ -1,5 +1,6 @@
 import { api } from "@/lib/client";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import type { UpdateProductionEmployeeDto } from "@/modules/attendance/types/production-employee.dto";
 import type { EmployeeAccumulationDayDto, EmployeeAccumulationHistoryYearDto, UpdateEmployeeAccumulationDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
@@ -24,6 +25,7 @@ const ENDPOINTS = {
         createEmployee: "/Employee",
         updateEmployee: (id: number) => `/Employee/${id}`,
         updateOtLimit: (id: number) => `/Employee/${id}/ot-limit`,
+        updateProductionInfo: (id: number) => `/Employee/${id}/production-info`,
         deleteEmployee: (id: number) => `/Employee/${id}`,
         assignDepartmentJobTitle: (id: number, departmentId: number) => `/Employee/${id}/department-job-title?departmentId=${departmentId}`,
         assignGroupJobTitle: (id: number, groupId: number) => `/Employee/${id}/group-job-title?groupId=${groupId}`,
@@ -53,6 +55,10 @@ export interface GetEmployeePageNationParams {
     departmentId?: number;
     groupId?: number;
     workshopId?: number;
+    productionLineId?: number;
+    teamId?: number;
+    shiftTeamId?: number;
+    congDoan?: string;
 }
 
 // A department can hold thousands of employees: the server always caps the list, so pass jobTitled (holders only)
@@ -100,6 +106,10 @@ export const EmployeeApi = {
         if (params?.pageSize) query.set("PageSize", String(params.pageSize));
         if (params?.keyword) query.set("Keyword", params.keyword);
         if (params?.departmentId) query.set("DepartmentId", String(params.departmentId));
+        if (params?.productionLineId) query.set("ProductionLineId", String(params.productionLineId));
+        if (params?.teamId) query.set("TeamId", String(params.teamId));
+        if (params?.shiftTeamId) query.set("ShiftTeamId", String(params.shiftTeamId));
+        if (params?.congDoan) query.set("CongDoan", params.congDoan);
         if (params?.groupId) query.set("GroupId", String(params.groupId));
         if (params?.workshopId) query.set("WorkshopId", String(params.workshopId));
 
@@ -132,6 +142,10 @@ export const EmployeeApi = {
     },
     updateEmployee: async (id: number, data: CreateUpdateEmployeeDto) => {
         const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.updateEmployee(id), { id, ...data });
+        return response.data;
+    },
+    updateProductionInfo: async (id: number, data: UpdateProductionEmployeeDto) => {
+        const response = await api.put<ApiResponse<boolean>>(ENDPOINTS.EMPLOYEE.updateProductionInfo(id), data);
         return response.data;
     },
     updateOtLimit: async (id: number, data: UpdateEmployeeOtLimitDto) => {

@@ -142,9 +142,10 @@ namespace Attendance.Application.Services
         }
 
         // Shared by the grid and the import-dialog exports so both list exactly the same employees.
-        private async Task<IQueryable<Employee>> BuildListQueryAsync(
-            string callerUserName, bool isAdmin, string? keyword, int? departmentId, int? groupId, int? workshopId)
+        private async Task<IQueryable<Employee>> BuildListQueryAsync(string callerUserName, bool isAdmin, EmployeeExportFilterDto filter)
         {
+            var keyword = filter.Keyword?.Trim();
+            var (departmentId, groupId, workshopId) = (filter.DepartmentId, filter.GroupId, filter.WorkshopId);
             var query = _unitOfWork.Employees.GetQueryable(false, x => x.Group!, x => x.Department!, x => x.JobTitle!).Where(x => !x.IsDeleted);
 
             if (!isAdmin)
@@ -157,6 +158,14 @@ namespace Attendance.Application.Services
                 query = query.Where(x => x.ApprovalScopes.Any(s => s.WorkshopId == workshopId.Value) || (x.Group != null && x.Group.WorkshopId == workshopId.Value));
             if (groupId.HasValue)
                 query = query.Where(x => x.GroupId == groupId.Value);
+            if (filter.ProductionLineId.HasValue)
+                query = query.Where(x => x.ProductionLineId == filter.ProductionLineId);
+            if (filter.TeamId.HasValue)
+                query = query.Where(x => x.TeamId == filter.TeamId);
+            if (filter.ShiftTeamId.HasValue)
+                query = query.Where(x => x.ShiftTeamId == filter.ShiftTeamId);
+            if (!string.IsNullOrWhiteSpace(filter.CongDoan))
+                query = query.Where(x => x.CongDoan == filter.CongDoan);
 
             if (!string.IsNullOrWhiteSpace(keyword))
                 query = query.Where(x =>
@@ -169,10 +178,11 @@ namespace Attendance.Application.Services
         }
 
         public async Task<PagedResponse<EmployeeDto>> GetPagedAsync(
-            string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId, int? workshopId)
+            string callerUserName, bool isAdmin, int pageIndex, int pageSize, EmployeeExportFilterDto filter)
         {
+            var keyword = filter.Keyword;
             var (todayYear, todayMonth) = GetTodayYearMonth();
-            var query = await BuildListQueryAsync(callerUserName, isAdmin, keyword, departmentId, groupId, workshopId);
+            var query = await BuildListQueryAsync(callerUserName, isAdmin, filter);
 
             // An exact code match goes first instead of being buried among codes that merely contain the keyword.
             var orderedQuery = string.IsNullOrWhiteSpace(keyword)
@@ -187,6 +197,14 @@ namespace Attendance.Application.Services
                 {
                     Id = x.Id,
                     Code = x.Code,
+                    ProductionLineId = x.ProductionLineId,
+                    LineCode = x.ProductionLine != null ? x.ProductionLine.LineCode : null,
+                    TeamId = x.TeamId,
+                    TeamCode = x.Team != null ? x.Team.Code : null,
+                    ShiftTeamId = x.ShiftTeamId,
+                    ShiftTeamCode = x.ShiftTeam != null ? x.ShiftTeam.Code : null,
+                    CongDoan = x.CongDoan,
+                    TaskName = x.TaskName,
                     FirstName = x.FirstName,
                     LastName = x.LastName,
                     UserName = x.UserName,
@@ -219,7 +237,7 @@ namespace Attendance.Application.Services
             var (todayYear, todayMonth) = GetTodayYearMonth();
             var y = year ?? todayYear;
             var m = month ?? todayMonth;
-            var query = await BuildListQueryAsync(callerUserName, isAdmin, filter.Keyword?.Trim(), filter.DepartmentId, filter.GroupId, filter.WorkshopId);
+            var query = await BuildListQueryAsync(callerUserName, isAdmin, filter);
 
             return await _unitOfWork.Employees.ToListAsync(
                 query.OrderBy(x => x.Code.Length).ThenBy(x => x.Code),
@@ -237,7 +255,12 @@ namespace Attendance.Application.Services
                     CustomMonthlyOtHourLimit = x.CustomMonthlyOtHourLimit,
                     CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit,
                     MonthHours = x.EmployeeAccumulationHistories.Where(h => h.Year == y && h.Month == m).Sum(h => (decimal?)h.TotalHours) ?? 0m,
-                    YearHours = x.EmployeeAccumulationHistories.Where(h => h.Year == y && h.Month <= m).Sum(h => (decimal?)h.TotalHours) ?? 0m
+                    YearHours = x.EmployeeAccumulationHistories.Where(h => h.Year == y && h.Month <= m).Sum(h => (decimal?)h.TotalHours) ?? 0m,
+                    LineCode = x.ProductionLine != null ? x.ProductionLine.LineCode : null,
+                    TeamCode = x.Team != null ? x.Team.Code : null,
+                    ShiftTeamCode = x.ShiftTeam != null ? x.ShiftTeam.Code : null,
+                    CongDoan = x.CongDoan,
+                    TaskName = x.TaskName
                 });
         }
 

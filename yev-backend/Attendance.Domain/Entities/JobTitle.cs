@@ -4,8 +4,6 @@ namespace Attendance.Domain.Entities;
 
 public partial class JobTitle
 {
-    public const string TeamLeaderCode = "TL";
-
     public int Id { get; set; }
 
     public string Code { get; set; } = null!;
@@ -18,8 +16,8 @@ public partial class JobTitle
     // Attendance.Domain.Enums.JobTitleTerminalLevel.
     public int TerminalLevel { get; set; }
 
-    // Marks the Line Leader step in ProductionApprovalStep; candidates come from ProductionEmployee.IsLeader on the
-    // form's line, not from Employee.JobTitleId. Kept separate from TerminalLevel because Line Leader is not terminal.
+    // Marks the Line Leader title: its holders act only on their own Employee.ProductionLineId.
+    // Kept separate from TerminalLevel because Line Leader is not terminal.
     public bool IsLineScoped { get; set; }
 
     public bool IsDeleted { get; set; }

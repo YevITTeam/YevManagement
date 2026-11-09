@@ -36,7 +36,6 @@ import StepCard, { type StepCardLabels } from "./StepCard";
 import StepHolders, { type StepHoldersLabels } from "./StepHolders";
 import CoordinatorsBox, { type CoordinatorsBoxLabels } from "./CoordinatorsBox";
 
-const TEAM_LEADER_CODE = "TL";
 const EMPTY_BORROWED: GroupBorrowedApproversDto = { approvers: [], candidates: [] };
 const EMPTY_CREATORS: GroupOtFormCreatorsDto = { creators: [], candidates: [] };
 
@@ -582,11 +581,10 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                     .toLowerCase(),
             }));
 
-    // Team Leader step: own-group holders plus Team Leaders borrowed from other Groups of the Department.
+    // Own-group holders plus same-title people borrowed from other Groups of the Department.
     const buildGroupHolders = (step: GroupApprovalStepDto) => {
         const own = groupEmployees.filter((e) => e.jobTitleId === step.jobTitleId);
-        if (step.jobTitleCode !== TEAM_LEADER_CODE) return own;
-        const borrowed = groupBorrowed.approvers.map((a) => ({
+        const borrowed = groupBorrowed.approvers.filter((a) => a.jobTitleId === step.jobTitleId).map((a) => ({
             id: a.employeeId,
             lastName: a.lastName,
             firstName: a.firstName,
@@ -596,8 +594,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         return [...own, ...borrowed];
     };
 
-    const buildBorrowCandidateOptions = (): SelectOption[] =>
-        groupBorrowed.candidates.map((c) => ({
+    const buildBorrowCandidateOptions = (jobTitleId: number): SelectOption[] =>
+        groupBorrowed.candidates.filter((c) => c.jobTitleId === jobTitleId).map((c) => ({
             value: c.employeeId,
             label: `${c.lastName} ${c.firstName} (${c.employeeCode}) — ${c.groupNameVn ?? ""}`,
             searchText: [c.lastName, c.firstName, `${c.firstName} ${c.lastName}`, c.employeeCode, c.groupNameVn ?? ""].join(" ").toLowerCase(),
@@ -1102,7 +1100,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                                                     onRemoveHolder={handleRemoveGroupHolder}
                                                                     addOptions={[
                                                                         ...buildHolderOptions(groupEmployees, step.jobTitleId),
-                                                                        ...(step.jobTitleCode === TEAM_LEADER_CODE ? buildBorrowCandidateOptions() : []),
+                                                                        ...buildBorrowCandidateOptions(step.jobTitleId),
                                                                     ]}
                                                                     addingValue={addingGroupHolderByJobTitle[step.jobTitleId] ?? ""}
                                                                     onAddChange={(v) => handlePickGroupHolder(step.jobTitleId, v)}

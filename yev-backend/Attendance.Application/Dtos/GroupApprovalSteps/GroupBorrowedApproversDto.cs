@@ -8,11 +8,12 @@ namespace Attendance.Application.Dtos.GroupApprovalSteps
         public string EmployeeCode { get; set; } = null!;
         public string LastName { get; set; } = null!;
         public string FirstName { get; set; } = null!;
+        public int JobTitleId { get; set; }
         public string? GroupNameVn { get; set; }
         public string? GroupNameJp { get; set; }
     }
 
-    // Approvers = already borrowed; Candidates = Team Leaders of the other Groups in the same Department.
+    // Approvers = already borrowed; Candidates = intermediate-title holders of the other Groups in the same Department.
     public class GroupBorrowedApproversDto
     {
         public List<GroupBorrowedApproverDto> Approvers { get; set; } = new();

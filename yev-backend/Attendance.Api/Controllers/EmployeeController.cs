@@ -1,5 +1,6 @@
 using Attendance.Application.Dtos.EmployeeAccumulationHistories;
 using Attendance.Application.Dtos.Employees;
+using Attendance.Application.Dtos.ProductionEmployees;
 using Attendance.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Mvc;
 using Shared.Application.Authorization;
@@ -11,20 +12,30 @@ namespace Attendance.Api.Controllers
     {
         private const string AdminRole = "Admin";
         private readonly IEmployeeService _employeeService;
+        private readonly IProductionEmployeeService _productionEmployeeService;
 
-        public EmployeeController(IEmployeeService employeeService)
+        public EmployeeController(IEmployeeService employeeService, IProductionEmployeeService productionEmployeeService)
         {
             _employeeService = employeeService;
+            _productionEmployeeService = productionEmployeeService;
         }
 
-        [RequirePermission("Attendance.Employee.View")]
+        [RequirePermission("Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
         [HttpGet("grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<EmployeeDto>>>> GetPaged(
-            [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null,
-            [FromQuery] int? departmentId = null, [FromQuery] int? groupId = null, [FromQuery] int? workshopId = null)
+            [FromQuery] EmployeeExportFilterDto filter, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50)
         {
-            var result = await _employeeService.GetPagedAsync(CurrentUserName, User.IsInRole(AdminRole), pageIndex, pageSize, keyword, departmentId, groupId, workshopId);
+            var result = await _employeeService.GetPagedAsync(CurrentUserName, User.IsInRole(AdminRole), pageIndex, pageSize, filter);
             return Success(result);
+        }
+
+        // Quick single-person edit between imports.
+        [RequirePermission("Attendance.ProductionEmployee.Update")]
+        [HttpPut("{id}/production-info")]
+        public async Task<ActionResult<ApiResponse<bool>>> UpdateProductionInfo(int id, [FromBody] UpdateProductionEmployeeDto request)
+        {
+            await _productionEmployeeService.UpdateAsync(id, request, CurrentUserName, User.IsInRole(AdminRole));
+            return Success(true, "Cập nhật thông tin dưới chuyền thành công.");
         }
 
         // date = the form's date so projected accumulation uses that month/year; defaults to today.

@@ -17,6 +17,7 @@ export const OT_CATEGORIES_PERMISSIONS = [
     "Attendance.ProductionEmployee.View",
     "Attendance.Setting.Update",
     "Attendance.ProductionOtReport.View",
+    "Attendance.ProductionCatalog.Manage",
 ];
 
 // Prefix match without locale; first match wins.

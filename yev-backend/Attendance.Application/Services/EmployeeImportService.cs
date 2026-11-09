@@ -12,7 +12,7 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Upserts employees by Code and auto-creates missing Department/Group, since HR files list them on the same row.
+    // One file for every employee: upserts by Code, auto-creates missing Department/Group, and carries the production roster.
     public class EmployeeImportService : BaseService<IAttendanceUnitOfWork>, IEmployeeImportService
     {
         private readonly IDepartmentAccessGuard _departmentAccessGuard;
@@ -29,7 +29,7 @@ namespace Attendance.Application.Services
         public async Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string userName, bool isAdmin)
         {
             var rawRows = ParseXlsx(excelFileStream);
-            var (validatedRows, departmentPlans, groupPlans) = await ValidateAndResolveRowsAsync(rawRows, userName, isAdmin);
+            var (validatedRows, departmentPlans, groupPlans, removedRows) = await ValidateAndResolveRowsAsync(rawRows, userName, isAdmin);
 
             return new EmployeeImportPreviewResultDto
             {
@@ -38,14 +38,15 @@ namespace Attendance.Application.Services
                 ValidRows = validatedRows.Count(r => r.IsValid),
                 InvalidRows = validatedRows.Count(r => !r.IsValid),
                 NewDepartmentCount = departmentPlans.Values.Count(p => p.ExistingId == null),
-                NewGroupCount = groupPlans.Values.Count(p => p.ExistingId == null)
+                NewGroupCount = groupPlans.Values.Count(p => p.ExistingId == null),
+                RemovedRows = removedRows
             };
         }
 
         public async Task<EmployeeImportConfirmResultDto> ConfirmAsync(ConfirmEmployeeImportDto request, string userName, bool isAdmin)
         {
             // Re-validate against current DB data; never trust client-sent Resolved*/IsNew* fields.
-            var (validatedRows, departmentPlans, groupPlans) = await ValidateAndResolveRowsAsync(request.Rows, userName, isAdmin);
+            var (validatedRows, departmentPlans, groupPlans, removedRows) = await ValidateAndResolveRowsAsync(request.Rows, userName, isAdmin);
 
             var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
             var validRows = validatedRows.Where(x => x.IsValid).ToList();
@@ -135,6 +136,7 @@ namespace Attendance.Application.Services
                             LastName = row.ResolvedLastName!,
                             IsDeleted = false
                         };
+                        ApplyProductionFields(newEmployee, row);
 
                         if (newGroupEntity != null) newEmployee.Group = newGroupEntity;
                         else newEmployee.GroupId = resolvedGroupId!.Value;
@@ -144,10 +146,11 @@ namespace Attendance.Application.Services
                     }
                     else
                     {
-                        // Name and group only: the file has no accumulation/UserName columns, so re-import must not wipe them.
+                        // The file has no accumulation/UserName columns, so re-import must not wipe them.
                         var existingEmployee = employeesToUpdateByCode[row.EmployeeCode!];
                         existingEmployee.FirstName = row.ResolvedFirstName!;
                         existingEmployee.LastName = row.ResolvedLastName!;
+                        ApplyProductionFields(existingEmployee, row);
 
                         if (newGroupEntity != null) existingEmployee.Group = newGroupEntity;
                         else existingEmployee.GroupId = resolvedGroupId!.Value;
@@ -155,6 +158,20 @@ namespace Attendance.Application.Services
                         _unitOfWork.Employees.Update(existingEmployee);
                         result.UpdatedEmployeeCount++;
                     }
+                }
+
+                if (removedRows.Count > 0)
+                {
+                    var removedCodes = removedRows.Select(x => x.EmployeeCode).ToList();
+                    foreach (var employee in await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && removedCodes.Contains(x.Code)))
+                    {
+                        employee.ProductionLineId = null;
+                        employee.TeamId = null;
+                        employee.ShiftTeamId = null;
+                        employee.CongDoan = null;
+                        employee.TaskName = null;
+                    }
+                    result.RemovedFromLineCount = removedRows.Count;
                 }
 
                 await _unitOfWork.SaveChangesAsync();
@@ -167,6 +184,15 @@ namespace Attendance.Application.Services
             }
 
             return result;
+        }
+
+        private static void ApplyProductionFields(Employee employee, EmployeeImportRowDto row)
+        {
+            employee.ProductionLineId = row.ResolvedProductionLineId;
+            employee.TeamId = row.ResolvedTeamId;
+            employee.ShiftTeamId = row.ResolvedShiftTeamId;
+            employee.CongDoan = row.CongDoan;
+            employee.TaskName = row.TaskName;
         }
 
         private sealed class DepartmentResolution
@@ -185,7 +211,11 @@ namespace Attendance.Application.Services
             public bool HasConflict { get; set; }
         }
 
-        private async Task<(List<EmployeeImportRowDto> Rows, Dictionary<string, DepartmentResolution> Departments, Dictionary<string, GroupResolution> Groups)>
+        // File GROUP A/B map to ProductionTeam.Code 1/2; other values match the code directly.
+        internal static readonly Dictionary<string, string> TeamCodeTranslation =
+            new(StringComparer.OrdinalIgnoreCase) { ["A"] = "1", ["B"] = "2" };
+
+        private async Task<(List<EmployeeImportRowDto> Rows, Dictionary<string, DepartmentResolution> Departments, Dictionary<string, GroupResolution> Groups, List<EmployeeImportRemovedRowDto> RemovedRows)>
             ValidateAndResolveRowsAsync(List<EmployeeImportRowDto> rawRows, string userName, bool isAdmin)
         {
             var existingDepartments = await _unitOfWork.Departments.SelectAsync(
@@ -212,6 +242,13 @@ namespace Attendance.Application.Services
             bool InCallerScope(int? departmentId, int? groupId) => isAdmin
                 || (departmentId.HasValue && managedDepartmentIds!.Contains(departmentId.Value))
                 || (groupId.HasValue && managedGroupIds!.Contains(groupId.Value));
+
+            var linesByCode = (await _unitOfWork.ProductionLines.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.LineCode }))
+                .ToDictionary(x => x.LineCode.Trim(), x => x.Id, StringComparer.OrdinalIgnoreCase);
+            var teamsByCode = (await _unitOfWork.ProductionTeams.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.Code }))
+                .ToDictionary(x => x.Code.Trim(), x => x.Id, StringComparer.OrdinalIgnoreCase);
+            var shiftTeamsByCode = (await _unitOfWork.ProductionShiftTeams.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.Code }))
+                .ToDictionary(x => x.Code.Trim(), x => x.Id, StringComparer.OrdinalIgnoreCase);
 
             var duplicatedEmployeeCodesInFile = FindDuplicates(rawRows, r => r.EmployeeCode);
 
@@ -343,6 +380,29 @@ namespace Attendance.Application.Services
                 if (existingEmployee != null && existingEmployee.TerminalLevel != (int)JobTitleTerminalLevel.None)
                     errors.Add("Nhân viên giữ chức vụ Trưởng phòng trở lên — sửa ở màn Nhân viên, không qua import.");
 
+                var lineCode = row.LineCode?.Trim();
+                var teamCode = row.TeamCode?.Trim();
+                var shiftTeamCode = row.ShiftTeamCode?.Trim();
+                var congDoan = string.IsNullOrWhiteSpace(row.CongDoan) ? null : row.CongDoan.Trim();
+                var taskName = string.IsNullOrWhiteSpace(row.TaskName) ? null : row.TaskName.Trim();
+                int? lineId = null, teamId = null, shiftTeamId = null;
+                var hasAllCodes = !string.IsNullOrWhiteSpace(lineCode) && !string.IsNullOrWhiteSpace(teamCode) && !string.IsNullOrWhiteSpace(shiftTeamCode);
+                if (hasAllCodes)
+                {
+                    var translatedTeamCode = TeamCodeTranslation.GetValueOrDefault(teamCode!, teamCode!);
+                    if (linesByCode.TryGetValue(lineCode!, out var foundLine)) lineId = foundLine;
+                    else errors.Add($"Line '{lineCode}' không có trong danh mục.");
+                    if (teamsByCode.TryGetValue(translatedTeamCode, out var foundTeam)) teamId = foundTeam;
+                    else errors.Add($"Team '{teamCode}' không có trong danh mục.");
+                    if (shiftTeamsByCode.TryGetValue(shiftTeamCode!, out var foundShiftTeam)) shiftTeamId = foundShiftTeam;
+                    else errors.Add($"Nhóm ca '{shiftTeamCode}' không có trong danh mục.");
+                }
+                else if (!string.IsNullOrWhiteSpace(lineCode) || !string.IsNullOrWhiteSpace(teamCode) || !string.IsNullOrWhiteSpace(shiftTeamCode)
+                         || congDoan != null || taskName != null)
+                {
+                    errors.Add("Dữ liệu dưới chuyền phải có đủ Line, Team và Nhóm ca.");
+                }
+
                 result.Add(new EmployeeImportRowDto
                 {
                     RowNumber = row.RowNumber,
@@ -352,6 +412,14 @@ namespace Attendance.Application.Services
                     DepartmentNameVn = deptName,
                     GroupCode = groupCode,
                     GroupNameVn = groupName,
+                    LineCode = lineCode,
+                    TeamCode = teamCode,
+                    ShiftTeamCode = shiftTeamCode,
+                    CongDoan = congDoan,
+                    TaskName = taskName,
+                    ResolvedProductionLineId = lineId,
+                    ResolvedTeamId = teamId,
+                    ResolvedShiftTeamId = shiftTeamId,
                     ResolvedFirstName = resolvedFirstName,
                     ResolvedLastName = resolvedLastName,
                     IsNewDepartment = isNewDepartment,
@@ -362,7 +430,19 @@ namespace Attendance.Application.Services
                 });
             }
 
-            return (result, departmentPlans, groupPlans);
+            // Only departments the file covers, so importing one department never touches another; invalid rows still count as present.
+            var departmentIdsInFile = departmentPlans.Values.Where(x => x.ExistingId.HasValue).Select(x => x.ExistingId!.Value).ToList();
+            var absentFromFile = await _unitOfWork.Employees.SelectAsync(
+                x => !x.IsDeleted && x.ProductionLineId != null && x.Group != null
+                     && departmentIdsInFile.Contains(x.Group.DepartmentId) && !codesInFile.Contains(x.Code),
+                x => new { x.Code, FullName = x.LastName + " " + x.FirstName, x.GroupId, x.Group!.DepartmentId, LineCode = x.ProductionLine!.LineCode });
+            var removedRows = absentFromFile
+                .Where(x => InCallerScope(x.DepartmentId, x.GroupId))
+                .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                .Select(x => new EmployeeImportRemovedRowDto { EmployeeCode = x.Code, FullName = x.FullName, LineCode = x.LineCode })
+                .ToList();
+
+            return (result, departmentPlans, groupPlans, removedRows);
         }
 
         private static HashSet<string> FindDuplicates(List<EmployeeImportRowDto> rows, Func<EmployeeImportRowDto, string?> selector)
@@ -377,9 +457,9 @@ namespace Attendance.Application.Services
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
-        // A=No. (ignored), B=Employee code, C=Full name, D/E=Department code/name, F/G=Group code/name.
-        // The header row is located by column B since real files have title rows above it.
-        private const string HeaderMarkerCellB = "Employee code";
+        // A=ignored, B=MNV, C=HO Ten, D/E=Department code/name, F/G=Group code/name, H=Line, I=Team, J=shift team,
+        // K=CongDoan, L=TaskName. A file without the production columns must not pass: blanks would clear the roster.
+        private const string HeaderMarkerCellB = "MNV";
 
         private static List<EmployeeImportRowDto> ParseXlsx(Stream stream)
         {
@@ -419,11 +499,14 @@ namespace Attendance.Application.Services
                 var departmentName = worksheet.Cell(xlRow.RowNumber(), 5).GetString().Trim();
                 var groupCode = worksheet.Cell(xlRow.RowNumber(), 6).GetString().Trim();
                 var groupName = worksheet.Cell(xlRow.RowNumber(), 7).GetString().Trim();
+                var lineCode = worksheet.Cell(xlRow.RowNumber(), 8).GetString().Trim();
+                var teamCode = worksheet.Cell(xlRow.RowNumber(), 9).GetString().Trim();
+                var shiftTeamCode = worksheet.Cell(xlRow.RowNumber(), 10).GetString().Trim();
+                var congDoan = worksheet.Cell(xlRow.RowNumber(), 11).GetString().Trim();
+                var taskName = worksheet.Cell(xlRow.RowNumber(), 12).GetString().Trim();
 
-                var isRowEmpty = string.IsNullOrWhiteSpace(employeeCode) && string.IsNullOrWhiteSpace(fullName) &&
-                    string.IsNullOrWhiteSpace(departmentCode) && string.IsNullOrWhiteSpace(departmentName) &&
-                    string.IsNullOrWhiteSpace(groupCode) && string.IsNullOrWhiteSpace(groupName);
-                if (isRowEmpty) continue;
+                string[] allCells = [employeeCode, fullName, departmentCode, departmentName, groupCode, groupName, lineCode, teamCode, shiftTeamCode, congDoan, taskName];
+                if (allCells.All(string.IsNullOrWhiteSpace)) continue;
 
                 rows.Add(new EmployeeImportRowDto
                 {
@@ -433,7 +516,12 @@ namespace Attendance.Application.Services
                     DepartmentCode = string.IsNullOrWhiteSpace(departmentCode) ? null : departmentCode,
                     DepartmentNameVn = string.IsNullOrWhiteSpace(departmentName) ? null : departmentName,
                     GroupCode = string.IsNullOrWhiteSpace(groupCode) ? null : groupCode,
-                    GroupNameVn = string.IsNullOrWhiteSpace(groupName) ? null : groupName
+                    GroupNameVn = string.IsNullOrWhiteSpace(groupName) ? null : groupName,
+                    LineCode = string.IsNullOrWhiteSpace(lineCode) ? null : lineCode,
+                    TeamCode = string.IsNullOrWhiteSpace(teamCode) ? null : teamCode,
+                    ShiftTeamCode = string.IsNullOrWhiteSpace(shiftTeamCode) ? null : shiftTeamCode,
+                    CongDoan = string.IsNullOrWhiteSpace(congDoan) ? null : congDoan,
+                    TaskName = string.IsNullOrWhiteSpace(taskName) ? null : taskName
                 });
             }
 
@@ -872,7 +960,9 @@ namespace Attendance.Application.Services
 
         private static readonly string[] EmployeeNotes =
         {
-            "Mỗi dòng 1 nhân viên. Mã NV đã có → cập nhật họ tên, Nhóm; chưa có → tạo mới.",
+            "Mỗi dòng 1 nhân viên. Mã NV đã có → cập nhật họ tên, Nhóm và thông tin dưới chuyền; chưa có → tạo mới.",
+            "Nhân viên văn phòng để trống 5 cột cuối. Người dưới chuyền phải có đủ Line, Team, Nhóm ca; Team A/B tương ứng mã 1/2.",
+            "Người dưới chuyền không có trong file, thuộc phòng có trong file: bị gỡ thông tin dưới chuyền (không xoá nhân viên).",
             "Bộ phận/Nhóm chưa có trong hệ thống sẽ được tạo mới (chỉ Admin). Người phụ trách chỉ import được vào đơn vị mình phụ trách.",
             "Nhân viên giữ chức vụ Trưởng phòng trở lên không import được — sửa ở màn Nhân viên.",
             "Tài khoản đăng nhập, email nhận thông báo, Chức vụ, chữ ký: dùng import Liên kết tài khoản.",
@@ -880,12 +970,17 @@ namespace Attendance.Application.Services
 
         private static readonly ImportTemplateColumn[] EmployeeColumns =
         {
-            new("Employee code", 16, true, "@"),
-            new("Full name", 28, true),
-            new("Department code", 16, true),
-            new("Department name", 26, true),
-            new("Group code", 14, true),
-            new("Group name", 26, true),
+            new("MNV", 16, true, "@"),
+            new("HO Ten", 28, true),
+            new("Mã phòng", 14, true, "@"),
+            new("Tên phòng", 26, true),
+            new("Mã nhóm", 14, true, "@"),
+            new("Tên nhóm", 26, true),
+            new("Line", 12, false, "@"),
+            new("Team", 10, false, "@"),
+            new("Nhóm ca", 10, false, "@"),
+            new("Công đoạn", 12, false),
+            new("Công việc", 22, false),
         };
 
         private async Task<ImportTemplateColumn[]> EmployeeColumnsWithOptionsAsync()
@@ -947,7 +1042,7 @@ namespace Attendance.Application.Services
 
         public async Task<(byte[] Content, string FileName)> GenerateTemplateAsync() => ImportTemplateBuilder.Build(
             "Nhan vien", "MẪU IMPORT NHÂN SỰ", EmployeeNotes, await EmployeeColumnsWithOptionsAsync(),
-            new[] { new object?[] { "NV001", "Nguyễn Văn A", "CT", "Chế tạo", "CT-A", "Nhóm A" } },
+            new[] { new object?[] { "NV001", "Nguyễn Văn A", "PRO", "Chế tạo", "PRO-A", "Nhóm A", "A1", "A", "G", "ATO", "Lắp ráp", "1" } },
             "Mau_Import_NhanVien.xlsx");
 
         public (byte[] Content, string FileName) GenerateOtHourLimitTemplate() => ImportTemplateBuilder.Build(
@@ -967,7 +1062,8 @@ namespace Attendance.Application.Services
             // Managers and above have no Group and are rejected by this import, so they are not exported.
             var rows = (await _employeeService.GetForExportAsync(userName, isAdmin, filter))
                 .Where(x => x.GroupCode != null && x.TerminalLevel == (int)JobTitleTerminalLevel.None)
-                .Select(x => new object?[] { x.Code, x.FullName, x.DepartmentCode, x.DepartmentNameVn, x.GroupCode, x.GroupNameVn })
+                .Select(x => new object?[] { x.Code, x.FullName, x.DepartmentCode, x.DepartmentNameVn, x.GroupCode, x.GroupNameVn,
+                    x.LineCode, x.TeamCode, x.ShiftTeamCode, x.CongDoan, x.TaskName })
                 .ToList();
             return ImportTemplateBuilder.Build("Nhan vien", "IMPORT NHÂN SỰ", EmployeeNotes, await EmployeeColumnsWithOptionsAsync(), rows,
                 $"NhanVien_{ExportStamp()}.xlsx", rowsAreSamples: false);

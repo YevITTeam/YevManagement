@@ -7,6 +7,5 @@ namespace Attendance.Application.Dtos.ProductionEmployees
         public int? ProductionLineId { get; set; }
         public int? TeamId { get; set; }
         public int? ShiftTeamId { get; set; }
-        public bool IsLeader { get; set; }
     }
 }

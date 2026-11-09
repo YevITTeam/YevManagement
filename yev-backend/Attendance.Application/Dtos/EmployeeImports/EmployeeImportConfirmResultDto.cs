@@ -11,6 +11,8 @@ namespace Attendance.Application.Dtos.EmployeeImports
         // decide whether to create new or update.
         public int UpdatedEmployeeCount { get; set; }
 
+        public int RemovedFromLineCount { get; set; }
+
         // Rows that still fail validation at Confirm time are skipped, and do NOT block the whole
         // batch — valid rows are still created normally; failing rows are listed here with reasons for the FE to report.
         public int SkippedCount { get; set; }

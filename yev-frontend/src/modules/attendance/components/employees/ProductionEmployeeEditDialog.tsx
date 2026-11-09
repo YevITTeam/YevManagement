@@ -5,14 +5,16 @@ import { X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
+import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
-import type { ProductionEmployeeListItemDto, ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
+import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import type { ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 
 interface ProductionEmployeeEditDialogProps {
-    item: ProductionEmployeeListItemDto | null;
+    item: EmployeeDto | null;
     onClose: () => void;
     onSaved: () => void;
 }
@@ -20,7 +22,7 @@ interface ProductionEmployeeEditDialogProps {
 const toOptions = (options: ProductionOptionDto[]): SelectOption[] =>
     options.map((o) => ({ value: o.id, label: o.nameVn ? `${o.code} - ${o.nameVn}` : o.code, searchText: o.code.toLowerCase() }));
 
-// Quick single-row fix between Excel imports (the import is the main source and overwrites monthly).
+// Quick single-row fix between Excel imports (the next import overwrites it).
 export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }: ProductionEmployeeEditDialogProps) {
     const t = useTranslations("Attendance.ProductionEmployeeList");
     const tCommon = useTranslations("Common");
@@ -28,7 +30,6 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
     const [teamId, setTeamId] = useState<number | "">("");
     const [productionLineId, setProductionLineId] = useState<number | "">("");
     const [shiftTeamId, setShiftTeamId] = useState<number | "">("");
-    const [isLeader, setIsLeader] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
     const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
@@ -43,7 +44,6 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
         setTeamId(current?.teamId ?? "");
         setProductionLineId(current?.productionLineId ?? "");
         setShiftTeamId(current?.shiftTeamId ?? "");
-        setIsLeader(current?.isLeader ?? false);
         ProductionEmployeeApi.getLineOptions(current?.teamId ?? undefined).then(setLineOptions).catch((err) => console.error(err));
         ProductionEmployeeApi.getShiftTeamOptions(current?.productionLineId ?? undefined, current?.teamId ?? undefined)
             .then(setShiftTeamOptions)
@@ -81,11 +81,10 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
         event.preventDefault();
         setIsSaving(true);
         try {
-            await ProductionEmployeeApi.update(item.id, {
+            await EmployeeApi.updateProductionInfo(item.id, {
                 productionLineId: productionLineId === "" ? null : productionLineId,
                 teamId: teamId === "" ? null : teamId,
                 shiftTeamId: shiftTeamId === "" ? null : shiftTeamId,
-                isLeader,
             });
             toast.success(t("editSuccess"));
             onSaved();
@@ -103,7 +102,7 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
             <div role="dialog" aria-modal="true" className="z-60 mx-4 w-full max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 className="text-lg font-semibold text-[#191c1e]">
-                        {t("editDialogTitle")} — {item.fullName} ({item.employeeCode})
+                        {t("editDialogTitle")} — {item.lastName} {item.firstName} ({item.code})
                     </h3>
                     <button
                         type="button"
@@ -150,17 +149,6 @@ export default function ProductionEmployeeEditDialog({ item, onClose, onSaved }:
                             />
                         </label>
                     </div>
-
-                    <label className="flex cursor-pointer items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={isLeader}
-                            onChange={(event) => setIsLeader(event.target.checked)}
-                            disabled={isSaving}
-                            className="h-4 w-4 rounded border-[#e0e3e5] text-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
-                        <span className="text-sm font-medium text-[#191c1e]">{t("fieldIsLeader")}</span>
-                    </label>
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button

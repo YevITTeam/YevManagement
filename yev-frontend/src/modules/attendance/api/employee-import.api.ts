@@ -5,8 +5,8 @@ import type {
     EmployeeImportPreviewResultDto,
     EmployeeImportPreviewRowDto,
     EmployeeOtHourLimitImportResultDto,
+    ProductionEmployeeAccumulationResultDto,
 } from "@/modules/attendance/types/employee-import.dto";
-import type { ProductionEmployeeAccumulationResultDto } from "@/modules/attendance/types/production-employee-import.dto";
 import { ApiResponse } from "@/types/api";
 
 const ENDPOINTS = {

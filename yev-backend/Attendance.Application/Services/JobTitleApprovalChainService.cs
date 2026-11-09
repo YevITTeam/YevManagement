@@ -167,8 +167,7 @@ namespace Attendance.Application.Services
                 .Select(x => x.JobTitleId)
                 .ToList();
 
-            // Intermediate levels: creator's own group only.
-            // Plus Team Leaders of other Groups lent to this Group (GroupBorrowedApprover).
+            // Intermediate levels: creator's own group plus people of other Groups lent to it (GroupBorrowedApprover).
             var borrowedApproverIds = intermediateJobTitleIds.Count == 0
                 ? new List<int>()
                 : await _unitOfWork.GroupBorrowedApprovers.SelectAsync(x => x.GroupId == groupId, x => x.EmployeeId);
@@ -176,7 +175,7 @@ namespace Attendance.Application.Services
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
                 : (await _unitOfWork.Employees.SelectAsync(
                     predicate: x => !x.IsDeleted && x.UserName != null
-                        && (x.GroupId == groupId || (borrowedApproverIds.Contains(x.Id) && x.JobTitle!.Code == JobTitle.TeamLeaderCode))
+                        && (x.GroupId == groupId || borrowedApproverIds.Contains(x.Id))
                         && x.JobTitleId != null && intermediateJobTitleIds.Contains(x.JobTitleId.Value),
                     selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
                     .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
@@ -329,8 +328,8 @@ namespace Attendance.Application.Services
                 };
             }
 
-            // Line Leaders are derived from the form's employees via ProductionEmployee.IsLeader (from import, not JobTitleId);
-            // Group/Team Leaders are assigned by JobTitleId and shared across the whole department for production forms.
+            // Line Leaders must sit on the line derived from the form's employees;
+            // Group/Team Leaders are shared across the whole department for production forms.
             var lineScopedJobTitleIds = relevantSteps
                 .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None && x.IsLineScoped)
                 .Select(x => x.JobTitleId)
@@ -353,8 +352,8 @@ namespace Attendance.Application.Services
             int? derivedProductionLineId = null;
             if (employeeIds.Count > 0)
             {
-                var participantLineIds = (await _unitOfWork.ProductionEmployees.SelectAsync(
-                    predicate: x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted,
+                var participantLineIds = (await _unitOfWork.Employees.SelectAsync(
+                    predicate: x => employeeIds.Contains(x.Id) && x.ProductionLineId != null && !x.IsDeleted,
                     selector: x => x.ProductionLineId))
                     .Distinct()
                     .ToList();
@@ -362,20 +361,14 @@ namespace Attendance.Application.Services
                     derivedProductionLineId = participantLineIds[0];
             }
 
-            var lineLeaderHolders = (lineScopedJobTitleIds.Count == 0 || derivedProductionLineId is null)
-                ? new List<(int Id, string UserName, string FirstName, string LastName)>()
-                : (await _unitOfWork.ProductionEmployees.SelectAsync(
-                    predicate: pe => !pe.IsDeleted && pe.IsLeader && pe.ProductionLineId == derivedProductionLineId
-                        && pe.EmployeeId != null && !pe.Employee!.IsDeleted && pe.Employee!.UserName != null,
-                    selector: pe => new { pe.Employee!.Id, pe.Employee!.UserName, pe.Employee!.FirstName, pe.Employee!.LastName }))
-                    .Select(x => (x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
-                    .Distinct()
+            var lineScopedCandidates = (lineScopedJobTitleIds.Count == 0 || derivedProductionLineId is null)
+                ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()
+                : (await _unitOfWork.Employees.SelectAsync(
+                    predicate: x => !x.IsDeleted && x.UserName != null && x.ProductionLineId == derivedProductionLineId
+                        && x.JobTitleId != null && lineScopedJobTitleIds.Contains(x.JobTitleId.Value),
+                    selector: x => new { JobTitleId = x.JobTitleId!.Value, x.Id, x.UserName, x.FirstName, x.LastName }))
+                    .Select(x => (x.JobTitleId, x.Id, UserName: x.UserName!, x.FirstName, x.LastName))
                     .ToList();
-
-            // The import has a single LEADER column, so one leader applies to every Line Leader step.
-            var lineScopedCandidates = lineScopedJobTitleIds
-                .SelectMany(jobTitleId => lineLeaderHolders.Select(h => (JobTitleId: jobTitleId, h.Id, h.UserName, h.FirstName, h.LastName)))
-                .ToList();
 
             var groupScopedCandidates = groupScopedJobTitleIds.Count == 0
                 ? new List<(int JobTitleId, int Id, string UserName, string FirstName, string LastName)>()

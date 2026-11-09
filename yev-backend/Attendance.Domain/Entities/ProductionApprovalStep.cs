@@ -1,7 +1,7 @@
 namespace Attendance.Domain.Entities;
 
 // One flat chain per department for production forms (too many groups to configure each). The Line Leader step
-// resolves from ProductionEmployee.IsLeader; other intermediate steps use the participants' real Employee.GroupId.
+// resolves from the title's holders on the form's line; other intermediate steps use the participants' real Employee.GroupId.
 public partial class ProductionApprovalStep
 {
     public int Id { get; set; }

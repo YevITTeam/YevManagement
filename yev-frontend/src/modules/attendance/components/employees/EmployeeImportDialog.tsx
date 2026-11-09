@@ -9,6 +9,7 @@ import { EmployeeImportApi } from "@/modules/attendance/api/employee-import.api"
 import type {
     EmployeeImportConfirmResultDto,
     EmployeeImportPreviewRowDto,
+    EmployeeImportRemovedRowDto,
 } from "@/modules/attendance/types/employee-import.dto";
 import ExportFilteredButton from "./ExportFilteredButton";
 import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
@@ -27,6 +28,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
     const [isPreviewing, setIsPreviewing] = useState(false);
     const [isConfirming, setIsConfirming] = useState(false);
     const [rows, setRows] = useState<EmployeeImportPreviewRowDto[]>([]);
+    const [removedRows, setRemovedRows] = useState<EmployeeImportRemovedRowDto[]>([]);
     const [summary, setSummary] = useState<{
         totalRows: number;
         validRows: number;
@@ -45,6 +47,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
     const resetState = () => {
         setFile(null);
         setRows([]);
+        setRemovedRows([]);
         setSummary(null);
         setResult(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -62,6 +65,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
         const selected = event.target.files?.[0] ?? null;
         setFile(selected);
         setRows([]);
+        setRemovedRows([]);
         setSummary(null);
     };
 
@@ -74,6 +78,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
         try {
             const previewResult = await EmployeeImportApi.previewImport(file);
             setRows(previewResult.rows);
+            setRemovedRows(previewResult.removedRows);
             setSummary({
                 totalRows: previewResult.totalRows,
                 validRows: previewResult.validRows,
@@ -176,6 +181,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                 {t("importNewDepartmentCount", { count: result.createdDepartmentCount })}
                             </span>
                             <span className="text-[#5e3f3a]">{t("importNewGroupCount", { count: result.createdGroupCount })}</span>
+                            <span className="text-[#5e3f3a]">{t("importRemovedCount", { count: result.removedFromLineCount })}</span>
                             <span className={result.skippedCount > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 {t("importSkippedCount", { count: result.skippedCount })}
                             </span>
@@ -246,6 +252,9 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                     {t("importNewDepartmentCount", { count: summary.newDepartmentCount })} ·{" "}
                                     {t("importNewGroupCount", { count: summary.newGroupCount })}
                                 </span>
+                                {removedRows.length > 0 && (
+                                    <span className="text-[#930006]">{t("importRemovedCount", { count: removedRows.length })}</span>
+                                )}
                                 {summary.invalidRows > 0 && <span className="text-[#930006]">{t("importSummaryHint")}</span>}
                             </div>
                         )}
@@ -264,6 +273,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                             <th className="whitespace-nowrap px-3 py-2">{t("importColResolvedName")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("importColDepartment")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("importColGroup")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("importColProduction")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("importColNew")}</th>
                                             <th className="min-w-[200px] px-3 py-2">{t("importColError")}</th>
                                         </tr>
@@ -286,6 +296,11 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                                     {row.groupCode} — {row.groupNameVn}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
+                                                    {[row.lineCode, row.teamCode, row.shiftTeamCode, row.congDoan, row.taskName]
+                                                        .filter(Boolean)
+                                                        .join(" · ") || "-"}
+                                                </td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
                                                     {[
                                                         row.isNewEmployee && t("importNewEmployeeTag"),
                                                         row.isNewDepartment && t("importNewDepartmentTag"),
@@ -301,6 +316,22 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                         ))}
                                     </tbody>
                                 </table>
+                            )}
+                            {removedRows.length > 0 && (
+                                <div className="mt-4 px-1">
+                                    <h4 className="mb-2 text-sm font-semibold text-[#930006]">{t("importRemovedTitle")}</h4>
+                                    <table className="min-w-full border-collapse text-left text-xs">
+                                        <tbody>
+                                            {removedRows.map((row) => (
+                                                <tr key={row.employeeCode} className="border-b border-[#f1f5f9]">
+                                                    <td className="whitespace-nowrap px-3 py-2 font-semibold text-[#191c1e]">{row.employeeCode}</td>
+                                                    <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.fullName}</td>
+                                                    <td className="w-full px-3 py-2 text-[#5e3f3a]">{row.lineCode ?? "-"}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             )}
                         </div>
                     </>

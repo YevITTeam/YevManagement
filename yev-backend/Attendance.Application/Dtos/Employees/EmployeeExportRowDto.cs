@@ -7,6 +7,10 @@ namespace Attendance.Application.Dtos.Employees
         public int? DepartmentId { get; set; }
         public int? GroupId { get; set; }
         public int? WorkshopId { get; set; }
+        public int? ProductionLineId { get; set; }
+        public int? TeamId { get; set; }
+        public int? ShiftTeamId { get; set; }
+        public string? CongDoan { get; set; }
     }
 
     public class EmployeeExportRowDto
@@ -25,5 +29,10 @@ namespace Attendance.Application.Dtos.Employees
         // Ledger hours of the requested month, and of the year up to that month (opening balance included).
         public decimal MonthHours { get; set; }
         public decimal YearHours { get; set; }
+        public string? LineCode { get; set; }
+        public string? TeamCode { get; set; }
+        public string? ShiftTeamCode { get; set; }
+        public string? CongDoan { get; set; }
+        public string? TaskName { get; set; }
     }
 }

@@ -723,15 +723,15 @@ namespace Attendance.Application.Services
             }
 
             // Defensive check for legacy/manual data; import already rejects rows without a shift team.
-            var productionEmployeesForCheck = await _unitOfWork.ProductionEmployees.FindAsync(
-                x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted);
-            var notOnRoster = employeeIds.Except(productionEmployeesForCheck.Select(x => x.EmployeeId!.Value)).ToList();
+            var productionEmployeesForCheck = await _unitOfWork.Employees.FindAsync(
+                x => employeeIds.Contains(x.Id) && x.ProductionLineId != null && !x.IsDeleted);
+            var notOnRoster = employeeIds.Except(productionEmployeesForCheck.Select(x => x.Id)).ToList();
             if (notOnRoster.Count > 0)
             {
                 var codes = await _unitOfWork.Employees.SelectAsync(x => notOnRoster.Contains(x.Id), x => x.Code);
                 throw new DomainException($"Nhân viên không có trong danh sách nhân sự dưới chuyền: {string.Join(", ", codes)}.");
             }
-            var missingShiftTeam = productionEmployeesForCheck.Where(x => x.ShiftTeamId == null).Select(x => x.EmployeeCode).ToList();
+            var missingShiftTeam = productionEmployeesForCheck.Where(x => x.ShiftTeamId == null).Select(x => x.Code).ToList();
             if (missingShiftTeam.Count > 0)
                 throw new DomainException($"Nhân viên chưa có Nhóm ca, cần cập nhật trước khi tạo đơn: {string.Join(", ", missingShiftTeam)}.");
 
@@ -743,8 +743,8 @@ namespace Attendance.Application.Services
                     .Select(x => x.ProductionLineId!.Value)
                     .Distinct()
                     .ToList();
-                var leaderLineIds = (await _unitOfWork.ProductionEmployees.FindAsync(
-                    x => x.EmployeeId == creatorEmployee!.Id && x.IsLeader && !x.IsDeleted && x.ProductionLineId.HasValue))
+                var leaderLineIds = (await _unitOfWork.Employees.FindAsync(
+                    x => x.Id == creatorEmployee!.Id && x.JobTitle!.IsLineScoped && !x.IsDeleted && x.ProductionLineId.HasValue))
                     .Select(x => x.ProductionLineId!.Value)
                     .ToHashSet();
                 if (orderLineIds.Count == 0 || !orderLineIds.All(leaderLineIds.Contains))
@@ -797,11 +797,12 @@ namespace Attendance.Application.Services
             return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId, forceMeal: true);
         }
 
-        // ProductionEmployee is reloaded every month, so its create-time state is snapshotted on OtFormEmployee, office forms included.
-        private async Task<Dictionary<int, ProductionEmployee>> LoadRosterAsync(List<int> employeeIds) =>
-            (await _unitOfWork.ProductionEmployees.FindAsync(
-                x => x.EmployeeId.HasValue && employeeIds.Contains(x.EmployeeId.Value) && !x.IsDeleted))
-                .ToDictionary(x => x.EmployeeId!.Value);
+        // Production fields can change with every import, so their create-time state is snapshotted on OtFormEmployee, office forms included.
+        private async Task<Dictionary<int, Employee>> LoadRosterAsync(List<int> employeeIds) =>
+            (await _unitOfWork.Employees.FindWithIncludesAsync(
+                x => employeeIds.Contains(x.Id) && x.ProductionLineId != null && !x.IsDeleted,
+                x => x.ProductionLine!, x => x.Team!, x => x.ShiftTeam!))
+                .ToDictionary(x => x.Id);
 
         // When the creator outranks every mandatory signer, they sign the "requester" box themselves;
         // creation is blocked without a stored signature.
@@ -820,7 +821,7 @@ namespace Attendance.Application.Services
 
         private async Task<OtFormDto> FinalizeCreateAsync(
             OtForm newOtForm, CreateOtFormDto request, ResolveApprovalChainResultDto chainResult,
-            AccumulatedByEmployee accumulated, Dictionary<int, ProductionEmployee>? productionEmployeesByEmployeeId, bool forceMeal)
+            AccumulatedByEmployee accumulated, Dictionary<int, Employee> productionEmployeesByEmployeeId, bool forceMeal)
         {
             await _unitOfWork.OtForms.AddAsync(newOtForm);
 
@@ -837,8 +838,7 @@ namespace Attendance.Application.Services
             var createdRows = new List<OtFormEmployee>();
             foreach (var item in request.Employees)
             {
-                ProductionEmployee? pe = null;
-                productionEmployeesByEmployeeId?.TryGetValue(item.EmployeeId, out pe);
+                var pe = productionEmployeesByEmployeeId.GetValueOrDefault(item.EmployeeId);
 
                 var createdRow = new OtFormEmployee
                 {
@@ -851,9 +851,9 @@ namespace Attendance.Application.Services
                     NoteJp = item.NoteJp,
                     CongDoanSnapshot = pe?.CongDoan,
                     TaskNameSnapshot = pe?.TaskName,
-                    BlockCodeSnapshot = pe?.BlockCode,
-                    TeamCodeSnapshot = pe?.TeamCode,
-                    ShiftTeamCodeSnapshot = pe?.ShiftTeamCode
+                    BlockCodeSnapshot = pe?.ProductionLine?.LineCode,
+                    TeamCodeSnapshot = pe?.Team?.Code,
+                    ShiftTeamCodeSnapshot = pe?.ShiftTeam?.Code
                 };
                 createdRows.Add(createdRow);
                 await _unitOfWork.OtFormEmployees.AddAsync(createdRow);
@@ -981,8 +981,8 @@ namespace Attendance.Application.Services
             var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == departmentId.Value && !x.IsDeleted);
             if (department == null) return new List<MyProductionCreateScopeItemDto>();
 
-            var leaderRows = await _unitOfWork.ProductionEmployees.SelectAsync(
-                x => x.EmployeeId == callerEmployee.Id && x.IsLeader && !x.IsDeleted
+            var leaderRows = await _unitOfWork.Employees.SelectAsync(
+                x => x.Id == callerEmployee.Id && x.JobTitle!.IsLineScoped && !x.IsDeleted
                     && x.ProductionLineId != null && x.TeamId != null && x.ShiftTeamId != null,
                 x => new MyProductionCreateScopeItemDto
                 {
@@ -999,11 +999,7 @@ namespace Attendance.Application.Services
                     ShiftTeamNameVn = x.ShiftTeam!.NameVn
                 });
 
-            // A leader may appear on several rows for the same combination; collapse to one.
-            return leaderRows
-                .GroupBy(x => (x.ProductionLineId, x.TeamId, x.ShiftTeamId))
-                .Select(g => g.First())
-                .ToList();
+            return leaderRows.ToList();
         }
 
         public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request)
@@ -1172,7 +1168,7 @@ namespace Attendance.Application.Services
 
             // Added employees of a production form must share a Line/shift team with the rest of the form;
             // office forms keep every member inside the form's Group.
-            Dictionary<int, ProductionEmployee> productionEmployeesByEmployeeId = toAddIds.Count > 0 ? await LoadRosterAsync(toAddIds.ToList()) : new();
+            Dictionary<int, Employee> productionEmployeesByEmployeeId = toAddIds.Count > 0 ? await LoadRosterAsync(toAddIds.ToList()) : new();
             if (otForm.IsProductionForm && toAddIds.Count > 0)
             {
                 var baselinePairs = activeEmployees
@@ -1315,9 +1311,9 @@ namespace Attendance.Application.Services
                         NoteJp = addRequest.NoteJp,
                         CongDoanSnapshot = productionEmployee?.CongDoan,
                         TaskNameSnapshot = productionEmployee?.TaskName,
-                        BlockCodeSnapshot = productionEmployee?.BlockCode,
-                        TeamCodeSnapshot = productionEmployee?.TeamCode,
-                        ShiftTeamCodeSnapshot = productionEmployee?.ShiftTeamCode
+                        BlockCodeSnapshot = productionEmployee?.ProductionLine?.LineCode,
+                        TeamCodeSnapshot = productionEmployee?.Team?.Code,
+                        ShiftTeamCodeSnapshot = productionEmployee?.ShiftTeam?.Code
                     };
                     await _unitOfWork.OtFormEmployees.AddAsync(affectedRow);
                 }
@@ -1702,11 +1698,11 @@ namespace Attendance.Application.Services
         // Added employees must share (Line, shift team) with at least one remaining employee; mixed lines are allowed.
         // Skipped when no original employee remains after this save's removals.
         private static void EnsureAddedEmployeeMatchesFormScope(
-            Employee employee, ProductionEmployee productionEmployee, HashSet<(string? BlockCode, string? ShiftTeamCode)> baselinePairs)
+            Employee employee, Employee productionEmployee, HashSet<(string? BlockCode, string? ShiftTeamCode)> baselinePairs)
         {
             if (baselinePairs.Count == 0) return;
 
-            var pair = (productionEmployee.BlockCode, productionEmployee.ShiftTeamCode);
+            var pair = ((string?)productionEmployee.ProductionLine?.LineCode, (string?)productionEmployee.ShiftTeam?.Code);
             if (!baselinePairs.Contains(pair))
                 throw new DomainException($"Nhân viên '{employee.Code}' không thuộc Line/Nhóm ca của đơn này.");
         }

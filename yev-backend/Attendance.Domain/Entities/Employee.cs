@@ -30,6 +30,17 @@ public partial class Employee
 
     public decimal? CustomYearlyOtHourLimit { get; set; }
 
+    // On the production roster when ProductionLineId is set; the import sets Line, Team and shift team together.
+    public int? ProductionLineId { get; set; }
+
+    public int? TeamId { get; set; }
+
+    public int? ShiftTeamId { get; set; }
+
+    public string? CongDoan { get; set; }
+
+    public string? TaskName { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual Group? Group { get; set; }
@@ -38,11 +49,16 @@ public partial class Employee
 
     public virtual JobTitle? JobTitle { get; set; }
 
+    public virtual ProductionLine? ProductionLine { get; set; }
+
+    public virtual ProductionTeam? Team { get; set; }
+
+    public virtual ProductionShiftTeam? ShiftTeam { get; set; }
+
     public virtual ICollection<EmployeeApprovalScope> ApprovalScopes { get; set; } = new List<EmployeeApprovalScope>();
 
     public virtual ICollection<OtFormEmployee> OtFormEmployees { get; set; } = new List<OtFormEmployee>();
 
     public virtual ICollection<EmployeeAccumulationHistory> EmployeeAccumulationHistories { get; set; } = new List<EmployeeAccumulationHistory>();
 
-    public virtual ICollection<ProductionEmployee> ProductionEmployees { get; set; } = new List<ProductionEmployee>();
 }

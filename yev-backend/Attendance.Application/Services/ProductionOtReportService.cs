@@ -519,8 +519,7 @@ namespace Attendance.Application.Services
         // touching stable logic, accepting some duplication.
         private async Task<List<GroupedDailyRow>> BuildGroupedDailyRowsAsync(Expression<Func<OtFormEmployee, bool>> scope, int? departmentId, int? workshopId, Dtos.AttendanceSettings.AttendanceSettingDto settings)
         {
-            // Office forms created before they got a production snapshot read the current production roster instead.
-            var roster = _unitOfWork.ProductionEmployees.GetQueryable().Where(p => !p.IsDeleted);
+            // Office forms created before they got a production snapshot read the employee's current production fields instead.
             var entries = await _unitOfWork.OtFormEmployees.ToListAsync(
                 _unitOfWork.OtFormEmployees.GetQueryable().Where(scope).Where(
                     x => !x.OtForm.IsDeleted && x.OtForm.Status == (int)OtFormStatus.Completed && !x.IsRemoved
@@ -540,13 +539,13 @@ namespace Attendance.Application.Services
                     x.NoteVn,
                     // Office staff are mostly not on the production roster; their group name stands in for the process.
                     CongDoanSnapshot = x.OtForm.IsProductionForm ? x.CongDoanSnapshot
-                        : x.CongDoanSnapshot ?? roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.CongDoan).FirstOrDefault() ?? x.OtForm.Group!.GroupNameVn,
+                        : x.CongDoanSnapshot ?? x.Employee.CongDoan ?? x.OtForm.Group!.GroupNameVn,
                     BlockCodeSnapshot = x.OtForm.IsProductionForm ? x.BlockCodeSnapshot
-                        : x.BlockCodeSnapshot ?? roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.BlockCode).FirstOrDefault(),
+                        : x.BlockCodeSnapshot ?? x.Employee.ProductionLine!.LineCode,
                     // Office: non-Green/Orange groups are always HC; Green/Orange use the roster, else G/O from the name.
                     ShiftTeamCodeSnapshot = x.OtForm.IsProductionForm ? x.ShiftTeamCodeSnapshot
                         : !x.OtForm.Group!.GroupNameVn.Contains("GREEN") && !x.OtForm.Group.GroupNameVn.Contains("ORANGE") ? "HC"
-                        : x.ShiftTeamCodeSnapshot ?? roster.Where(p => p.EmployeeId == x.EmployeeId).Select(p => p.ShiftTeamCode).FirstOrDefault()
+                        : x.ShiftTeamCodeSnapshot ?? x.Employee.ShiftTeam!.Code
                           ?? (x.OtForm.Group.GroupNameVn.Contains("GREEN") ? "G" : "O"),
                     ReasonNameVn = x.OtForm.Reason.ReasonNameVn,
                     x.OtForm.SubReason,

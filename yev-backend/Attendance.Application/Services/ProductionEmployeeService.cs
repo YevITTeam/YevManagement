@@ -5,12 +5,11 @@ using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
 using Shared.Application.Helper;
 using Shared.Application.Services;
-using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Picks people by Line/Team/shift/CongDoan for production forms; ProductionEmployees only holds resolved rows, so no extra EmployeeId filter.
+    // Picks people on the production roster (employees with a Line) by Line/Team/shift/CongDoan for production forms.
     public class ProductionEmployeeService : BaseService<IAttendanceUnitOfWork>, IProductionEmployeeService
     {
         private readonly IAttendanceSettingService _attendanceSettingService;
@@ -36,31 +35,31 @@ namespace Attendance.Application.Services
             if (productionLineId == null && teamId == null && shiftTeamId == null && congDoan == null && trimmedKeyword == null)
                 throw new DomainException("Vui lòng chọn Team/Line/Nhóm ca hoặc nhập từ khoá để tìm nhân viên.");
 
-            var filtered = _unitOfWork.ProductionEmployees.GetQueryable().Where(x => !x.IsDeleted && x.EmployeeId != null
+            var filtered = _unitOfWork.Employees.GetQueryable().Where(x => !x.IsDeleted && x.ProductionLineId != null
                     && (productionLineId == null || x.ProductionLineId == productionLineId)
                     && (teamId == null || x.TeamId == teamId)
                     && (shiftTeamId == null || x.ShiftTeamId == shiftTeamId)
                     && (congDoan == null || x.CongDoan == congDoan)
                     && (trimmedKeyword == null
-                        || x.EmployeeCode.Contains(trimmedKeyword)
-                        || x.Employee!.LastName.Contains(trimmedKeyword)
-                        || x.Employee!.FirstName.Contains(trimmedKeyword)));
-            var items = await _unitOfWork.ProductionEmployees.ToListAsync(
-                filtered.OrderBy(x => x.EmployeeCode.Length).ThenBy(x => x.EmployeeCode).Take(MaxSearchResults),
+                        || x.Code.Contains(trimmedKeyword)
+                        || x.LastName.Contains(trimmedKeyword)
+                        || x.FirstName.Contains(trimmedKeyword)));
+            var items = await _unitOfWork.Employees.ToListAsync(
+                filtered.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).Take(MaxSearchResults),
                 selector: x => new ProductionEmployeeSearchItemDto
                 {
-                    EmployeeId = x.EmployeeId!.Value,
-                    EmployeeCode = x.Employee!.Code,
-                    FullName = x.Employee!.LastName + " " + x.Employee!.FirstName,
+                    EmployeeId = x.Id,
+                    EmployeeCode = x.Code,
+                    FullName = x.LastName + " " + x.FirstName,
                     CongDoan = x.CongDoan,
                     TaskName = x.TaskName,
-                    BlockCode = x.BlockCode,
-                    TeamCode = x.TeamCode,
-                    ShiftTeamCode = x.ShiftTeamCode,
+                    BlockCode = x.ProductionLine != null ? x.ProductionLine.LineCode : null,
+                    TeamCode = x.Team != null ? x.Team.Code : null,
+                    ShiftTeamCode = x.ShiftTeam != null ? x.ShiftTeam.Code : null,
                     ShiftTeamNameVn = x.ShiftTeam != null ? x.ShiftTeam.NameVn : null,
-                    IsLeader = x.IsLeader,
-                    CustomMonthlyOtHourLimit = x.Employee!.CustomMonthlyOtHourLimit,
-                    CustomYearlyOtHourLimit = x.Employee!.CustomYearlyOtHourLimit
+                    IsLeader = x.JobTitle != null && x.JobTitle.IsLineScoped,
+                    CustomMonthlyOtHourLimit = x.CustomMonthlyOtHourLimit,
+                    CustomYearlyOtHourLimit = x.CustomYearlyOtHourLimit
                 });
 
             var result = items.OrderBy(x => x.EmployeeCode.Length).ThenBy(x => x.EmployeeCode).ToList();
@@ -109,10 +108,10 @@ namespace Attendance.Application.Services
                 return allItems.OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
             }
 
-            // ProductionLine.TeamId is a static snapshot while employees' teams are reloaded monthly, so derive the
-            // Team->Line options from actual ProductionEmployees to avoid combos that return nothing.
-            var items = await _unitOfWork.ProductionEmployees.SelectAsync(
-                predicate: x => !x.IsDeleted && x.EmployeeId != null && x.ProductionLineId != null && x.TeamId == teamId,
+            // ProductionLine.TeamId is a static snapshot while employees' teams change with each import, so derive the
+            // Team->Line options from actual employees to avoid combos that return nothing.
+            var items = await _unitOfWork.Employees.SelectAsync(
+                predicate: x => !x.IsDeleted && x.ProductionLineId != null && x.TeamId == teamId,
                 selector: x => new ProductionOptionDto { Id = x.ProductionLineId!.Value, Code = x.ProductionLine!.LineCode, NameVn = null });
 
             return items.DistinctBy(x => x.Id).OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
@@ -129,8 +128,8 @@ namespace Attendance.Application.Services
         // Shift teams are not children of Line/Team, so options are derived from actual data to avoid empty results.
         public async Task<List<ProductionOptionDto>> GetShiftTeamOptionsAsync(int? productionLineId, int? teamId)
         {
-            var items = await _unitOfWork.ProductionEmployees.SelectAsync(
-                predicate: x => !x.IsDeleted && x.EmployeeId != null && x.ShiftTeamId != null
+            var items = await _unitOfWork.Employees.SelectAsync(
+                predicate: x => !x.IsDeleted && x.ProductionLineId != null && x.ShiftTeamId != null
                     && (productionLineId == null || x.ProductionLineId == productionLineId)
                     && (teamId == null || x.TeamId == teamId),
                 selector: x => new ProductionOptionDto { Id = x.ShiftTeamId!.Value, Code = x.ShiftTeam!.Code, NameVn = x.ShiftTeam!.NameVn });
@@ -138,137 +137,38 @@ namespace Attendance.Application.Services
             return items.DistinctBy(x => x.Id).OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
-        // Reads ProductionEmployees directly for the latest line data. Import is the main source; manual edits
-        // are overwritten by the next import.
-        public async Task<PagedResponse<ProductionEmployeeListItemDto>> GetPagedAsync(
-            string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword,
-            int? productionLineId, int? teamId, int? shiftTeamId, int? departmentId)
+        public async Task<List<string>> GetCongDoanOptionsAsync()
         {
-            var (todayYear, todayMonth) = GetTodayYearMonth();
-            var trimmedKeyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim();
-
-            // Department coordinators only (not group). Rows without a resolved Employee have no scope and stay hidden from non-Admins.
-            var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
-
-            var query = _unitOfWork.ProductionEmployees.GetQueryable(false).Where(x => !x.IsDeleted
-                && (productionLineId == null || x.ProductionLineId == productionLineId)
-                && (teamId == null || x.TeamId == teamId)
-                && (shiftTeamId == null || x.ShiftTeamId == shiftTeamId)
-                && (departmentId == null || (x.Employee != null && x.Employee.Group != null && x.Employee.Group.DepartmentId == departmentId))
-                && (trimmedKeyword == null
-                    || x.EmployeeCode.Contains(trimmedKeyword)
-                    || (x.Employee != null && (x.Employee.LastName.Contains(trimmedKeyword) || x.Employee.FirstName.Contains(trimmedKeyword))))
-                && (isAdmin || (x.EmployeeId != null && x.Employee != null && (
-                        (x.Employee.DepartmentId != null && managedDepartmentIds!.Contains(x.Employee.DepartmentId.Value))
-                        || (x.Employee.Group != null && managedDepartmentIds!.Contains(x.Employee.Group.DepartmentId))))));
-
-            var orderedQuery = query.OrderBy(x => x.EmployeeCode.Length).ThenBy(x => x.EmployeeCode);
-
-            return await _unitOfWork.ProductionEmployees.ToPagedResponseAsync(
-                orderedQuery,
-                pageIndex,
-                pageSize,
-                x => new ProductionEmployeeListItemDto
-                {
-                    Id = x.Id,
-                    EmployeeId = x.EmployeeId,
-                    EmployeeCode = x.EmployeeCode,
-                    FullName = x.Employee != null ? x.Employee.LastName + " " + x.Employee.FirstName : x.EmployeeCode,
-                    CongDoan = x.CongDoan,
-                    TaskName = x.TaskName,
-                    BlockCode = x.BlockCode,
-                    ProductionLineId = x.ProductionLineId,
-                    TeamCode = x.TeamCode,
-                    TeamNameVn = x.Team != null ? x.Team.NameVn : null,
-                    TeamId = x.TeamId,
-                    ShiftTeamCode = x.ShiftTeamCode,
-                    ShiftTeamNameVn = x.ShiftTeam != null ? x.ShiftTeam.NameVn : null,
-                    ShiftTeamId = x.ShiftTeamId,
-                    IsLeader = x.IsLeader,
-                    DepartmentNameVn = x.Employee != null && x.Employee.Group != null && x.Employee.Group.Department != null
-                        ? x.Employee.Group.Department.DepartmentNameVn
-                        : null,
-                    MonthToDate = x.EmployeeId != null
-                        ? x.Employee!.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month == todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m
-                        : 0m,
-                    YearToDate = x.EmployeeId != null
-                        ? x.Employee!.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m
-                        : 0m
-                });
+            var items = await _unitOfWork.Employees.SelectAsync(
+                predicate: x => !x.IsDeleted && x.ProductionLineId != null && x.CongDoan != null,
+                selector: x => x.CongDoan!);
+            return items.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
-        private static (int Year, int Month) GetTodayYearMonth()
+        // Manual fix between imports; the next import overwrites it.
+        public async Task UpdateAsync(int employeeId, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin)
         {
-            var today = DateOnly.FromDateTime(TimeHelper.GetCurrentUtcTime());
-            return (today.Year, today.Month);
-        }
+            var entity = (await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId && !x.IsDeleted, x => x.Group!))
+                .OrThrowNotFound("Nhân viên", employeeId);
 
-        // Always store Id+Code from the selected entity so codes never drift from FKs. IsLeader is read live when
-        // resolving the production approval chain, so no extra sync is needed.
-        public async Task UpdateAsync(int id, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin)
-        {
-            var entity = (await _unitOfWork.ProductionEmployees.GetByIdAsync(id)).OrThrowNotFound("Nhân viên dưới chuyền", id);
-
-            // Rows without a resolved Employee have no department, so non-Admins are always blocked.
             if (!isAdmin)
             {
-                int? resolvedDepartmentId = null;
-                if (entity!.EmployeeId.HasValue)
-                {
-                    var employee = (await _unitOfWork.Employees.SelectAsync(
-                        x => x.Id == entity.EmployeeId.Value,
-                        x => new { x.DepartmentId, GroupDepartmentId = x.Group != null ? (int?)x.Group.DepartmentId : null }))
-                        .FirstOrDefault();
-                    resolvedDepartmentId = employee?.DepartmentId ?? employee?.GroupDepartmentId;
-                }
-
+                var departmentId = entity!.DepartmentId ?? entity.Group?.DepartmentId;
                 var managedDepartmentIds = await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
-                if (resolvedDepartmentId == null || !managedDepartmentIds.Contains(resolvedDepartmentId.Value))
+                if (departmentId == null || !managedDepartmentIds.Contains(departmentId.Value))
                     throw new DomainException("Bạn chỉ được sửa nhân sự dưới chuyền thuộc Bộ phận mình phụ trách.");
             }
 
             if (request.ProductionLineId.HasValue)
-            {
-                var line = (await _unitOfWork.ProductionLines.GetByIdAsync(request.ProductionLineId.Value))
-                    .OrThrowNotFound("Line", request.ProductionLineId.Value);
-                entity!.ProductionLineId = line!.Id;
-                entity.BlockCode = line.LineCode;
-            }
-            else
-            {
-                entity!.ProductionLineId = null;
-                entity.BlockCode = null;
-            }
-
+                (await _unitOfWork.ProductionLines.GetByIdAsync(request.ProductionLineId.Value)).OrThrowNotFound("Line", request.ProductionLineId.Value);
             if (request.TeamId.HasValue)
-            {
-                var team = (await _unitOfWork.ProductionTeams.GetByIdAsync(request.TeamId.Value))
-                    .OrThrowNotFound("Team", request.TeamId.Value);
-                entity.TeamId = team!.Id;
-                entity.TeamCode = team.Code;
-            }
-            else
-            {
-                entity.TeamId = null;
-                entity.TeamCode = null;
-            }
-
+                (await _unitOfWork.ProductionTeams.GetByIdAsync(request.TeamId.Value)).OrThrowNotFound("Team", request.TeamId.Value);
             if (request.ShiftTeamId.HasValue)
-            {
-                var shiftTeam = (await _unitOfWork.ProductionShiftTeams.GetByIdAsync(request.ShiftTeamId.Value))
-                    .OrThrowNotFound("Nhóm ca", request.ShiftTeamId.Value);
-                entity.ShiftTeamId = shiftTeam!.Id;
-                entity.ShiftTeamCode = shiftTeam.Code;
-            }
-            else
-            {
-                entity.ShiftTeamId = null;
-                entity.ShiftTeamCode = null;
-            }
+                (await _unitOfWork.ProductionShiftTeams.GetByIdAsync(request.ShiftTeamId.Value)).OrThrowNotFound("Nhóm ca", request.ShiftTeamId.Value);
 
-            entity.IsLeader = request.IsLeader;
-
-            _unitOfWork.ProductionEmployees.Update(entity);
+            entity!.ProductionLineId = request.ProductionLineId;
+            entity.TeamId = request.TeamId;
+            entity.ShiftTeamId = request.ShiftTeamId;
             await _unitOfWork.SaveChangesAsync();
         }
     }

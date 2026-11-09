@@ -1,13 +1,13 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import {
     AlertTriangle,
     CalendarClock,
     Clock,
-    Download,
+    Factory,
     FileSpreadsheet,
     History,
     Inbox,
@@ -39,8 +39,7 @@ import EmployeeMonthlyAccumulationImportDialog from "./EmployeeMonthlyAccumulati
 import EmployeeIdentityLinkImportDialog from "./EmployeeIdentityLinkImportDialog";
 import EmployeeOtLimitDialog from "./EmployeeOtLimitDialog";
 import EmployeeSignatureDialog from "./EmployeeSignatureDialog";
-import ProductionEmployeeImportDialog from "./ProductionEmployeeImportDialog";
-import ProductionEmployeeList, { type ProductionEmployeeListHandle } from "./ProductionEmployeeList";
+import ProductionEmployeeEditDialog from "./ProductionEmployeeEditDialog";
 import AccumulationHistoryModal from "./AccumulationHistoryModal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -48,23 +47,29 @@ import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Pagination } from "@/components/ui/Pagination";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
-import { ProductionEmployeeExportApi } from "@/modules/attendance/api/production-employee-import.api";
+import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
+import type { ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 
 const PAGE_SIZE = 10;
-type ViewMode = "employee" | "production";
+const FILTER_TRIGGER_CLASS =
+    "h-9 w-36 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+
+const toProductionOptions = (options: ProductionOptionDto[]): SelectOption[] =>
+    options.map((o) => ({ value: o.id, label: o.nameVn ? `${o.code} - ${o.nameVn}` : o.code, searchText: o.code.toLowerCase() }));
 
 const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeList({ onLoadingChange }, ref) {
     const t = useTranslations("Attendance.Employee");
     const tCommon = useTranslations("Common");
+    const tProduction = useTranslations("Attendance.ProductionEmployeeList");
     const { user } = useAuth();
     const canUpdateEmployee = hasPermission(user, "Attendance.Employee.Update");
     const canDeleteEmployee = hasPermission(user, "Attendance.Employee.Delete");
     const canUpdateOtLimit = hasPermission(user, "Attendance.Employee.UpdateOtLimit");
     const canUpdateAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Update");
     const canCreateEmployee = hasPermission(user, "Attendance.Employee.Create");
-    const canViewProduction = hasPermission(user, "Attendance.ProductionEmployee.View");
+    const canUpdateProduction = hasPermission(user, "Attendance.ProductionEmployee.Update");
     // Admin-only permission, never auto-granted via JobTitle/Coordinator.
     const canImportIdentityLink = hasPermission(user, "Identity.User.BulkImport");
     const isAdmin = Boolean(user?.roles.includes("Admin"));
@@ -80,6 +85,16 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
     const [workshopId, setWorkshopId] = useState<number | "">("");
     const [groupId, setGroupId] = useState<number | "">("");
+
+    const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
+    const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
+    const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
+    const [congDoanOptions, setCongDoanOptions] = useState<string[]>([]);
+    const [teamId, setTeamId] = useState<number | "">("");
+    const [productionLineId, setProductionLineId] = useState<number | "">("");
+    const [shiftTeamId, setShiftTeamId] = useState<number | "">("");
+    const [congDoan, setCongDoan] = useState<number | "">("");
+    const [productionEditEmployee, setProductionEditEmployee] = useState<EmployeeDto | null>(null);
 
     // UX only: narrows the filter dropdowns to what the caller can see (BE already scopes the data),
     // avoiding unexplained empty tables.
@@ -106,15 +121,16 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
 
     const [importOpen, setImportOpen] = useState(false);
     const [identityLinkImportOpen, setIdentityLinkImportOpen] = useState(false);
-    const [productionImportOpen, setProductionImportOpen] = useState(false);
     const [otHourLimitImportOpen, setOtHourLimitImportOpen] = useState(false);
     const [monthlyAccumulationImportOpen, setMonthlyAccumulationImportOpen] = useState(false);
-    const [isExportingProduction, setIsExportingProduction] = useState(false);
     const { setting } = useAttendanceSetting();
 
-    // Employees vs. read-only ProductionEmployees, each view with its own filters and Excel actions.
-    const [viewMode, setViewMode] = useState<ViewMode>("employee");
-    const productionListRef = useRef<ProductionEmployeeListHandle>(null);
+    useEffect(() => {
+        ProductionEmployeeApi.getTeamOptions().then(setTeamOptions).catch((err) => console.error(err));
+        ProductionEmployeeApi.getLineOptions().then(setLineOptions).catch((err) => console.error(err));
+        ProductionEmployeeApi.getShiftTeamOptions().then(setShiftTeamOptions).catch((err) => console.error(err));
+        ProductionEmployeeApi.getCongDoanOptions().then(setCongDoanOptions).catch((err) => console.error(err));
+    }, []);
 
     useEffect(() => {
         EmployeeApi.getMyScope()
@@ -168,6 +184,37 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         setPageIndex(1);
     };
 
+    const handleSelectTeam = (nextId: number | "") => {
+        setTeamId(nextId);
+        setProductionLineId("");
+        setPageIndex(1);
+        ProductionEmployeeApi.getLineOptions(nextId === "" ? undefined : nextId)
+            .then(setLineOptions)
+            .catch((err) => console.error(err));
+    };
+
+    const handleSelectLine = (nextId: number | "") => {
+        setProductionLineId(nextId);
+        setPageIndex(1);
+    };
+
+    const handleSelectShiftTeam = (nextId: number | "") => {
+        setShiftTeamId(nextId);
+        setPageIndex(1);
+    };
+
+    const handleSelectCongDoan = (nextValue: number | "") => {
+        setCongDoan(nextValue);
+        setPageIndex(1);
+    };
+
+    const selectedCongDoan = congDoan === "" ? undefined : congDoanOptions[congDoan];
+    const congDoanSelectOptions: SelectOption[] = congDoanOptions.map((value, index) => ({
+        value: index,
+        label: value,
+        searchText: value.toLowerCase(),
+    }));
+
     const departmentOptions: SelectOption[] = departments.map((d) => ({
         value: d.id,
         label: d.departmentNameVn,
@@ -195,8 +242,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 departmentId: departmentId || undefined,
                 groupId: groupId || undefined,
                 workshopId: workshopId || undefined,
+                productionLineId: productionLineId || undefined,
+                teamId: teamId || undefined,
+                shiftTeamId: shiftTeamId || undefined,
+                congDoan: selectedCongDoan,
             }),
-        [pageIndex, appliedKeyword, departmentId, groupId, workshopId],
+        [pageIndex, appliedKeyword, departmentId, groupId, workshopId, productionLineId, teamId, shiftTeamId, selectedCongDoan],
         (result) => {
             setEmployees(result.data);
             setTotalCount(result.totalCount);
@@ -212,7 +263,6 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     }, [isLoading, onLoadingChange]);
 
     const openCreateForm = () => {
-        setViewMode("employee");
         setFormMode("create");
         setEditingEmployee(null);
         setFormOpen(true);
@@ -221,7 +271,6 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     useImperativeHandle(ref, () => ({
         refresh: () => {
             fetchEmployees();
-            productionListRef.current?.refresh();
         },
         openCreate: openCreateForm,
     }));
@@ -229,23 +278,6 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const handleSearch = () => {
         setPageIndex(1);
         setAppliedKeyword(keyword.trim());
-    };
-
-    const handleExportProduction = async () => {
-        setIsExportingProduction(true);
-        try {
-            const { blob, fileName } = await ProductionEmployeeExportApi.exportExcel();
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = fileName ?? "NhanSuDuoiChuyen.xlsx";
-            link.click();
-            URL.revokeObjectURL(url);
-        } catch (err) {
-            toast.error(getApiErrorMessage(err, t("exportProductionError")));
-        } finally {
-            setIsExportingProduction(false);
-        }
     };
 
     const openEditForm = (employee: EmployeeDto) => {
@@ -314,48 +346,17 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     };
 
     // Coordinators may hold only some of these permissions; hide actions that would 403.
-    const canImportProduction = hasPermission(user, "Attendance.ProductionEmployee.Import");
-    const canExportProduction = hasPermission(user, "Attendance.ProductionEmployee.Export");
     // Applies to every department; this permission is auto-granted to department coordinators.
     const canImportMonthlyAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Import");
-    const productionExcelItems = [
-        ...(canImportProduction
-            ? [{ label: t("importProductionExcel"), onClick: () => setProductionImportOpen(true), icon: <Upload className="h-3.5 w-3.5" /> }]
-            : []),
-        ...(canExportProduction
-            ? [
-                  {
-                      label: isExportingProduction ? t("exportingProduction") : t("exportProductionExcel"),
-                      onClick: handleExportProduction,
-                      disabled: isExportingProduction,
-                      icon: <Download className="h-3.5 w-3.5" />,
-                  },
-              ]
-            : []),
-        ...(canUpdateOtLimit
-            ? [{ label: t("otHourLimitImportMenuLabel"), onClick: () => setOtHourLimitImportOpen(true), icon: <Clock className="h-3.5 w-3.5" /> }]
-            : []),
-        ...(canImportMonthlyAccumulation
-            ? [
-                  {
-                      label: t("monthlyAccumulationImportMenuLabel"),
-                      onClick: () => setMonthlyAccumulationImportOpen(true),
-                      icon: <CalendarClock className="h-3.5 w-3.5" />,
-                  },
-              ]
-            : []),
-    ];
-    // Nothing permitted → hide the Excel button rather than show an empty menu.
-    const productionExcelActions =
-        productionExcelItems.length > 0 ? (
-            <ActionMenu label={t("excelActionsLabel")} icon={<FileSpreadsheet className="h-3.5 w-3.5" />} items={productionExcelItems} />
-        ) : null;
-
     const exportFilter: EmployeeExportFilter = {
         keyword: appliedKeyword || undefined,
         departmentId: departmentId || undefined,
         groupId: groupId || undefined,
         workshopId: workshopId || undefined,
+        productionLineId: productionLineId || undefined,
+        teamId: teamId || undefined,
+        shiftTeamId: shiftTeamId || undefined,
+        congDoan: selectedCongDoan,
     };
     const employeeExcelItems = [
         ...(canCreateEmployee
@@ -382,35 +383,11 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
             <ActionMenu label={t("excelActionsLabel")} icon={<FileSpreadsheet className="h-3.5 w-3.5" />} items={employeeExcelItems} />
         ) : null;
 
-    const effectiveViewMode: ViewMode = canViewProduction ? viewMode : "employee";
-    const viewModeSwitch = !canViewProduction ? null : (
-        <div className="inline-flex h-9 shrink-0 items-center rounded-lg border border-[#e0e3e5] bg-white p-0.5">
-            {(["employee", "production"] as const).map((mode) => (
-                <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setViewMode(mode)}
-                    className={`h-full cursor-pointer whitespace-nowrap rounded-md px-2.5 text-[13px] font-semibold transition ${
-                        effectiveViewMode === mode ? "bg-[#fff4f2] text-[#e3000f]" : "text-[#5e3f3a] hover:text-[#191c1e]"
-                    }`}
-                >
-                    {mode === "employee" ? t("viewModeEmployee") : t("viewModeProduction")}
-                </button>
-            ))}
-        </div>
-    );
-
     return (
         <div className="space-y-4">
-            {effectiveViewMode === "production" ? (
-                <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                    <ProductionEmployeeList ref={productionListRef} actions={productionExcelActions} leading={viewModeSwitch} />
-                </section>
-            ) : (
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3 md:flex-row md:items-center md:justify-between">
                     <div className="flex flex-wrap items-center gap-2">
-                        {viewModeSwitch}
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
@@ -450,6 +427,34 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             placeholder={t("filterGroupPlaceholder")}
                             triggerClassName="h-9 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
+                        <SearchableSelect
+                            options={toProductionOptions(teamOptions)}
+                            value={teamId}
+                            onChange={handleSelectTeam}
+                            placeholder={tProduction("filterTeamPlaceholder")}
+                            triggerClassName={FILTER_TRIGGER_CLASS}
+                        />
+                        <SearchableSelect
+                            options={toProductionOptions(lineOptions)}
+                            value={productionLineId}
+                            onChange={handleSelectLine}
+                            placeholder={tProduction("filterBlockPlaceholder")}
+                            triggerClassName={FILTER_TRIGGER_CLASS}
+                        />
+                        <SearchableSelect
+                            options={toProductionOptions(shiftTeamOptions)}
+                            value={shiftTeamId}
+                            onChange={handleSelectShiftTeam}
+                            placeholder={tProduction("filterShiftTeamPlaceholder")}
+                            triggerClassName={FILTER_TRIGGER_CLASS}
+                        />
+                        <SearchableSelect
+                            options={congDoanSelectOptions}
+                            value={congDoan}
+                            onChange={handleSelectCongDoan}
+                            placeholder={tProduction("filterCongDoanPlaceholder")}
+                            triggerClassName={FILTER_TRIGGER_CLASS}
+                        />
                         {employeeExcelActions}
                     </div>
                 </div>
@@ -468,6 +473,11 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                 <th className="px-3 py-2">{t("colWorkshop")}</th>
                                 <th className="px-3 py-2">{t("colGroup")}</th>
                                 <th className="px-3 py-2">{t("colJobTitle")}</th>
+                                <th className="px-3 py-2">{tProduction("colBlock")}</th>
+                                <th className="px-3 py-2">{tProduction("colTeam")}</th>
+                                <th className="px-3 py-2">{tProduction("colShiftTeam")}</th>
+                                <th className="px-3 py-2">{tProduction("colCongDoan")}</th>
+                                <th className="px-3 py-2">{tProduction("colTaskName")}</th>
                                 <th className="px-3 py-2">{t("colMonthToDate")}</th>
                                 <th className="px-3 py-2">{t("colYearToDate")}</th>
                                 <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
@@ -476,7 +486,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         <tbody>
                             {!isLoading && employees.length === 0 && (
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-12">
+                                    <td colSpan={14} className="px-4 py-12">
                                         <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                             <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                             {t("noData")}
@@ -521,6 +531,13 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                             <span className="text-xs italic text-[#8a8f94]">{t("noJobTitle")}</span>
                                         )}
                                     </td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                        {employee.lineCode ?? "-"}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.teamCode ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.shiftTeamCode ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.congDoan ?? "-"}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{employee.taskName ?? "-"}</td>
                                     <td className="px-3 py-2 text-sm">
                                         <span className={accumulationBadgeClass(isMonthOverLimit)}>
                                             {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
@@ -543,6 +560,16 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                             >
                                                 <History className="h-3.5 w-3.5" />
                                             </button>
+                                            {canUpdateProduction && (
+                                                <button
+                                                    onClick={() => setProductionEditEmployee(employee)}
+                                                    className="cursor-pointer rounded-md border border-[#e0e3e5] p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                    title={tProduction("editAction")}
+                                                    aria-label={tProduction("editAction")}
+                                                >
+                                                    <Factory className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
                                             {canUpdateOtLimit && !canUpdateEmployee && (
                                                 <button
                                                     onClick={() => setOtLimitEmployee(employee)}
@@ -601,7 +628,6 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     compactSummary={totalCount}
                 />
             </section>
-            )}
 
             <EmployeeImportDialog
                 isOpen={importOpen}
@@ -617,12 +643,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 exportFilter={exportFilter}
             />
 
-            <ProductionEmployeeImportDialog
-                isOpen={productionImportOpen}
-                onClose={() => setProductionImportOpen(false)}
-                onImported={() => {
+            <ProductionEmployeeEditDialog
+                item={productionEditEmployee}
+                onClose={() => setProductionEditEmployee(null)}
+                onSaved={() => {
+                    setProductionEditEmployee(null);
                     fetchEmployees();
-                    productionListRef.current?.refresh();
                 }}
             />
 

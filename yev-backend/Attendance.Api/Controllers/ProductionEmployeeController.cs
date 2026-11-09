@@ -29,7 +29,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction", "Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
         [HttpGet("line-options")]
         public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetLineOptions([FromQuery] int? teamId)
         {
@@ -37,7 +37,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction", "Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
         [HttpGet("team-options")]
         public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetTeamOptions()
         {
@@ -45,7 +45,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction", "Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
         [HttpGet("shift-team-options")]
         public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetShiftTeamOptions(
             [FromQuery] int? productionLineId, [FromQuery] int? teamId)
@@ -54,25 +54,12 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Dedicated permission so not every coordinator/team leader can see this screen.
-        [RequirePermission("Attendance.ProductionEmployee.View")]
-        [HttpGet("page-nation")]
-        public async Task<ActionResult<ApiResponse<PagedResponse<ProductionEmployeeListItemDto>>>> GetPaged(
-            [FromQuery] int pageIndex, [FromQuery] int pageSize, [FromQuery] string? keyword,
-            [FromQuery] int? productionLineId, [FromQuery] int? teamId, [FromQuery] int? shiftTeamId, [FromQuery] int? departmentId)
+        [RequirePermission("Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
+        [HttpGet("cong-doan-options")]
+        public async Task<ActionResult<ApiResponse<List<string>>>> GetCongDoanOptions()
         {
-            var result = await _productionEmployeeService.GetPagedAsync(
-                CurrentUserName, User.IsInRole(AdminRole), pageIndex, pageSize, keyword, productionLineId, teamId, shiftTeamId, departmentId);
+            var result = await _productionEmployeeService.GetCongDoanOptionsAsync();
             return Success(result);
-        }
-
-        // Separate from Import: quick single-person edits between imports.
-        [RequirePermission("Attendance.ProductionEmployee.Update")]
-        [HttpPut("{id}")]
-        public async Task<ActionResult<ApiResponse<bool>>> Update(int id, [FromBody] UpdateProductionEmployeeDto request)
-        {
-            await _productionEmployeeService.UpdateAsync(id, request, CurrentUserName, User.IsInRole(AdminRole));
-            return Success(true, "Cập nhật nhân viên dưới chuyền thành công.");
         }
     }
 }

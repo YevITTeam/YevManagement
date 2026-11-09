@@ -15,5 +15,5 @@ public partial class ProductionTeam
 
     public virtual ICollection<ProductionLine> ProductionLines { get; set; } = new List<ProductionLine>();
 
-    public virtual ICollection<ProductionEmployee> ProductionEmployees { get; set; } = new List<ProductionEmployee>();
+    public virtual ICollection<Employee> Employees { get; set; } = new List<Employee>();
 }

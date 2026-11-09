@@ -6,7 +6,7 @@ import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
 import { EmployeeImportApi } from "@/modules/attendance/api/employee-import.api";
-import type { ProductionEmployeeAccumulationResultDto } from "@/modules/attendance/types/production-employee-import.dto";
+import type { ProductionEmployeeAccumulationResultDto } from "@/modules/attendance/types/employee-import.dto";
 import ExportFilteredButton from "./ExportFilteredButton";
 import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";

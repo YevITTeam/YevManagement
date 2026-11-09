@@ -43,7 +43,7 @@ public partial class OtFormEmployee
 
     public string? RemoveReason { get; set; }
 
-    // Snapshots from ProductionEmployee (production forms only), which changes daily.
+    // Snapshots of the employee's production fields, which the import can change daily.
     public string? CongDoanSnapshot { get; set; }
 
     public string? TaskNameSnapshot { get; set; }

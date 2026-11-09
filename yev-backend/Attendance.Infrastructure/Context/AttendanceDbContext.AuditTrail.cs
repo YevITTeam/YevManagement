@@ -294,7 +294,6 @@ public partial class AttendanceDbContext
             DepartmentApprovalStepCoordinator x => $"Phòng ban #{x.DepartmentId} - {Emp(x.EmployeeId)}",
             GroupApprovalStepCoordinator x => $"Nhóm #{x.GroupId} - {Emp(x.EmployeeId)}",
             ApprovalDelegation x => $"{Emp(x.DelegatorEmployeeId)} → {Emp(x.DelegateEmployeeId)}",
-            ProductionEmployee x => x.EmployeeCode,
             Department x => $"{x.DepartmentCode} - {x.DepartmentNameVn}",
             Group x => $"{x.GroupCode} - {x.GroupNameVn}",
             Workshop x => $"{x.WorkshopCode} - {x.WorkshopNameVn}",

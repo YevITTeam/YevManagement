@@ -37,4 +37,14 @@ export interface EmployeeDto {
     // Per-employee monthly/yearly limits; null = global default. No per-employee daily limit.
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
+
+    // Filled by the grid list only; productionLineId is null for people not on the production roster.
+    productionLineId?: number | null;
+    lineCode?: string | null;
+    teamId?: number | null;
+    teamCode?: string | null;
+    shiftTeamId?: number | null;
+    shiftTeamCode?: string | null;
+    congDoan?: string | null;
+    taskName?: string | null;
 }

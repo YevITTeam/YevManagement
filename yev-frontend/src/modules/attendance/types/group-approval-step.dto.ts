@@ -22,6 +22,7 @@ export interface GroupApprovalStepDto {
 // A Team Leader of another Group (same Department) who approves this Group's Team Leader step.
 export interface GroupBorrowedApproverDto {
     employeeId: number;
+    jobTitleId: number;
     employeeCode: string;
     lastName: string;
     firstName: string;
@@ -29,7 +30,7 @@ export interface GroupBorrowedApproverDto {
     groupNameJp: string | null;
 }
 
-// approvers = already borrowed; candidates = Team Leaders of the other Groups in the same Department.
+// approvers = already borrowed; candidates = intermediate-title holders of the other Groups in the same Department.
 export interface GroupBorrowedApproversDto {
     approvers: GroupBorrowedApproverDto[];
     candidates: GroupBorrowedApproverDto[];

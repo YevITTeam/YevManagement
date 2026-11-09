@@ -15,7 +15,7 @@ namespace Attendance.Application.Dtos.ProductionApprovalSteps
         // JobTitleTerminalLevel; unlike DepartmentApprovalStepDto this single chain mixes None and terminal levels.
         public int TerminalLevel { get; set; }
 
-        // True only for Line Leader, whose holder comes from ProductionEmployee.IsLeader and cannot be assigned manually.
+        // True only for Line Leader, whose candidates are the title's holders on the form's line.
         public bool IsLineScoped { get; set; }
     }
 }

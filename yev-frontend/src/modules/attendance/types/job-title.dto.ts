@@ -5,7 +5,7 @@ export interface JobTitleDto {
     rankOrder: number;
     // JobTitleTerminalLevel: 0=None, 1=DepartmentManager, 2=WorkshopManager, 3=GeneralDirector.
     terminalLevel: number;
-    // true only for "Line Leader"; holders come from ProductionEmployee.IsLeader on import.
+    // true only for "Line Leader"; holders act only on their own line.
     // Read-only, not part of create/update payloads.
     isLineScoped?: boolean;
 }

@@ -1,5 +1,4 @@
 using Attendance.Application.Dtos.ProductionEmployees;
-using Shared.Application.Wrapper;
 
 namespace Attendance.Application.Interfaces.Service
 {
@@ -12,12 +11,9 @@ namespace Attendance.Application.Interfaces.Service
         Task<List<ProductionOptionDto>> GetTeamOptionsAsync();
         Task<List<ProductionOptionDto>> GetShiftTeamOptionsAsync(int? productionLineId, int? teamId);
 
-        // departmentId is the optional FE filter; coordinator scope from callerUserName/isAdmin is always applied.
-        Task<PagedResponse<ProductionEmployeeListItemDto>> GetPagedAsync(
-            string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword,
-            int? productionLineId, int? teamId, int? shiftTeamId, int? departmentId);
+        Task<List<string>> GetCongDoanOptionsAsync();
 
         // Scoped to departments the caller coordinates.
-        Task UpdateAsync(int id, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin);
+        Task UpdateAsync(int employeeId, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin);
     }
 }

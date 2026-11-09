@@ -5,6 +5,10 @@ export interface EmployeeExportFilter {
     departmentId?: number;
     groupId?: number;
     workshopId?: number;
+    productionLineId?: number;
+    teamId?: number;
+    shiftTeamId?: number;
+    congDoan?: string;
 }
 
 export interface EmployeeImportPreviewRowDto {
@@ -15,6 +19,11 @@ export interface EmployeeImportPreviewRowDto {
     departmentNameVn: string;
     groupCode: string;
     groupNameVn: string;
+    lineCode: string | null;
+    teamCode: string | null;
+    shiftTeamCode: string | null;
+    congDoan: string | null;
+    taskName: string | null;
     resolvedFirstName: string | null;
     resolvedLastName: string | null;
     isNewDepartment: boolean;
@@ -31,6 +40,13 @@ export interface EmployeeImportPreviewResultDto {
     invalidRows: number;
     newDepartmentCount: number;
     newGroupCount: number;
+    removedRows: EmployeeImportRemovedRowDto[];
+}
+
+export interface EmployeeImportRemovedRowDto {
+    employeeCode: string;
+    fullName: string;
+    lineCode: string | null;
 }
 
 export interface SkippedEmployeeImportRowDto {
@@ -44,6 +60,7 @@ export interface EmployeeImportConfirmResultDto {
     createdGroupCount: number;
     createdEmployeeCount: number;
     updatedEmployeeCount: number;
+    removedFromLineCount: number;
     skippedCount: number;
     skippedRows: SkippedEmployeeImportRowDto[];
 }
@@ -63,4 +80,19 @@ export interface EmployeeOtHourLimitImportResultDto {
     updatedCount: number;
     skippedCount: number;
     rows: EmployeeOtHourLimitImportRowResultDto[];
+}
+
+export interface ProductionEmployeeAccumulationSkippedRowDto {
+    employeeCode: string | null;
+    reason: string;
+}
+
+export interface ProductionEmployeeAccumulationResultDto {
+    adjustedCount: number;
+    unchangedCount: number;
+    skippedCount: number;
+    skippedRows: ProductionEmployeeAccumulationSkippedRowDto[];
+    totalDeltaHours: number;
+    adjustedYearCount?: number;
+    totalDeltaYearHours?: number;
 }

@@ -43,7 +43,6 @@ namespace Attendance.Infrastructure.Repositories
             IProductionLineRepository productionLines,
             IProductionShiftTeamRepository productionShiftTeams,
             IProductionTeamRepository productionTeams,
-            IProductionEmployeeRepository productionEmployees,
             IProductionApprovalStepRepository productionApprovalSteps,
             IOtFormEditLogRepository otFormEditLogs,
             IApprovalDelegationRepository approvalDelegations,
@@ -62,7 +61,6 @@ namespace Attendance.Infrastructure.Repositories
             ProductionLines = productionLines;
             ProductionShiftTeams = productionShiftTeams;
             ProductionTeams = productionTeams;
-            ProductionEmployees = productionEmployees;
             ProductionApprovalSteps = productionApprovalSteps;
             AttendanceSettings = attendanceSettings;
             WorkCalendarDays = workCalendarDays;
@@ -132,7 +130,6 @@ namespace Attendance.Infrastructure.Repositories
         public IProductionLineRepository ProductionLines { get; }
         public IProductionShiftTeamRepository ProductionShiftTeams { get; }
         public IProductionTeamRepository ProductionTeams { get; }
-        public IProductionEmployeeRepository ProductionEmployees { get; }
         public IProductionApprovalStepRepository ProductionApprovalSteps { get; }
         public IOtFormEditLogRepository OtFormEditLogs { get; }
         public IApprovalDelegationRepository ApprovalDelegations { get; }

@@ -8,7 +8,7 @@ namespace Attendance.Application.Interfaces.Service
     public interface IEmployeeService
     {
         // Non-Admins are limited to their own job-title scope: Employee.View is company-wide, so scoping must happen here.
-        Task<PagedResponse<EmployeeDto>> GetPagedAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, string? keyword, int? departmentId, int? groupId, int? workshopId);
+        Task<PagedResponse<EmployeeDto>> GetPagedAsync(string callerUserName, bool isAdmin, int pageIndex, int pageSize, EmployeeExportFilterDto filter);
 
         // Same employees as the grid for that filter (caller scope applied); hours are for year/month, default today.
         Task<List<EmployeeExportRowDto>> GetForExportAsync(string callerUserName, bool isAdmin, EmployeeExportFilterDto filter, int? year = null, int? month = null);

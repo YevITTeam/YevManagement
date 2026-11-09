@@ -150,8 +150,9 @@ namespace Attendance.Application.Services
 
             var borrowedIds = (await _unitOfWork.GroupBorrowedApprovers.SelectAsync(x => x.GroupId == groupId, x => x.EmployeeId)).ToHashSet();
 
-            var teamLeaders = await _unitOfWork.Employees.SelectAsync(
-                x => !x.IsDeleted && x.JobTitle!.Code == JobTitle.TeamLeaderCode && x.GroupId != null && x.GroupId != groupId
+            var lendable = await _unitOfWork.Employees.SelectAsync(
+                x => !x.IsDeleted && !x.JobTitle!.IsDeleted && x.JobTitle.TerminalLevel == (int)JobTitleTerminalLevel.None
+                    && x.GroupId != null && x.GroupId != groupId
                     && x.Group!.DepartmentId == group!.DepartmentId,
                 x => new GroupBorrowedApproverDto
                 {
@@ -159,14 +160,15 @@ namespace Attendance.Application.Services
                     EmployeeCode = x.Code,
                     LastName = x.LastName,
                     FirstName = x.FirstName,
+                    JobTitleId = x.JobTitleId!.Value,
                     GroupNameVn = x.Group!.GroupNameVn,
                     GroupNameJp = x.Group!.GroupNameJp
                 });
 
             return new GroupBorrowedApproversDto
             {
-                Approvers = teamLeaders.Where(x => borrowedIds.Contains(x.EmployeeId)).OrderBy(x => x.EmployeeCode).ToList(),
-                Candidates = teamLeaders.Where(x => !borrowedIds.Contains(x.EmployeeId)).OrderBy(x => x.EmployeeCode).ToList()
+                Approvers = lendable.Where(x => borrowedIds.Contains(x.EmployeeId)).OrderBy(x => x.EmployeeCode).ToList(),
+                Candidates = lendable.Where(x => !borrowedIds.Contains(x.EmployeeId)).OrderBy(x => x.EmployeeCode).ToList()
             };
         }
 
@@ -178,7 +180,7 @@ namespace Attendance.Application.Services
             var eligibleIds = current.Approvers.Concat(current.Candidates).Select(x => x.EmployeeId).ToHashSet();
             var requestedIds = request.EmployeeIds.Distinct().ToList();
             if (requestedIds.Any(id => !eligibleIds.Contains(id)))
-                throw new DomainException("Chỉ được chọn Team Leader thuộc Nhóm khác trong cùng Bộ phận.");
+                throw new DomainException("Chỉ được chọn người giữ chức vụ cấp trung gian thuộc Nhóm khác trong cùng Bộ phận.");
 
             var existing = await _unitOfWork.GroupBorrowedApprovers.FindAsync(x => x.GroupId == groupId);
             foreach (var item in existing.Where(x => !requestedIds.Contains(x.EmployeeId)))

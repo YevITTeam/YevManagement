@@ -1,6 +1,6 @@
 namespace Attendance.Application.Dtos.ProductionEmployees
 {
-    // Only rows with a resolved EmployeeId exist in ProductionEmployees, so every result is selectable.
+    // Only people on the production roster (employees with a Line) are returned.
     public class ProductionEmployeeSearchItemDto
     {
         public int EmployeeId { get; set; }

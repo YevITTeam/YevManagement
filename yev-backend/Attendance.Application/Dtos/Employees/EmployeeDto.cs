@@ -38,5 +38,15 @@ namespace Attendance.Application.Dtos.Employees
         // Null = global default. No per-employee daily limit; daily is always global.
         public decimal? CustomMonthlyOtHourLimit { get; set; }
         public decimal? CustomYearlyOtHourLimit { get; set; }
+
+        // Production fields, filled by the grid list only; ProductionLineId is null for people not on the roster.
+        public int? ProductionLineId { get; set; }
+        public string? LineCode { get; set; }
+        public int? TeamId { get; set; }
+        public string? TeamCode { get; set; }
+        public int? ShiftTeamId { get; set; }
+        public string? ShiftTeamCode { get; set; }
+        public string? CongDoan { get; set; }
+        public string? TaskName { get; set; }
     }
 }

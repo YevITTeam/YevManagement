@@ -9,7 +9,7 @@ export interface ProductionApprovalStepDto {
     requiresSignature: boolean;
     isResponsible: boolean;
     terminalLevel: number;
-    // true only for "Line Leader"; holders come from ProductionEmployee.IsLeader on import.
+    // true only for "Line Leader"; holders act only on their own line.
     isLineScoped: boolean;
 }
 

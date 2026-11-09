@@ -8,6 +8,7 @@ import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions"
 import WorkshopList from "./workshops/WorkshopList";
 import DepartmentList from "./departments/DepartmentList";
 import GroupList from "./groups/GroupList";
+import ProductionCatalogList from "./production-catalogs/ProductionCatalogList";
 import ReasonList from "./reasons/ReasonList";
 import OtCaseList from "./ot-cases/OtCaseList";
 import JobTitleList from "./job-titles/JobTitleList";
@@ -16,12 +17,17 @@ import EmployeeList from "./employees/EmployeeList";
 import ProductionOtReportPanel from "./reports/ProductionOtReportPanel";
 import AttendanceSettingPanel from "./settings/AttendanceSettingPanel";
 import type { ListHandle } from "./list-toolbar";
+import type { ProductionCatalogKind } from "@/modules/attendance/types/production-catalog.dto";
+import { Tabs } from "@/components/ui/Tabs";
 import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 
 type CategoryTab =
     | "workshops"
     | "departments"
     | "groups"
+    | "production-lines"
+    | "production-teams"
+    | "production-shift-teams"
     | "reasons"
     | "ot-cases"
     | "job-titles"
@@ -29,6 +35,14 @@ type CategoryTab =
     | "employees"
     | "reports"
     | "settings";
+
+type CategoryTabGroup = "organization" | "production";
+
+const PRODUCTION_KIND_BY_TAB: Partial<Record<CategoryTab, ProductionCatalogKind>> = {
+    "production-lines": "Line",
+    "production-teams": "Team",
+    "production-shift-teams": "ShiftTeam",
+};
 
 export default function CategoryManagement() {
     const t = useTranslations("Attendance.CategoryManagement");
@@ -38,10 +52,14 @@ export default function CategoryManagement() {
     const canViewReports = hasPermission(user, "Attendance.ProductionOtReport.View");
     const canCreateEmployee = hasPermission(user, "Attendance.Employee.Create");
     // "settings" is not a CRUD list, so it has no add button.
-    const allTabs: { key: CategoryTab; label: string; addLabel: string | null; visible: boolean }[] = [
-        { key: "workshops", label: t("tabWorkshops"), addLabel: t("addWorkshops"), visible: hasPermission(user, "Attendance.Workshop.Create") },
-        { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments"), visible: hasPermission(user, "Attendance.Department.Create") },
-        { key: "groups", label: t("tabGroups"), addLabel: t("addGroups"), visible: hasPermission(user, "Attendance.Group.Create") },
+    const canManageProductionCatalog = hasPermission(user, "Attendance.ProductionCatalog.Manage");
+    const allTabs: { key: CategoryTab; label: string; addLabel: string | null; visible: boolean; group?: CategoryTabGroup }[] = [
+        { key: "workshops", label: t("tabWorkshops"), addLabel: t("addWorkshops"), visible: hasPermission(user, "Attendance.Workshop.Create"), group: "organization" },
+        { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments"), visible: hasPermission(user, "Attendance.Department.Create"), group: "organization" },
+        { key: "groups", label: t("tabGroups"), addLabel: t("addGroups"), visible: hasPermission(user, "Attendance.Group.Create"), group: "organization" },
+        { key: "production-lines", label: t("tabProductionLines"), addLabel: t("addProductionLines"), visible: canManageProductionCatalog, group: "production" },
+        { key: "production-teams", label: t("tabProductionTeams"), addLabel: t("addProductionTeams"), visible: canManageProductionCatalog, group: "production" },
+        { key: "production-shift-teams", label: t("tabProductionShiftTeams"), addLabel: t("addProductionShiftTeams"), visible: canManageProductionCatalog, group: "production" },
         { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons"), visible: hasPermission(user, "Attendance.Reason.Create") },
         { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases"), visible: hasPermission(user, "Attendance.OtCase.Create") },
         { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles"), visible: hasPermission(user, "Attendance.JobTitle.Create") },
@@ -72,6 +90,9 @@ export default function CategoryManagement() {
         { key: "settings", label: t("tabSettings"), addLabel: null, visible: hasPermission(user, "Attendance.Setting.Update") },
     ];
     const tabs = allTabs.filter((tab) => tab.visible);
+    const groupLabels: Record<CategoryTabGroup, string> = { organization: t("tabOrganization"), production: t("tabProduction") };
+    // A group takes one slot in the top row, at its first visible member.
+    const topTabs = tabs.filter((tab, index) => !tab.group || tabs.findIndex((x) => x.group === tab.group) === index);
     const defaultTabKey: CategoryTab = tabs[0]?.key ?? "departments";
     const [activeTab, setActiveTab] = usePersistedTab<CategoryTab>("ot-category-tab", tabs.map((tab) => tab.key), defaultTabKey);
     // Mount a tab on first visit and keep it mounted: avoids firing every tab's API on entry while keeping
@@ -83,6 +104,9 @@ export default function CategoryManagement() {
         workshops: false,
         departments: false,
         groups: false,
+        "production-lines": false,
+        "production-teams": false,
+        "production-shift-teams": false,
         reasons: false,
         "ot-cases": false,
         "job-titles": false,
@@ -92,10 +116,18 @@ export default function CategoryManagement() {
         settings: false,
     });
     const loading = loadingByTab[activeTab];
+    const activeGroup = tabs.find((tab) => tab.key === activeTab)?.group;
+    const groupTabs = activeGroup ? tabs.filter((tab) => tab.group === activeGroup) : [];
+    const productionKind = PRODUCTION_KIND_BY_TAB[activeTab];
+    const selectTab = (key: CategoryTab) => {
+        setActiveTab(key);
+        setVisitedTabs((current) => (current.has(key) ? current : new Set(current).add(key)));
+    };
 
     const workshopRef = useRef<ListHandle>(null);
     const departmentRef = useRef<ListHandle>(null);
     const groupRef = useRef<ListHandle>(null);
+    const productionCatalogRef = useRef<ListHandle>(null);
     const reasonRef = useRef<ListHandle>(null);
     const otCaseRef = useRef<ListHandle>(null);
     const jobTitleRef = useRef<ListHandle>(null);
@@ -108,6 +140,9 @@ export default function CategoryManagement() {
         workshops: workshopRef,
         departments: departmentRef,
         groups: groupRef,
+        "production-lines": productionCatalogRef,
+        "production-teams": productionCatalogRef,
+        "production-shift-teams": productionCatalogRef,
         reasons: reasonRef,
         "ot-cases": otCaseRef,
         "job-titles": jobTitleRef,
@@ -133,6 +168,16 @@ export default function CategoryManagement() {
     );
     const handleGroupLoadingChange = useCallback(
         (value: boolean) => setLoadingByTab((current) => ({ ...current, groups: value })),
+        []
+    );
+    const handleProductionCatalogLoadingChange = useCallback(
+        (value: boolean) =>
+            setLoadingByTab((current) => ({
+                ...current,
+                "production-lines": value,
+                "production-teams": value,
+                "production-shift-teams": value,
+            })),
         []
     );
     const handleReasonLoadingChange = useCallback(
@@ -191,26 +236,25 @@ export default function CategoryManagement() {
             </div>
 
             <div className="flex flex-wrap gap-1 border-b border-[#e0e3e5]">
-                {tabs.map((tab) => {
-                    const isActive = activeTab === tab.key;
+                {topTabs.map((tab) => {
+                    const isActive = tab.group ? activeGroup === tab.group : activeTab === tab.key;
                     return (
                         <button
                             key={tab.key}
-                            onClick={() => {
-                                setActiveTab(tab.key);
-                                setVisitedTabs((current) => (current.has(tab.key) ? current : new Set(current).add(tab.key)));
-                            }}
+                            onClick={() => selectTab(tab.key)}
                             className={`cursor-pointer border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
                                 isActive
                                     ? "border-[#e3000f] text-[#191c1e]"
                                     : "border-transparent text-[#5e3f3a] hover:text-[#191c1e]"
                             }`}
                         >
-                            {tab.label}
+                            {tab.group ? groupLabels[tab.group] : tab.label}
                         </button>
                     );
                 })}
             </div>
+
+            {groupTabs.length > 1 && <Tabs tabs={groupTabs} activeKey={activeTab} onChange={selectTab} />}
 
             {/* Lazy mount, then keep mounted (hidden) so switching back is instant without refetching. */}
             {isMounted("workshops") && (
@@ -227,6 +271,10 @@ export default function CategoryManagement() {
                 <div className={activeTab === "groups" ? "" : "hidden"}>
                     <GroupList ref={groupRef} onLoadingChange={handleGroupLoadingChange} />
                 </div>
+            )}
+            {/* Not kept mounted: the Line form must see Teams added a moment ago in the Team sub-tab. */}
+            {productionKind && (
+                <ProductionCatalogList key={productionKind} ref={productionCatalogRef} kind={productionKind} onLoadingChange={handleProductionCatalogLoadingChange} />
             )}
             {isMounted("reasons") && (
                 <div className={activeTab === "reasons" ? "" : "hidden"}>

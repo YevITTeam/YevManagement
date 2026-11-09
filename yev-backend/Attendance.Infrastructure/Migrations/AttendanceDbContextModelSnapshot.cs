@@ -321,6 +321,10 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("CongDoan")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<decimal?>("CustomMonthlyOtHourLimit")
                         .HasColumnType("decimal(10, 2)");
 
@@ -349,11 +353,30 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<int?>("ProductionLineId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ShiftTeamId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TaskName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<int?>("TeamId")
+                        .HasColumnType("int");
+
                     b.Property<string>("UserName")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ProductionLineId");
+
+                    b.HasIndex("ShiftTeamId");
+
+                    b.HasIndex("TeamId");
 
                     b.HasIndex(new[] { "Code" }, "IX_Employees_Code")
                         .IsUnique();
@@ -1476,81 +1499,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("ProductionApprovalSteps");
                 });
 
-            modelBuilder.Entity("Attendance.Domain.Entities.ProductionEmployee", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("BlockCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("CongDoan")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("EmployeeCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int?>("EmployeeId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("FirstNameSnapshot")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsLeader")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("LastNameSnapshot")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
-
-                    b.Property<int?>("ProductionLineId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ShiftTeamCode")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<int?>("ShiftTeamId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("TaskName")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("TeamCode")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<int?>("TeamId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmployeeCode")
-                        .IsUnique();
-
-                    b.HasIndex("EmployeeId");
-
-                    b.HasIndex("ProductionLineId");
-
-                    b.HasIndex("ShiftTeamId");
-
-                    b.HasIndex("TeamId");
-
-                    b.ToTable("ProductionEmployees");
-                });
-
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionLine", b =>
                 {
                     b.Property<int>("Id")
@@ -1862,11 +1810,35 @@ namespace Attendance.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_Employees_JobTitles_JobTitleId");
 
+                    b.HasOne("Attendance.Domain.Entities.ProductionLine", "ProductionLine")
+                        .WithMany("Employees")
+                        .HasForeignKey("ProductionLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Employees_ProductionLines_ProductionLineId");
+
+                    b.HasOne("Attendance.Domain.Entities.ProductionShiftTeam", "ShiftTeam")
+                        .WithMany("Employees")
+                        .HasForeignKey("ShiftTeamId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Employees_ProductionShiftTeams_ShiftTeamId");
+
+                    b.HasOne("Attendance.Domain.Entities.ProductionTeam", "Team")
+                        .WithMany("Employees")
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_Employees_ProductionTeams_TeamId");
+
                     b.Navigation("Department");
 
                     b.Navigation("Group");
 
                     b.Navigation("JobTitle");
+
+                    b.Navigation("ProductionLine");
+
+                    b.Navigation("ShiftTeam");
+
+                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.EmployeeAccumulationHistory", b =>
@@ -2270,41 +2242,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("JobTitle");
                 });
 
-            modelBuilder.Entity("Attendance.Domain.Entities.ProductionEmployee", b =>
-                {
-                    b.HasOne("Attendance.Domain.Entities.Employee", "Employee")
-                        .WithMany("ProductionEmployees")
-                        .HasForeignKey("EmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("FK_ProductionEmployees_Employees_EmployeeId");
-
-                    b.HasOne("Attendance.Domain.Entities.ProductionLine", "ProductionLine")
-                        .WithMany("ProductionEmployees")
-                        .HasForeignKey("ProductionLineId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("FK_ProductionEmployees_ProductionLines_ProductionLineId");
-
-                    b.HasOne("Attendance.Domain.Entities.ProductionShiftTeam", "ShiftTeam")
-                        .WithMany("ProductionEmployees")
-                        .HasForeignKey("ShiftTeamId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("FK_ProductionEmployees_ProductionShiftTeams_ShiftTeamId");
-
-                    b.HasOne("Attendance.Domain.Entities.ProductionTeam", "Team")
-                        .WithMany("ProductionEmployees")
-                        .HasForeignKey("TeamId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("FK_ProductionEmployees_ProductionTeams_TeamId");
-
-                    b.Navigation("Employee");
-
-                    b.Navigation("ProductionLine");
-
-                    b.Navigation("ShiftTeam");
-
-                    b.Navigation("Team");
-                });
-
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionLine", b =>
                 {
                     b.HasOne("Attendance.Domain.Entities.ProductionTeam", "Team")
@@ -2337,8 +2274,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("EmployeeAccumulationHistories");
 
                     b.Navigation("OtFormEmployees");
-
-                    b.Navigation("ProductionEmployees");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Group", b =>
@@ -2403,17 +2338,17 @@ namespace Attendance.Infrastructure.Migrations
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionLine", b =>
                 {
-                    b.Navigation("ProductionEmployees");
+                    b.Navigation("Employees");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionShiftTeam", b =>
                 {
-                    b.Navigation("ProductionEmployees");
+                    b.Navigation("Employees");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionTeam", b =>
                 {
-                    b.Navigation("ProductionEmployees");
+                    b.Navigation("Employees");
 
                     b.Navigation("ProductionLines");
                 });
