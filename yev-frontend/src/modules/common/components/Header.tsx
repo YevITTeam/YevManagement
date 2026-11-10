@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Link, useRouter, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { ChevronDown, ChevronUp, LogOut, Menu, RefreshCw, Settings } from "lucide-react";
+import { ChevronDown, ChevronUp, KeyRound, LogOut, Menu, RefreshCw, Settings } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, IDENTITY_ADMIN_PERMISSIONS } from "@/modules/auth/lib/permissions";
@@ -141,6 +141,18 @@ export default function Header() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#191c1e] text-xs font-semibold text-white">
                   {user.fullName?.charAt(0)?.toUpperCase() ?? "U"}
                 </div>
+
+                {user.isLocalAccount && (
+                  <Link
+                    href="/doi-mat-khau"
+                    prefetch={false}
+                    title={t("changePassword")}
+                    aria-label={t("changePassword")}
+                    className="flex items-center rounded-lg border border-transparent p-2 text-[#5e3f3a] transition hover:border-[#e0e3e5] hover:text-[#e3000f]"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                  </Link>
+                )}
 
                 <button
                   type="button"

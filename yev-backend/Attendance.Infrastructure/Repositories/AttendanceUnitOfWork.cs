@@ -44,6 +44,7 @@ namespace Attendance.Infrastructure.Repositories
             IProductionTeamRepository productionTeams,
             IProductionApprovalStepRepository productionApprovalSteps,
             IOtFormEditLogRepository otFormEditLogs,
+            IOtFormPaperScanRepository otFormPaperScans,
             IApprovalDelegationRepository approvalDelegations,
             IAttendanceAuditTrailRepository attendanceAuditTrails,
             IAttendanceMailLogRepository attendanceMailLogs,
@@ -56,6 +57,7 @@ namespace Attendance.Infrastructure.Repositories
             GeneralAffairsDispatches = generalAffairsDispatches;
             GeneralAffairsRecipients = generalAffairsRecipients;
             OtFormEditLogs = otFormEditLogs;
+            OtFormPaperScans = otFormPaperScans;
             EmployeeAccumulationHistories = employeeAccumulationHistories;
             ProductionLines = productionLines;
             ProductionShiftTeams = productionShiftTeams;
@@ -129,6 +131,7 @@ namespace Attendance.Infrastructure.Repositories
         public IProductionTeamRepository ProductionTeams { get; }
         public IProductionApprovalStepRepository ProductionApprovalSteps { get; }
         public IOtFormEditLogRepository OtFormEditLogs { get; }
+        public IOtFormPaperScanRepository OtFormPaperScans { get; }
         public IApprovalDelegationRepository ApprovalDelegations { get; }
         public IAttendanceAuditTrailRepository AttendanceAuditTrails { get; }
         public IAttendanceMailLogRepository AttendanceMailLogs { get; }

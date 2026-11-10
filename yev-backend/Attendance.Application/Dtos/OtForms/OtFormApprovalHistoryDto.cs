@@ -19,6 +19,7 @@ namespace Attendance.Application.Dtos.OtForms
         public string? Comment { get; set; }
         public bool HasSignature { get; set; }
         public byte[]? SignatureImage { get; set; }
+        public bool IsPaperApproval { get; set; }
         public DateTime ActionAt { get; set; }
     }
 }

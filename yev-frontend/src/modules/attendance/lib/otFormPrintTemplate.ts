@@ -6,6 +6,8 @@ import type { OtFormApprovalHistoryDto, OtFormDto, OtFormEmployeeDto } from "@/m
 
 export type PaperSize = "a4" | "a5";
 
+const isOvernight = (startTime: string, endTime: string) => endTime.slice(0, 5) < startTime.slice(0, 5);
+
 export interface PrintLimits {
     monthlyOtHourLimit: number;
     yearlyOtHourLimit: number;
@@ -128,7 +130,7 @@ export function getSignatureDataUrl(signatureImage: string | null | undefined): 
 }
 
 export type SignatureDisplay = Pick<OtFormApprovalHistoryDto, "approverFullName" | "approverUserName" | "hasSignature" | "signatureImage" | "actionAt"> &
-    Partial<Pick<OtFormApprovalHistoryDto, "onBehalfOfFullName" | "onBehalfOfUserName">>;
+    Partial<Pick<OtFormApprovalHistoryDto, "onBehalfOfFullName" | "onBehalfOfUserName" | "isPaperApproval">>;
 
 export function buildEmployeePages(employees: OtFormEmployeeDto[], paperSize: PaperSize): OtFormEmployeeDto[][] {
     const { first, rest } = EMPLOYEE_PAGE_CAPACITY[paperSize];
@@ -242,6 +244,15 @@ function signatureHtml(history: SignatureDisplay | null, widthPt: number, rowPt:
     const signedAt = formatDateTime(history.actionAt) ?? "";
     const dataUrl = history.hasSignature ? getSignatureDataUrl(history.signatureImage) : null;
     const avail = widthPt - 6;
+    // The real signature is on the scanned paper; the name here is only the Admin who confirmed it.
+    if (history.isPaperApproval) {
+        const confirmedBy = `Xác nhận bởi ${name}`;
+        return [
+            `<div style="text-align:center;white-space:nowrap;font-weight:bold;font-size:${fitPt("Đã ký giấy", avail, 7, 5)}pt">Đã ký giấy</div>`,
+            `<div style="text-align:center;white-space:nowrap;font-size:${fitPt(confirmedBy, avail, 5.5, 4)}pt">${esc(confirmedBy)}</div>`,
+            signedAt ? `<div style="text-align:center;white-space:nowrap;font-size:5.5pt">${esc(signedAt)}</div>` : "",
+        ].join("");
+    }
     const textLines = 1 + (onBehalfText ? 1 : 0) + (signedAt ? 1 : 0);
     const imgMaxH = Math.max(12, rowPt - 6 - textLines * 8);
     const parts = [
@@ -266,7 +277,7 @@ function headerBlock(form: OtFormDto, paperSize: PaperSize) {
 
     // Only mandatory-signature intermediate steps go in the requester box (capped at 1-2 by GroupApprovalStepService).
     const intermediate = form.approvalSteps.filter((s) => s.terminalLevelSnapshot === 0 && s.requiresSignatureSnapshot);
-    // No intermediate step left (creator ranks at or above them): the creator self-signs with the CreatorSignatureImage snapshot.
+    // The creator's own signing step is dropped from the chain, so CreatorSignatureImage takes its place.
     const selfSign: SignatureDisplay | null = form.creatorSignatureImage
         ? {
               approverFullName: form.createdByFullName,
@@ -276,12 +287,12 @@ function headerBlock(form: OtFormDto, paperSize: PaperSize) {
               actionAt: form.createdAt,
           }
         : null;
-    const firstRequester = intermediate[0]
-        ? findHistory(form.approvalHistories, intermediate[0].stepOrder)
-        : intermediate.length === 0
+    // Production chains keep the creator's own step, so that step's history already carries their signature.
+    const creatorPlusOne = Boolean(selfSign) && intermediate.length === 1 && !form.isProductionForm;
+    const firstRequester = creatorPlusOne || intermediate.length === 0
         ? selfSign
-        : null;
-    const isSingleRequester = intermediate.length <= 1;
+        : findHistory(form.approvalHistories, intermediate[0].stepOrder);
+    const isSingleRequester = intermediate.length <= 1 && !creatorPlusOne;
     const lastRequester = isSingleRequester ? null : findHistory(form.approvalHistories, intermediate[intermediate.length - 1].stepOrder);
 
     const sigWidths = scaleWidths([21.45, 22.75, 23.49, 9.91, 9.91], W);
@@ -333,7 +344,7 @@ function headerBlock(form: OtFormDto, paperSize: PaperSize) {
     const attachNote = `<div style="text-align:right;font-size:${S.small}pt">(Kèm theo danh sách ở trang sau)</div>${
         L.attachNoteJp ? `<div style="text-align:right;font-size:${S.small}pt">${jp(L.attachNoteJp)}</div>` : ""
     }`;
-    const timeLine1 = `<div style="font-size:${S.label}pt">Từ ${jp("から")} <span style="font-weight:bold">${esc(formatTime(form.startTime))}</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Đến ${jp("まで")} <span style="font-weight:bold">${esc(`${formatTime(form.endTime)} (${form.totalHour}h)`)}</span></div>`;
+    const timeLine1 = `<div style="font-size:${S.label}pt">Từ ${jp("から")} <span style="font-weight:bold">${esc(formatTime(form.startTime))}</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Đến ${jp("まで")} <span style="font-weight:bold">${esc(`${formatTime(form.endTime)}${isOvernight(form.startTime, form.endTime) ? " +1" : ""} (${form.totalHour}h)`)}</span></div>`;
     const timeLine2 = `<div style="font-size:${S.label}pt">Ngày ${jp("日付")} <span style="font-weight:bold">${esc(formatDate(form.date))}</span></div>`;
     const infoTable = table(
         infoWidths,
@@ -476,7 +487,7 @@ function employeeTable(
                 { html: `<span style="font-size:${S.list}pt">${startIndex + i + 1}</span>`, align: "center" },
                 { html: e ? fit(e.fullName, 1) : "", nowrap: true },
                 { html: e ? fit(e.employeeCode, 2) : "", nowrap: true },
-                { html: e ? fit(`${formatTime(e.startTime)} — ${formatTime(e.endTime)}`, 3) : "", nowrap: true },
+                { html: e ? fit(`${formatTime(e.startTime)} — ${formatTime(e.endTime)}${isOvernight(e.startTime, e.endTime) ? " +1" : ""}`, 3) : "", nowrap: true },
                 { html: e ? accumulation(e.monthToDate, limits.monthlyOtHourLimit) : "", align: "center" },
                 { html: e ? accumulation(e.yearToDate, limits.yearlyOtHourLimit) : "", align: "center" },
                 { html: e?.noteVn ? fit(e.noteVn, 6) : "", nowrap: true },

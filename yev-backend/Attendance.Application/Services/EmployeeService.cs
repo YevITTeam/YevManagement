@@ -308,9 +308,11 @@ namespace Attendance.Application.Services
 
                 // Same projection rule as OtFormService.ComputeAccumulatedHoursBatchAsync: Day from every valid form,
                 // Month/Year from the ledger plus forms still InApproval (Completed forms are already in the ledger).
+                var spillFrom = new DateOnly(target.Year, 1, 1).AddDays(-1);
+                var yearEnd = new DateOnly(target.Year, 12, 31);
                 var rows = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
                     x => employeeIds.Contains(x.EmployeeId) && !x.IsRemoved && x.OtForm.Status != (int)OtFormStatus.Rejected
-                         && !x.OtForm.IsDeleted && x.OtForm.Date.Year == target.Year,
+                         && !x.OtForm.IsDeleted && x.OtForm.Date >= spillFrom && x.OtForm.Date <= yearEnd,
                     x => x.OtForm);
                 var ledgerRows = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
                     x => employeeIds.Contains(x.EmployeeId) && x.Year == target.Year);
@@ -319,16 +321,12 @@ namespace Attendance.Application.Services
                 var ledgerByEmployee = ledgerRows.ToLookup(x => x.EmployeeId);
                 foreach (var item in items)
                 {
-                    var employeeRows = rowsByEmployee[item.Id].ToList();
-                    var pendingRows = employeeRows.Where(x => x.OtForm.Status != (int)OtFormStatus.Completed).ToList();
+                    var (day, pendingMonth, pendingYear) = MealTicketCalculator.SumFormRows(target, rowsByEmployee[item.Id], mealSettings);
                     var ledger = ledgerByEmployee[item.Id].ToList();
 
-                    item.ProjectedDayToDate = employeeRows.Where(x => x.OtForm.Date == target)
-                        .Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings));
-                    item.ProjectedMonthToDate = ledger.Where(x => x.Month == target.Month).Sum(x => x.TotalHours)
-                        + pendingRows.Where(x => x.OtForm.Date.Month == target.Month).Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings));
-                    item.ProjectedYearToDate = ledger.Sum(x => x.TotalHours)
-                        + pendingRows.Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings));
+                    item.ProjectedDayToDate = day;
+                    item.ProjectedMonthToDate = ledger.Where(x => x.Month == target.Month).Sum(x => x.TotalHours) + pendingMonth;
+                    item.ProjectedYearToDate = ledger.Sum(x => x.TotalHours) + pendingYear;
                 }
             }
 

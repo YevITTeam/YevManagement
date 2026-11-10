@@ -30,6 +30,9 @@ public partial class OtFormApprovalHistory
     // Snapshot so a later signature change does not alter past approvals.
     public byte[]? SignatureImage { get; set; }
 
+    // Closed by Admin from a scanned paper copy: the approver above is the reviewer, not the signer.
+    public bool IsPaperApproval { get; set; }
+
     public DateTime ActionAt { get; set; }
 
     public virtual OtForm OtForm { get; set; } = null!;

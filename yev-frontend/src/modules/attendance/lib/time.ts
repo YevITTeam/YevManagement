@@ -1,9 +1,6 @@
-// BE guarantees endTime > startTime (no overnight), so Math.max only guards odd legacy data.
-export function calculateHours(startTime: string, endTime: string): number {
-    const [startH, startM] = startTime.split(":").map(Number);
-    const [endH, endM] = endTime.split(":").map(Number);
-    const minutes = endH * 60 + endM - (startH * 60 + startM);
-    return Math.max(0, minutes / 60);
+// An end before the start means the next day. Works on "HH:mm" and "HH:mm:ss".
+export function isOvernight(startTime: string, endTime: string): boolean {
+    return Boolean(startTime && endTime) && endTime.slice(0, 5) < startTime.slice(0, 5);
 }
 
 // Rounds to 2 decimals and drops trailing zeros (2 -> "2h", 2.5 -> "2.5h").

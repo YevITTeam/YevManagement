@@ -4,6 +4,8 @@ import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 
+const CHANGE_PASSWORD_PATH = "/doi-mat-khau";
+
 const isLoginPath = (pathname: string) => pathname === "/login" || pathname.startsWith("/login/");
 
 // Email-link routes authenticate via the URL token (BE [AllowAnonymous]); forcing SPA login here would defeat email approval.
@@ -26,6 +28,9 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
     const { user, isLoading } = useAuth();
     const onLoginPage = isLoginPath(pathname);
     const onPublicConfirmPage = isPublicConfirmPath(pathname);
+    // ponytail: UI-only gate, a hand-made API call can skip it; enforce in BE if the admin-set password becomes a real risk.
+    const mustChangePassword =
+        !!user?.mustChangePassword && pathname !== CHANGE_PASSWORD_PATH && !pathname.startsWith(`${CHANGE_PASSWORD_PATH}/`);
 
     useEffect(() => {
         if (onPublicConfirmPage) return;
@@ -35,15 +40,17 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
             router.replace(`/login?redirect=${encodeURIComponent(redirectTarget)}`);
         } else if (user && onLoginPage) {
             router.replace("/");
+        } else if (mustChangePassword) {
+            router.replace(CHANGE_PASSWORD_PATH);
         }
-    }, [isLoading, user, onLoginPage, onPublicConfirmPage, pathname, router]);
+    }, [isLoading, user, onLoginPage, onPublicConfirmPage, mustChangePassword, pathname, router]);
 
     // Don't wait for auth: these pages must work in any session state.
     if (onPublicConfirmPage) {
         return <>{children}</>;
     }
 
-    if (isLoading || (!user && !onLoginPage) || (user && onLoginPage)) {
+    if (isLoading || (!user && !onLoginPage) || (user && onLoginPage) || mustChangePassword) {
         return (
             <div className="flex min-h-full items-center justify-center bg-[#f8fafc] text-sm text-[#5e3f3a]">
                 Đang tải...

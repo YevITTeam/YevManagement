@@ -1,4 +1,5 @@
 ﻿using Identity.Application.Authentication;
+using Identity.Application.Dtos.LocalAccountDto;
 using Identity.Application.Dtos.LoginQrDto;
 using Identity.Application.Dtos.UserDto;
 using Identity.Application.Interfaces.Service;
@@ -19,6 +20,7 @@ namespace Identity.Api.Controllers
         private readonly ITokenService _tokenService;
         private readonly IUserService _service;
         private readonly ILoginQrService _loginQrService;
+        private readonly ILocalAccountService _localAccountService;
         private readonly IRoleService _roleService;
         private readonly IClaimsTransformation _claimsTransformation;
         private readonly IActiveDirectoryAuthService _adAuthService;
@@ -29,6 +31,7 @@ namespace Identity.Api.Controllers
             ITokenService tokenService,
             IUserService service,
             ILoginQrService loginQrService,
+            ILocalAccountService localAccountService,
             IRoleService roleService,
             IClaimsTransformation claimsTransformation,
             IActiveDirectoryAuthService adAuthService,
@@ -38,6 +41,7 @@ namespace Identity.Api.Controllers
             _tokenService = tokenService;
             _service = service;
             _loginQrService = loginQrService;
+            _localAccountService = localAccountService;
             _roleService = roleService;
             _claimsTransformation = claimsTransformation;
             _adAuthService = adAuthService;
@@ -80,6 +84,19 @@ namespace Identity.Api.Controllers
                 var testTransformedPrincipal = await _claimsTransformation.TransformAsync(testSeedPrincipal);
 
                 return Success(BuildSession(testTransformedPrincipal), "Đăng nhập thành công (tài khoản TEST)!");
+            }
+
+            // Domain users type the bare name (the domain is appended below), so a backslash means a local account.
+            if (request.UserName != null && request.UserName.Contains('\\'))
+            {
+                var localUserName = await _localAccountService.ValidateLoginAsync(request.UserName.Trim(), request.Password);
+                if (localUserName == null)
+                    return Fail<LoginResponseDto>("Tên đăng nhập hoặc mật khẩu không đúng.");
+
+                var localPrincipal = await _claimsTransformation.TransformAsync(new ClaimsPrincipal(new ClaimsIdentity(
+                    new[] { new Claim(ClaimTypes.Name, localUserName) })));
+
+                return Success(BuildSession(localPrincipal), "Đăng nhập thành công!");
             }
 
             var domain = _configuration["ActiveDirectory:Domain"] ?? "YEV";
@@ -135,6 +152,14 @@ namespace Identity.Api.Controllers
             return Success(BuildSession(User), "Lấy thông tin phiên đăng nhập thành công!");
         }
 
+        [Authorize]
+        [HttpPost("change-password")]
+        public async Task<ActionResult<ApiResponse<bool>>> ChangePassword([FromBody] ChangeOwnPasswordDto request)
+        {
+            await _localAccountService.ChangeOwnPasswordAsync(User.Identity!.Name!, request.CurrentPassword, request.NewPassword);
+            return Success(true, "Đã đổi mật khẩu!");
+        }
+
         // Reads roles/permissions from the fresh "DbRoles" identity, not the possibly stale JWT copies.
         // Takes an explicit principal so Login() can pass one built after AD validation, outside the auth middleware.
         private LoginResponseDto BuildSession(ClaimsPrincipal principal)
@@ -165,7 +190,9 @@ namespace Identity.Api.Controllers
                 Roles = roles,
                 Permissions = permissions,
                 DeviceName = deviceName,
-                Email = email
+                Email = email,
+                IsLocalAccount = profileClaims.Any(c => c.Type == IdentityClaimTypes.IsLocalAccount),
+                MustChangePassword = profileClaims.Any(c => c.Type == IdentityClaimTypes.MustChangePassword)
             };
 
             return new LoginResponseDto

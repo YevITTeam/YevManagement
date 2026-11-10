@@ -27,5 +27,9 @@ namespace Identity.Application.Interfaces.Service
         IUserEmailRepository UserEmails { get; }
 
         IUserEmailModuleRepository UserEmailModules { get; }
+
+        ILocalAccountPrefixRepository LocalAccountPrefixes { get; }
+
+        ILocalLoginAccountRepository LocalLoginAccounts { get; }
     }
 }

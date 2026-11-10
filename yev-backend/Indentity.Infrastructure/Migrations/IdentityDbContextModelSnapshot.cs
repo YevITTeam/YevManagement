@@ -22,6 +22,82 @@ namespace Identity.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Identity.Domain.Entities.LocalAccountPrefix", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Prefix")
+                        .IsUnique();
+
+                    b.ToTable("LocalAccountPrefixes");
+                });
+
+            modelBuilder.Entity("Identity.Domain.Entities.LocalLoginAccount", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("FailedLoginCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("PasswordChangedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("PrefixId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PrefixId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("LocalLoginAccounts");
+                });
+
             modelBuilder.Entity("Identity.Domain.Entities.LoginQrCode", b =>
                 {
                     b.Property<int>("Id")
@@ -381,6 +457,25 @@ namespace Identity.Infrastructure.Migrations
                     b.ToTable("UserRoles", (string)null);
                 });
 
+            modelBuilder.Entity("Identity.Domain.Entities.LocalLoginAccount", b =>
+                {
+                    b.HasOne("Identity.Domain.Entities.LocalAccountPrefix", "AccountPrefix")
+                        .WithMany("Accounts")
+                        .HasForeignKey("PrefixId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Identity.Domain.Entities.User", "User")
+                        .WithOne("LocalLoginAccount")
+                        .HasForeignKey("Identity.Domain.Entities.LocalLoginAccount", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AccountPrefix");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Identity.Domain.Entities.LoginQrCode", b =>
                 {
                     b.HasOne("Identity.Domain.Entities.User", "User")
@@ -474,8 +569,15 @@ namespace Identity.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Identity.Domain.Entities.LocalAccountPrefix", b =>
+                {
+                    b.Navigation("Accounts");
+                });
+
             modelBuilder.Entity("Identity.Domain.Entities.User", b =>
                 {
+                    b.Navigation("LocalLoginAccount");
+
                     b.Navigation("LoginUserIPs");
 
                     b.Navigation("UserEmails");

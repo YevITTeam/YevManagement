@@ -28,6 +28,9 @@ public partial class OtFormEmployee
     // Hours actually added to the ledger at sign-off, so reversing subtracts the same figure even after settings change.
     public decimal? LedgerHours { get; set; }
 
+    // The part of an overnight row that lands in the following month; reversal needs it because it went to another ledger row.
+    public decimal? LedgerHoursNextMonth { get; set; }
+
     // Soft removal by an approver: the form is a legal document, so who was dropped and why must stay traceable.
     // Accumulation, NumberOfEmployee and the PDF all filter on IsRemoved.
     public bool IsRemoved { get; set; }

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { TimeRange } from "@/modules/attendance/components/ot-form/TimeRange";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Car, Check, ChevronDown, Clock, History, MessageCircle, Printer, Trash2, User, UserX, Utensils, X } from "lucide-react";
+import { Car, Check, ChevronDown, Clock, FileText, History, MessageCircle, Printer, Trash2, Upload, User, UserX, Utensils, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalStepDto, OtFormDto, OtFormEditLogDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
@@ -16,6 +16,8 @@ import OtCaseBadge from "@/modules/attendance/components/OtCaseBadge";
 import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { formatHours } from "@/modules/attendance/lib/time";
+import { openPaperScan, PAPER_SCAN_BADGE, MAX_PAPER_SCAN_BYTES } from "@/modules/attendance/lib/paperScan";
+import { Badge } from "@/components/ui/Badge";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -131,6 +133,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
     // BE blocks deleting Completed forms (accumulation already counted); hide the button instead of letting it 400.
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isPrintOpen, setIsPrintOpen] = useState(false);
+    const [isUploadingScan, setIsUploadingScan] = useState(false);
     const [deleteReason, setDeleteReason] = useState("");
     const [isDeletingForm, setIsDeletingForm] = useState(false);
 
@@ -176,6 +179,28 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
         !canEdit &&
         form?.resubmitKind != null &&
         (form.resubmitUserNames.some((n) => n.toLowerCase() === myUserName) || (form.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
+
+    const isFormCreator = form?.createdByUserName.toLowerCase() === myUserName;
+    const canUploadScan = !readOnly && isFormCreator && Boolean(form?.canUploadPaperScan);
+    const canViewScan = isFormCreator || Boolean(user?.roles.includes("Admin"));
+
+    const handleScanSelected = async (file: File) => {
+        if (file.size > MAX_PAPER_SCAN_BYTES) {
+            toast.error(t("paperScanTooLarge"));
+            return;
+        }
+        setIsUploadingScan(true);
+        try {
+            await OtFormApi.uploadPaperScan(id, file);
+            toast.success(t("paperScanUploaded"));
+            await fetchForm();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("paperScanUploadError")));
+        } finally {
+            setIsUploadingScan(false);
+        }
+    };
 
     // Admin only; blocked once Completed (status=1, accumulation already counted).
     const canDelete = !readOnly && hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;
@@ -498,6 +523,57 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                         </div>
                     </section>
 
+                    {(form.paperScan || canUploadScan) && (
+                        <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
+                            <div className="mb-3 flex items-center justify-between gap-2">
+                                <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{t("paperScanTitle")}</h2>
+                                {form.paperScan && (
+                                    <Badge variant={PAPER_SCAN_BADGE[form.paperScan.status]}>
+                                        {[t("paperScanPending"), t("paperScanApproved"), t("paperScanRejected")][form.paperScan.status]}
+                                    </Badge>
+                                )}
+                            </div>
+                            {form.paperScan && (
+                                <div className="space-y-1 text-xs text-[#5e3f3a]">
+                                    {canViewScan ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => openPaperScan(id, t("paperScanOpenError"))}
+                                            className="inline-flex cursor-pointer items-center gap-1.5 break-all text-left font-semibold text-[#191c1e] hover:text-[#e3000f]"
+                                        >
+                                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                                            {form.paperScan.fileName}
+                                        </button>
+                                    ) : (
+                                        <div className="break-all font-semibold text-[#191c1e]">{form.paperScan.fileName}</div>
+                                    )}
+                                    {form.paperScan.reviewComment && (
+                                        <div className="italic text-[#191c1e]">
+                                            {form.paperScan.reviewedByFullName}: &quot;{form.paperScan.reviewComment}&quot;
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {canUploadScan && (
+                                <label className={`mt-3 inline-flex items-center gap-2 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] ${isUploadingScan ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>
+                                    <Upload className="h-3.5 w-3.5" />
+                                    {form.paperScan ? t("paperScanReplace") : t("paperScanUpload")}
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        className="sr-only"
+                                        disabled={isUploadingScan}
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0];
+                                            event.target.value = "";
+                                            if (file) void handleScanSelected(file);
+                                        }}
+                                    />
+                                </label>
+                            )}
+                        </section>
+                    )}
+
                     <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                         <h2 className="mb-4 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{t("approvalProgressTitle")}</h2>
                         {form.approvalChainWarning && (
@@ -573,7 +649,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                         {history.approverFullName ?? history.approverUserName}
                                                         {history.onBehalfOfUserName &&
                                                             ` (${t("onBehalfOf", { name: history.onBehalfOfFullName ?? history.onBehalfOfUserName })})`}{" "}
-                                                        · {enumLabels.approvalAction[history.action]}
+                                                        · {history.isPaperApproval ? t("paperApprovalLabel") : enumLabels.approvalAction[history.action]}
                                                     </div>
                                                     {history.comment && (
                                                         <div className="text-xs italic text-[#191c1e]">&quot;{history.comment}&quot;</div>

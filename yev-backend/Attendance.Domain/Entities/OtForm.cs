@@ -92,6 +92,8 @@ public partial class OtForm
 
     public virtual ICollection<OtFormEditLog> OtFormEditLogs { get; set; } = new List<OtFormEditLog>();
 
+    public virtual OtFormPaperScan? PaperScan { get; set; }
+
     public virtual ICollection<OtFormApprovalEmailToken> OtFormApprovalEmailTokens { get; set; } = new List<OtFormApprovalEmailToken>();
 
     public virtual ICollection<OtFormApprovalStep> ApprovalSteps { get; set; } = new List<OtFormApprovalStep>();

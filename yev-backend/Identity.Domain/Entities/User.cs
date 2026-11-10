@@ -26,4 +26,6 @@ public class User
     public virtual ICollection<UserPermission> UserPermissions { get; set; } = new List<UserPermission>();
 
     public virtual ICollection<UserEmail> UserEmails { get; set; } = new List<UserEmail>();
+
+    public virtual LocalLoginAccount? LocalLoginAccount { get; set; }
 }

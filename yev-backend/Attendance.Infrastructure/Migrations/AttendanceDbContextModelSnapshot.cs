@@ -965,6 +965,9 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<bool>("IsPaperApproval")
+                        .HasColumnType("bit");
+
                     b.Property<string>("OnBehalfOfFullName")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -1258,6 +1261,10 @@ namespace Attendance.Infrastructure.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
 
+                    b.Property<decimal?>("LedgerHoursNextMonth")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
                     b.Property<decimal>("MonthToDate")
                         .HasPrecision(10, 2)
                         .HasColumnType("decimal(10,2)");
@@ -1310,6 +1317,69 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "EmployeeId" }, "IX_OtFormEmployees_EmployeeId");
 
                     b.ToTable("OtFormEmployees");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormPaperScan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<byte[]>("FileContent")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<int>("OtFormId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReviewComment")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReviewedByFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ReviewedByUserName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UploadedByFullName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("UploadedByUserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "OtFormId" }, "IX_OtFormPaperScans_OtFormId")
+                        .IsUnique();
+
+                    b.ToTable("OtFormPaperScans");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.PendingSecondaryPasswordConfirmation", b =>
@@ -2164,6 +2234,18 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtForm");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.OtFormPaperScan", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.OtForm", "OtForm")
+                        .WithOne("PaperScan")
+                        .HasForeignKey("Attendance.Domain.Entities.OtFormPaperScan", "OtFormId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_OtFormPaperScans_OtForms_OtFormId");
+
+                    b.Navigation("OtForm");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.ProcessPart", b =>
                 {
                     b.HasOne("Attendance.Domain.Entities.OtForm", "OtForm")
@@ -2271,6 +2353,8 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtFormEditLogs");
 
                     b.Navigation("OtFormEmployees");
+
+                    b.Navigation("PaperScan");
 
                     b.Navigation("ProcessPart");
                 });

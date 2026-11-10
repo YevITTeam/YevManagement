@@ -16,8 +16,8 @@ namespace Identity.Application.Services
         public async Task<List<UserDto>> GetAllUsersAsync(int? roleId = null)
         {
             var users = roleId.HasValue
-                ? await _unitOfWork.Users.FindWithIncludesAsync(x => x.Roles.Any(r => r.Id == roleId.Value), x => x.Roles)
-                : await _unitOfWork.Users.FindWithIncludesAsync(null, x => x.Roles);
+                ? await _unitOfWork.Users.FindWithIncludesAsync(x => x.Roles.Any(r => r.Id == roleId.Value), x => x.Roles, x => x.LocalLoginAccount!)
+                : await _unitOfWork.Users.FindWithIncludesAsync(null, x => x.Roles, x => x.LocalLoginAccount!);
 
             return users.Select(user => new UserDto
             {
@@ -26,6 +26,7 @@ namespace Identity.Application.Services
                 FullName = user.FullName,
                 DeviceName = user.DeviceName,
                 Email = user.Email,
+                IsLocalAccount = user.LocalLoginAccount != null,
                 Roles = user.Roles.Select(r => r.RoleName).ToList()
             }).ToList();
         }

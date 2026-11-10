@@ -2,7 +2,7 @@
 
 import { Link, usePathname } from "@/navigation";
 import { useTranslations } from "next-intl";
-import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, UserCheck, LayoutDashboard, History } from "lucide-react";
+import { Bot, FilePlus2, ClipboardList, FolderCog, PenTool, KeyRound, PanelLeftClose, UserCheck, LayoutDashboard, History, FileCheck2 } from "lucide-react";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
 import { sidebarDrawerClass, useSidebarCollapse } from "@/modules/common/hooks/useSidebarCollapse";
@@ -19,6 +19,7 @@ interface OtNavItem {
     permissions?: string[];
     // Shown only to Admin / Manager-and-above (see useOverviewAccess).
     requiresOverviewAccess?: boolean;
+    adminOnly?: boolean;
 }
 
 const navItems: OtNavItem[] = [
@@ -30,6 +31,7 @@ const navItems: OtNavItem[] = [
     // One screen with tabs; each tab gates itself on finer permissions (OtFormTabsPage.tsx).
     { key: "otForms", href: "/ot/list", icon: ClipboardList, permissions: ["Attendance.OTForm.View"] },
     { key: "otDelegations", href: "/ot/delegations", icon: UserCheck, permissions: ["Attendance.OTForm.Delegate"] },
+    { key: "otPaperScans", href: "/ot/paper-scans", icon: FileCheck2, permissions: ["Attendance.OTForm.View"], adminOnly: true },
     // Gated on .Create, not .View: staff roles get .View just to load dropdowns. Approval-tree coordinators
     // (*ApprovalStep.Update) and Group Leaders (ProductionOtReport.View only) need it for their own tab.
     {
@@ -97,7 +99,7 @@ export default function OtManagerSidebar() {
             {/* overflow-x-clip, not hidden: hidden creates a scroll container that scrollIntoView() can shift sideways and get stuck. */}
             <nav className="mt-5 flex-1 space-y-1 overflow-y-auto overflow-x-clip">
                 {navItems
-                    .filter((item) => (!item.permissions || hasAnyPermission(user, item.permissions)) && (!item.requiresOverviewAccess || canViewOverview))
+                    .filter((item) => (!item.permissions || hasAnyPermission(user, item.permissions)) && (!item.requiresOverviewAccess || canViewOverview) && (!item.adminOnly || user?.roles.includes("Admin")))
                     .map((item) => {
                         const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                         const badgeCount = item.key === "otForms" ? pendingApprovalsCount : 0;

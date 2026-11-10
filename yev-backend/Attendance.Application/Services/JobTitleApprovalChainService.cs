@@ -114,9 +114,11 @@ namespace Attendance.Application.Services
             var configuredSigningIntermediateSteps = configuredSteps
                 .Where(x => x.TerminalLevel == (int)JobTitleTerminalLevel.None && x.RequiresSignature)
                 .ToList();
+            // A signing step of the creator's own rank is dropped from the chain, so they sign for it at creation.
             var requiresCreatorSelfSign = creatorRank > 0
                 && configuredSigningIntermediateSteps.Count > 0
-                && configuredSigningIntermediateSteps.All(x => x.RankOrder <= creatorRank);
+                && (configuredSigningIntermediateSteps.All(x => x.RankOrder <= creatorRank)
+                    || configuredSigningIntermediateSteps.Any(x => x.RankOrder == creatorRank));
 
             // Checked after requiresCreatorSelfSign so a form completing immediately still snapshots the creator's signature.
             if (targetJobTitle.RankOrder <= creatorRank)

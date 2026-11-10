@@ -48,6 +48,8 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<ProductionTeam> ProductionTeams { get; set; }
     public virtual DbSet<ProductionApprovalStep> ProductionApprovalSteps { get; set; }
     public virtual DbSet<OtFormEditLog> OtFormEditLogs { get; set; }
+
+    public virtual DbSet<OtFormPaperScan> OtFormPaperScans { get; set; }
     public virtual DbSet<ApprovalDelegation> ApprovalDelegations { get; set; }
     public virtual DbSet<AttendanceAuditTrail> AttendanceAuditTrails { get; set; }
     public virtual DbSet<AttendanceMailLog> AttendanceMailLogs { get; set; }
@@ -355,6 +357,7 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.MonthToDate).HasPrecision(10, 2);
             entity.Property(e => e.YearToDate).HasPrecision(10, 2);
             entity.Property(e => e.LedgerHours).HasPrecision(10, 2);
+            entity.Property(e => e.LedgerHoursNextMonth).HasPrecision(10, 2);
             entity.Property(e => e.RemovedByUserName).HasMaxLength(100);
             entity.Property(e => e.RemovedByFullName).HasMaxLength(255);
             entity.Property(e => e.RemoveReason).HasMaxLength(500);
@@ -448,6 +451,23 @@ public partial class AttendanceDbContext : DbContext
             entity.HasOne(d => d.OtForm).WithMany(p => p.OtFormEditLogs)
                 .HasForeignKey(d => d.OtFormId)
                 .HasConstraintName("FK_OtFormEditLogs_OtForms_OtFormId");
+        });
+
+        modelBuilder.Entity<OtFormPaperScan>(entity =>
+        {
+            entity.HasIndex(e => e.OtFormId, "IX_OtFormPaperScans_OtFormId").IsUnique();
+
+            entity.Property(e => e.FileName).HasMaxLength(255);
+            entity.Property(e => e.ContentType).HasMaxLength(100);
+            entity.Property(e => e.UploadedByUserName).HasMaxLength(100);
+            entity.Property(e => e.UploadedByFullName).HasMaxLength(255);
+            entity.Property(e => e.ReviewedByUserName).HasMaxLength(100);
+            entity.Property(e => e.ReviewedByFullName).HasMaxLength(255);
+            entity.Property(e => e.ReviewComment).HasMaxLength(500);
+
+            entity.HasOne(d => d.OtForm).WithOne(p => p.PaperScan)
+                .HasForeignKey<OtFormPaperScan>(d => d.OtFormId)
+                .HasConstraintName("FK_OtFormPaperScans_OtForms_OtFormId");
         });
 
         modelBuilder.Entity<UserSignature>(entity =>

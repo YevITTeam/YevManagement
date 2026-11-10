@@ -6,6 +6,8 @@ export interface UserDto {
   deviceName: string | null;
   // Copy of the primary UserEmail; null when the user has none.
   email: string | null;
+  isLocalAccount: boolean;
+  mustChangePassword: boolean;
   roles: string[];
   // Derived from roles, UI-only; BE always enforces at the API.
   permissions: string[];

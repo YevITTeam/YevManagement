@@ -36,6 +36,10 @@ public partial class IdentityDbContext : DbContext
 
     public virtual DbSet<UserEmailModule> UserEmailModules { get; set; }
 
+    public virtual DbSet<LocalAccountPrefix> LocalAccountPrefixes { get; set; }
+
+    public virtual DbSet<LocalLoginAccount> LocalLoginAccounts { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Role>(entity =>
@@ -101,6 +105,28 @@ public partial class IdentityDbContext : DbContext
             entity.Property(e => e.FullName).HasMaxLength(100);
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
             entity.HasIndex(e => e.UserName).IsUnique();
+        });
+
+        modelBuilder.Entity<LocalAccountPrefix>(entity =>
+        {
+            entity.Property(e => e.Prefix).HasMaxLength(30);
+            entity.Property(e => e.CreatedByUserName).HasMaxLength(100);
+            entity.HasIndex(e => e.Prefix).IsUnique();
+        });
+
+        modelBuilder.Entity<LocalLoginAccount>(entity =>
+        {
+            entity.Property(e => e.PasswordHash).HasMaxLength(500);
+            entity.Property(e => e.CreatedByUserName).HasMaxLength(100);
+            entity.HasIndex(e => e.UserId).IsUnique();
+
+            entity.HasOne(e => e.User).WithOne(u => u.LocalLoginAccount)
+                .HasForeignKey<LocalLoginAccount>(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.AccountPrefix).WithMany(p => p.Accounts)
+                .HasForeignKey(e => e.PrefixId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<LoginQrCode>(entity =>

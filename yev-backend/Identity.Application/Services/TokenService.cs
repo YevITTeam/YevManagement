@@ -22,6 +22,8 @@ namespace Identity.Application.Services
         {
             IdentityClaimTypes.RolesLoaded,
             IdentityClaimTypes.Permission,
+            IdentityClaimTypes.IsLocalAccount,
+            IdentityClaimTypes.MustChangePassword,
             JwtRegisteredClaimNames.Exp,
             JwtRegisteredClaimNames.Nbf,
             JwtRegisteredClaimNames.Iat,

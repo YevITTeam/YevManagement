@@ -76,6 +76,13 @@ namespace Attendance.Application.Interfaces.Service
         // Soft-delete for permanently stuck forms; blocked once Completed because accumulation was already applied.
         Task DeleteAsync(int id, string deletedByUserName, string? deletedByFullName, DeleteOtFormDto request);
 
+        // Forms stuck at a Factory Manager-or-higher step nobody holds: the creator uploads the signed paper, Admin reviews it.
+        Task UploadPaperScanAsync(int id, string userName, string? fullName, string fileName, byte[] content);
+        Task<(byte[] Content, string ContentType, string FileName)> GetPaperScanFileAsync(int id, string userName, bool isAdmin);
+        Task<List<OtFormPaperScanListItemDto>> GetPaperScansAsync(bool isAdmin, int? status);
+        Task ApprovePaperScanAsync(int id, string userName, string? fullName, bool isAdmin, ReviewOtFormPaperScanDto request);
+        Task RejectPaperScanAsync(int id, string userName, string? fullName, bool isAdmin, ReviewOtFormPaperScanDto request);
+
         // Anonymous email links: the token is the only credential.
         Task<OtFormDto> GetByEmailTokenAsync(string token);
         Task ApproveByEmailTokenAsync(string token, ApproveOtFormDto request);

@@ -16,6 +16,8 @@ namespace Identity.Application.Authentication
         public const string Email = "Email";
         public const string DeviceName = "DeviceName";
         public const string IpAddress = "IpAddress";
+        public const string IsLocalAccount = "IsLocalAccount";
+        public const string MustChangePassword = "MustChangePassword";
 
         // Numeric Identity.Users.Id, added 2026-08-25 so other modules (starting with Workflow —
         // Workflow.Domain.Entities.Employee.UserId, workflow-module.md §1.4) can resolve "which

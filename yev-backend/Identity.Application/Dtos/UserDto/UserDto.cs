@@ -16,6 +16,9 @@ namespace Identity.Application.Dtos.UserDto
         // because not every AD account has a mail attribute available.
         public string? Email { get; set; }
 
+        public bool IsLocalAccount { get; set; }
+        public bool MustChangePassword { get; set; }
+
         public List<string> Roles { get; set; } = new List<string>();
         public List<string> Permissions { get; set; } = new List<string>();
     }

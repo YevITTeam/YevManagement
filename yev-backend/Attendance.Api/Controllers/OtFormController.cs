@@ -2,6 +2,7 @@ using Shared.Core.Exceptions;
 using Attendance.Application.Dtos.OtForms;
 using Attendance.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Shared.Application.Authorization;
 using Shared.Application.Wrapper;
@@ -239,6 +240,49 @@ namespace Attendance.Api.Controllers
         {
             await _otFormService.DeleteAsync(id, CurrentUserName, CurrentFullName, request);
             return Success(true, "Đã xoá đơn.");
+        }
+
+        [RequirePermission("Attendance.OTForm.View")]
+        [HttpGet("paper-scans")]
+        public async Task<ActionResult<ApiResponse<List<OtFormPaperScanListItemDto>>>> GetPaperScans([FromQuery] int? status = null)
+        {
+            var result = await _otFormService.GetPaperScansAsync(User.IsInRole(AdminRole), status);
+            return Success(result);
+        }
+
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
+        [RequestSizeLimit(11 * 1024 * 1024)]
+        [HttpPost("{id}/paper-scan")]
+        public async Task<ActionResult<ApiResponse<bool>>> UploadPaperScan(int id, IFormFile file)
+        {
+            using var stream = new MemoryStream();
+            await file.CopyToAsync(stream);
+            await _otFormService.UploadPaperScanAsync(id, CurrentUserName, CurrentFullName, file.FileName, stream.ToArray());
+            return Success(true, "Đã gửi bản scan.");
+        }
+
+        [RequirePermission("Attendance.OTForm.View")]
+        [HttpGet("{id}/paper-scan")]
+        public async Task<IActionResult> GetPaperScan(int id)
+        {
+            var (content, contentType, fileName) = await _otFormService.GetPaperScanFileAsync(id, CurrentUserName, User.IsInRole(AdminRole));
+            return File(content, contentType, fileName);
+        }
+
+        [RequirePermission("Attendance.OTForm.View")]
+        [HttpPost("{id}/paper-scan/approve")]
+        public async Task<ActionResult<ApiResponse<bool>>> ApprovePaperScan(int id, [FromBody] ReviewOtFormPaperScanDto request)
+        {
+            await _otFormService.ApprovePaperScanAsync(id, CurrentUserName, CurrentFullName, User.IsInRole(AdminRole), request);
+            return Success(true, "Đã duyệt bản scan, đơn đã hoàn tất.");
+        }
+
+        [RequirePermission("Attendance.OTForm.View")]
+        [HttpPost("{id}/paper-scan/reject")]
+        public async Task<ActionResult<ApiResponse<bool>>> RejectPaperScan(int id, [FromBody] ReviewOtFormPaperScanDto request)
+        {
+            await _otFormService.RejectPaperScanAsync(id, CurrentUserName, CurrentFullName, User.IsInRole(AdminRole), request);
+            return Success(true, "Đã trả lại bản scan.");
         }
 
         // Public endpoints for the email Approve/Reject links, a supplementary channel; the token is the only credential.

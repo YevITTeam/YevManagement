@@ -14,7 +14,8 @@ using Shared.Application.Services;
 using Shared.Application.Wrapper;
 using Shared.Core.Exceptions;
 using static Attendance.Application.Services.MealTicketCalculator;
-using AccumulatedByEmployee = System.Collections.Generic.Dictionary<int, (decimal Day, decimal Month, decimal Year)>;
+using AccumulatedByEmployee = System.Collections.Generic.Dictionary<int, (decimal Month, decimal Year)>;
+using HoursByDay = System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<(System.DateOnly Date, decimal Hours)>>;
 
 namespace Attendance.Application.Services
 {
@@ -381,8 +382,24 @@ namespace Attendance.Application.Services
                     Comment = x.Comment,
                     HasSignature = x.SignatureImage != null,
                     SignatureImage = x.SignatureImage,
+                    IsPaperApproval = x.IsPaperApproval,
                     ActionAt = x.ActionAt
                 });
+
+            var paperScan = (await _unitOfWork.OtFormPaperScans.SelectAsync(
+                predicate: x => x.OtFormId == id,
+                selector: x => new OtFormPaperScanDto
+                {
+                    FileName = x.FileName,
+                    ContentType = x.ContentType,
+                    UploadedByUserName = x.UploadedByUserName,
+                    UploadedByFullName = x.UploadedByFullName,
+                    UploadedAt = x.UploadedAt,
+                    Status = x.Status,
+                    ReviewedByFullName = x.ReviewedByFullName ?? x.ReviewedByUserName,
+                    ReviewedAt = x.ReviewedAt,
+                    ReviewComment = x.ReviewComment
+                })).FirstOrDefault();
 
             var steps = await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                 x => x.OtFormId == id && !x.IsDeleted, x => x.Candidates);
@@ -448,6 +465,9 @@ namespace Attendance.Application.Services
                 ResubmitUserNames = resubmit?.UserNames.ToList() ?? new List<string>(),
                 ResubmitDeadline = resubmit?.Deadline,
                 ApprovalChainWarning = otForm.ApprovalChainWarning,
+                PaperScan = paperScan,
+                CanUploadPaperScan = otForm.Status == (int)OtFormStatus.InApproval
+                    && IsPaperScanStep(orderedSteps.FirstOrDefault(s => s.Status == (int)OtFormApprovalStepStatus.Pending)),
                 Employees = employees.Select(x => new OtFormEmployeeDto
                 {
                     EmployeeId = x.EmployeeId,
@@ -597,9 +617,9 @@ namespace Attendance.Application.Services
 
         private async Task<OtFormDto> CreateCoreAsync(string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
         {
-            // Overnight shifts aren't supported; checked first because later validation compares TimeOnly values directly.
-            if (request.EndTime <= request.StartTime)
-                throw new DomainException("Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).");
+            // An end before the start means the next day.
+            if (request.EndTime == request.StartTime)
+                throw new DomainException("Giờ kết thúc phải khác giờ bắt đầu.");
 
             EnsureDateNotTooFarBack(request.Date, (await _attendanceSettingService.GetAsync()).BackdateDays);
 
@@ -636,13 +656,13 @@ namespace Attendance.Application.Services
 
             var validatedEmployees = await ValidateEmployeesAsync(groupId, request.StartTime, request.EndTime, request.Employees);
 
-            var accumulated = await EnsureOtCaseMatchesRulesAsync(request, forceMeal: !group.AllowEatLater, otCase!);
+            await EnsureOtCaseMatchesRulesAsync(request, forceMeal: !group.AllowEatLater, otCase!);
 
             // An employee may not appear in two overlapping non-rejected forms on the same day.
             var employeeTimes = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => (x.StartTime ?? request.StartTime, x.EndTime));
             await EnsureNoOverlappingOtFormsAsync(
-                validatedEmployees, request.Date, employeeTimes, excludeFormId: null);
+                validatedEmployees, request.Date, request.StartTime, employeeTimes, excludeFormId: null);
 
             // Admin-created forms count as lowest level. An incomplete chain doesn't block creation: the form waits at the
             // step lacking candidates and ApprovalChainWarning tells the FE.
@@ -679,7 +699,7 @@ namespace Attendance.Application.Services
             };
 
             var rosterByEmployeeId = await LoadRosterAsync(request.Employees.Select(x => x.EmployeeId).ToList());
-            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, rosterByEmployeeId, forceMeal: !group.AllowEatLater);
+            return await FinalizeCreateAsync(newOtForm, request, chainResult, rosterByEmployeeId, forceMeal: !group.AllowEatLater);
         }
 
         // Who may create production forms is decided by the Attendance.OTForm.CreateProduction permission;
@@ -753,12 +773,12 @@ namespace Attendance.Application.Services
 
             var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
 
-            var accumulated = await EnsureOtCaseMatchesRulesAsync(request, forceMeal: true, otCase!);
+            await EnsureOtCaseMatchesRulesAsync(request, forceMeal: true, otCase!);
 
             var employeeTimes = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => (x.StartTime ?? request.StartTime, x.EndTime));
             await EnsureNoOverlappingOtFormsAsync(
-                validatedEmployees, request.Date, employeeTimes, excludeFormId: null);
+                validatedEmployees, request.Date, request.StartTime, employeeTimes, excludeFormId: null);
 
             var workshopId = await ResolveProductionWorkshopIdAsync(employeeIds);
 
@@ -794,7 +814,7 @@ namespace Attendance.Application.Services
 
             var productionEmployeesByEmployeeId = await LoadRosterAsync(employeeIds);
 
-            return await FinalizeCreateAsync(newOtForm, request, chainResult, accumulated, productionEmployeesByEmployeeId, forceMeal: true);
+            return await FinalizeCreateAsync(newOtForm, request, chainResult, productionEmployeesByEmployeeId, forceMeal: true);
         }
 
         // Production fields can change with every import, so their create-time state is snapshotted on OtFormEmployee, office forms included.
@@ -821,7 +841,7 @@ namespace Attendance.Application.Services
 
         private async Task<OtFormDto> FinalizeCreateAsync(
             OtForm newOtForm, CreateOtFormDto request, ResolveApprovalChainResultDto chainResult,
-            AccumulatedByEmployee accumulated, Dictionary<int, Employee> productionEmployeesByEmployeeId, bool forceMeal)
+            Dictionary<int, Employee> productionEmployeesByEmployeeId, bool forceMeal)
         {
             await _unitOfWork.OtForms.AddAsync(newOtForm);
 
@@ -831,9 +851,10 @@ namespace Attendance.Application.Services
                 x => x.EmployeeId, x => ResolveDidEat(forceMeal, x.DidEat));
 
             // Hard block before writing anything when any employee exceeds a daily limit.
-            var newHoursByEmployeeId = request.Employees.ToDictionary(
-                x => x.EmployeeId, x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
-            await ValidateOtHourLimitsAsync(request.Date, newHoursByEmployeeId, mealSettings, accumulated);
+            var newHoursByDay = request.Employees.ToDictionary(
+                x => x.EmployeeId,
+                x => SplitHoursByDay(request.Date, request.StartTime, x.StartTime ?? request.StartTime, x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
+            await ValidateOtHourLimitsAsync(request.Date, newHoursByDay, mealSettings, excludeFormId: null);
 
             var createdRows = new List<OtFormEmployee>();
             foreach (var item in request.Employees)
@@ -1102,8 +1123,8 @@ namespace Attendance.Application.Services
             var formDate = header?.Date ?? otForm.Date;
             var formStart = header?.StartTime ?? otForm.StartTime;
             var formEnd = header?.EndTime ?? otForm.EndTime;
-            if (formEnd <= formStart)
-                throw new DomainException("Giờ kết thúc phải sau giờ bắt đầu (không hỗ trợ ca qua đêm).");
+            if (formEnd == formStart)
+                throw new DomainException("Giờ kết thúc phải khác giờ bắt đầu.");
             if (formDate != otForm.Date)
                 EnsureDateNotTooFarBack(formDate, (await _attendanceSettingService.GetAsync()).BackdateDays);
 
@@ -1211,18 +1232,19 @@ namespace Attendance.Application.Services
                 x => x.EmployeeId, x => ResolveDidEat(forceMeal, x.DidEat));
 
             // excludeFormId: this form's own rows are being replaced, so they must not count against their new hours.
-            var newHoursByEmployeeId = request.Employees.ToDictionary(
-                x => x.EmployeeId, x => CalculateOtHours(startTimeByEmployeeId[x.EmployeeId], x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
-            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, formDate, mealSettings, excludeFormId: otForm.Id);
-            await ValidateOtHourLimitsAsync(formDate, newHoursByEmployeeId, mealSettings, accumulated);
+            var newHoursByDay = request.Employees.ToDictionary(
+                x => x.EmployeeId,
+                x => SplitHoursByDay(formDate, formStart, startTimeByEmployeeId[x.EmployeeId], x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
+            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByDay.Keys, formDate, mealSettings, excludeFormId: otForm.Id);
+            await ValidateOtHourLimitsAsync(formDate, newHoursByDay, mealSettings, excludeFormId: otForm.Id);
 
             // Office forms re-derive the OT case from date + hours (as at creation); production forms keep
             // theirs and may not be pushed past the month/year limit unless already TH3.
             OtCase? newOtCase = null;
             if (isOfficeForm)
             {
-                var exceedsTh3 = await ExceedsMonthYearLimitAsync(newHoursByEmployeeId, mealSettings, accumulated);
-                var expectedCode = exceedsTh3 ? "TH3" : (await IsNonWorkingDayAsync(formDate) ? "TH2" : "TH1");
+                var exceedsTh3 = await ExceedsMonthYearLimitAsync(formDate, newHoursByDay, mealSettings, accumulated);
+                var expectedCode = exceedsTh3 ? "TH3" : (await TouchesNonWorkingDayAsync(formDate, formStart, formEnd) ? "TH2" : "TH1");
                 newOtCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Code == expectedCode && !x.IsDeleted);
                 if (newOtCase == null)
                     throw new DomainException($"Chưa cấu hình Trường hợp OT '{expectedCode}'.");
@@ -1231,7 +1253,7 @@ namespace Attendance.Application.Services
             {
                 var currentOtCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == otForm.OtCaseId);
                 if (currentOtCase?.Code != "TH3"
-                    && await ExceedsMonthYearLimitAsync(newHoursByEmployeeId, mealSettings, accumulated))
+                    && await ExceedsMonthYearLimitAsync(formDate, newHoursByDay, mealSettings, accumulated))
                     throw new DomainException("Giờ sửa khiến có nhân viên vượt giới hạn OT tháng/năm, đơn này phải là TH3. Vui lòng giảm giờ hoặc tạo đơn TH3 mới.");
             }
 
@@ -1242,7 +1264,7 @@ namespace Attendance.Application.Services
                 var overlapEmployees = overlapEmployeeIds.Select(eid => employeesById[eid]).ToList();
                 var overlapTimes = request.Employees.Where(x => overlapEmployeeIds.Contains(x.EmployeeId))
                     .ToDictionary(x => x.EmployeeId, x => (startTimeByEmployeeId[x.EmployeeId], x.EndTime));
-                await EnsureNoOverlappingOtFormsAsync(overlapEmployees, formDate, overlapTimes, excludeFormId: otForm.Id);
+                await EnsureNoOverlappingOtFormsAsync(overlapEmployees, formDate, formStart, overlapTimes, excludeFormId: otForm.Id);
             }
 
             // Apply: removals, additions, then kept rows (each touches different rows).
@@ -2078,37 +2100,50 @@ namespace Attendance.Application.Services
             return employees.ToList();
         }
 
-        // Per-employee OT window must sit inside the form's window: formStart <= start < end <= formEnd.
+        // Measured as offsets from the form's start (TimeOnly subtraction wraps past midnight), so overnight forms need no special case.
         private static void EnsureEmployeeTimeWithinForm(
             string code, TimeOnly startTime, TimeOnly endTime, TimeOnly formStartTime, TimeOnly formEndTime)
         {
-            if (startTime < formStartTime || startTime >= formEndTime)
+            var offset = startTime - formStartTime;
+            var formLength = formEndTime - formStartTime;
+            if (offset >= formLength)
                 throw new DomainException(
                     $"Giờ bắt đầu OT của nhân viên '{code}' phải nằm trong khoảng giờ của đơn " +
                     $"({formStartTime:HH:mm}–{formEndTime:HH:mm}).");
-            if (endTime <= startTime || endTime > formEndTime)
+            var length = endTime - startTime;
+            if (length == TimeSpan.Zero || offset + length > formLength)
                 throw new DomainException(
                     $"Giờ kết thúc OT của nhân viên '{code}' phải sau giờ bắt đầu ({startTime:HH:mm}) " +
                     $"và không được vượt quá giờ kết thúc của đơn ({formEndTime:HH:mm}).");
         }
 
-        private async Task EnsureNoOverlappingOtFormsAsync(
-            List<Employee> employees, DateOnly date, Dictionary<int, (TimeOnly Start, TimeOnly End)> employeeTimes, int? excludeFormId)
+        // Neighbouring dates are read too: an overnight form on either side can collide with this one.
+        private async Task<List<OtFormEmployee>> FindOverlappingRowsAsync(
+            List<int> employeeIds, DateOnly date, TimeOnly formStart, Dictionary<int, (TimeOnly Start, TimeOnly End)> employeeTimes, int? excludeFormId)
         {
-            var employeeIds = employees.Select(x => x.Id).ToList();
-
+            var (previous, next) = (date.AddDays(-1), date.AddDays(1));
             var existingRecords = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
                 x => employeeIds.Contains(x.EmployeeId)
-                     && x.OtForm.Date == date
+                     && x.OtForm.Date >= previous && x.OtForm.Date <= next
                      && !x.OtForm.IsDeleted
                      && x.OtForm.Status != (int)OtFormStatus.Rejected
                      && !x.IsRemoved
                      && (excludeFormId == null || x.OtFormId != excludeFormId.Value),
                 x => x.OtForm);
 
-            var overlapping = existingRecords
-                .Where(x => employeeTimes.TryGetValue(x.EmployeeId, out var t) && t.Start < x.EndTime && t.End > x.StartTime)
-                .ToList();
+            return existingRecords.Where(x =>
+            {
+                if (!employeeTimes.TryGetValue(x.EmployeeId, out var t)) return false;
+                var mine = MealTicketCalculator.GetWindow(date, formStart, t.Start, t.End);
+                var theirs = MealTicketCalculator.GetWindow(x.OtForm.Date, x.OtForm.StartTime, x.StartTime, x.EndTime);
+                return mine.From < theirs.To && mine.To > theirs.From;
+            }).ToList();
+        }
+
+        private async Task EnsureNoOverlappingOtFormsAsync(
+            List<Employee> employees, DateOnly date, TimeOnly formStart, Dictionary<int, (TimeOnly Start, TimeOnly End)> employeeTimes, int? excludeFormId)
+        {
+            var overlapping = await FindOverlappingRowsAsync(employees.Select(x => x.Id).ToList(), date, formStart, employeeTimes, excludeFormId);
 
             if (overlapping.Count > 0)
             {
@@ -2130,25 +2165,13 @@ namespace Attendance.Application.Services
             var employeeIds = request.Employees.Select(x => x.EmployeeId).Distinct().ToList();
             if (employeeIds.Count == 0) return new List<int>();
 
-            var existingRecords = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
-                x => employeeIds.Contains(x.EmployeeId)
-                     && x.OtForm.Date == request.Date
-                     && !x.OtForm.IsDeleted
-                     && x.OtForm.Status != (int)OtFormStatus.Rejected
-                     && !x.IsRemoved
-                     && (request.ExcludeFormId == null || x.OtFormId != request.ExcludeFormId.Value),
-                x => x.OtForm);
-
             var employeeTimes = request.Employees.ToDictionary(
                 x => x.EmployeeId, x => (Start: x.StartTime ?? request.StartTime, End: x.EndTime));
 
-            var overlappingIds = existingRecords
-                .Where(x => employeeTimes.TryGetValue(x.EmployeeId, out var t) && t.Start < x.EndTime && t.End > x.StartTime)
+            return (await FindOverlappingRowsAsync(employeeIds, request.Date, request.StartTime, employeeTimes, request.ExcludeFormId))
                 .Select(x => x.EmployeeId)
                 .Distinct()
                 .ToList();
-
-            return overlappingIds;
         }
 
         // IsEarlyMealWindowOt/CalculateOtHours/CalculateMealTicketType live in MealTicketCalculator, shared with reports.
@@ -2222,33 +2245,39 @@ namespace Attendance.Application.Services
                     row.YearToDate = frozen[row.EmployeeId].Year;
                 }
             }
-            var existingLedgerRows = (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
-                x => employeeIds.Contains(x.EmployeeId) && x.Year == otForm.Date.Year && x.Month == otForm.Date.Month))
-                .ToDictionary(x => x.EmployeeId);
+            var formDate = otForm.Date;
+            var nextDate = formDate.AddDays(1);
+            var ledgerRows = (await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
+                x => employeeIds.Contains(x.EmployeeId)
+                     && ((x.Year == formDate.Year && x.Month == formDate.Month) || (x.Year == nextDate.Year && x.Month == nextDate.Month))))
+                .ToDictionary(x => (x.EmployeeId, x.Year, x.Month));
 
-            foreach (var otFormEmployee in otFormEmployees)
+            async Task ApplyAsync(int employeeId, DateOnly month, decimal hours)
             {
-                var hours = sign > 0
-                    ? CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mealSettings)
-                    : -(otFormEmployee.LedgerHours
-                        ?? CalculateOtHours(otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mealSettings));
-                otFormEmployee.LedgerHours = sign > 0 ? hours : null;
-
-                if (existingLedgerRows.TryGetValue(otFormEmployee.EmployeeId, out var ledgerRow))
+                if (ledgerRows.TryGetValue((employeeId, month.Year, month.Month), out var ledgerRow))
                 {
                     ledgerRow.TotalHours += hours;
                     _unitOfWork.EmployeeAccumulationHistories.Update(ledgerRow);
+                    return;
                 }
-                else
-                {
-                    await _unitOfWork.EmployeeAccumulationHistories.AddAsync(new EmployeeAccumulationHistory
-                    {
-                        EmployeeId = otFormEmployee.EmployeeId,
-                        Year = otForm.Date.Year,
-                        Month = otForm.Date.Month,
-                        TotalHours = hours
-                    });
-                }
+                var created = new EmployeeAccumulationHistory { EmployeeId = employeeId, Year = month.Year, Month = month.Month, TotalHours = hours };
+                ledgerRows[(employeeId, month.Year, month.Month)] = created;
+                await _unitOfWork.EmployeeAccumulationHistories.AddAsync(created);
+            }
+
+            foreach (var otFormEmployee in otFormEmployees)
+            {
+                var parts = SplitHoursByDay(formDate, otForm.StartTime, otFormEmployee.StartTime, otFormEmployee.EndTime, otFormEmployee.DidEat, mealSettings);
+                var inFormMonth = parts.Where(p => p.Date.Year == formDate.Year && p.Date.Month == formDate.Month).Sum(p => p.Hours);
+                var inNextMonth = parts.Sum(p => p.Hours) - inFormMonth;
+
+                var formMonthDelta = sign > 0 ? inFormMonth : -(otFormEmployee.LedgerHours ?? inFormMonth);
+                var nextMonthDelta = sign > 0 ? inNextMonth : -(otFormEmployee.LedgerHoursNextMonth ?? 0m);
+                otFormEmployee.LedgerHours = sign > 0 ? inFormMonth : null;
+                otFormEmployee.LedgerHoursNextMonth = sign > 0 && inNextMonth != 0 ? inNextMonth : null;
+
+                await ApplyAsync(otFormEmployee.EmployeeId, formDate, formMonthDelta);
+                if (nextMonthDelta != 0) await ApplyAsync(otFormEmployee.EmployeeId, nextDate, nextMonthDelta);
             }
         }
 
@@ -2259,12 +2288,13 @@ namespace Attendance.Application.Services
             IEnumerable<int> employeeIds, DateOnly date, int excludeFormId, AttendanceSettingDto mealSettings, bool includePending)
         {
             var ids = employeeIds.Distinct().ToList();
+            var spillFrom = new DateOnly(date.Year, 1, 1).AddDays(-1);
+            var monthEnd = new DateOnly(date.Year, date.Month, DateTime.DaysInMonth(date.Year, date.Month));
             var rows = await _unitOfWork.OtFormEmployees.SelectAsync(
                 predicate: x => ids.Contains(x.EmployeeId) && !x.IsRemoved && x.OtFormId != excludeFormId && !x.OtForm.IsDeleted
-                    && x.OtForm.Date.Year == date.Year && x.OtForm.Date.Month <= date.Month
-                    && ((x.OtForm.Status == (int)OtFormStatus.InApproval && x.OtForm.Date <= date)
-                        || (x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date > date && x.OtForm.Date.Month == date.Month)),
-                selector: x => new { x.EmployeeId, x.OtFormId, x.StartTime, x.EndTime, x.DidEat, x.OtForm.Date, x.OtForm.Status });
+                    && ((x.OtForm.Status == (int)OtFormStatus.InApproval && x.OtForm.Date >= spillFrom && x.OtForm.Date <= date)
+                        || (x.OtForm.Status == (int)OtFormStatus.Completed && x.OtForm.Date >= date && x.OtForm.Date <= monthEnd)),
+                selector: x => new { x.EmployeeId, x.OtFormId, x.StartTime, x.EndTime, x.DidEat, x.OtForm.Date, x.OtForm.Status, FormStart = x.OtForm.StartTime });
             // Tracking query on purpose: an edited Completed form has already been taken out of the ledger in memory.
             var ledger = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
                 x => ids.Contains(x.EmployeeId) && x.Year == date.Year && x.Month <= date.Month);
@@ -2274,11 +2304,15 @@ namespace Attendance.Application.Services
             return ids.ToDictionary(id => id, id =>
             {
                 var forms = rowsByEmployee[id]
-                    .Select(x => (x.Date, x.Status, Hours: CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)))
+                    .SelectMany(x => SplitHoursByDay(x.Date, x.FormStart, x.StartTime, x.EndTime, x.DidEat, mealSettings)
+                        .Select(p => (p.Date, x.Status, p.Hours)))
                     .ToList();
-                // Completed rows here are only those dated after `date`, so they are subtracted.
-                var completedLater = forms.Where(x => x.Status == (int)OtFormStatus.Completed).Sum(x => x.Hours);
-                var pending = includePending ? forms.Where(x => x.Status == (int)OtFormStatus.InApproval).ToList() : new();
+                var completedLater = forms
+                    .Where(x => x.Status == (int)OtFormStatus.Completed && x.Date > date && x.Date.Year == date.Year && x.Date.Month == date.Month)
+                    .Sum(x => x.Hours);
+                var pending = includePending
+                    ? forms.Where(x => x.Status == (int)OtFormStatus.InApproval && x.Date <= date && x.Date.Year == date.Year).ToList()
+                    : new();
                 var employeeLedger = ledgerByEmployee[id].ToList();
                 return (
                     employeeLedger.Where(x => x.Month == date.Month).Sum(x => x.TotalHours) - completedLater
@@ -2299,21 +2333,22 @@ namespace Attendance.Application.Services
 
         // Projected accumulation of a batch of employees around targetDate (the date on the form being checked,
         // not today):
-        //   Day   = every valid form of the employee on that date (ledger has no daily figure);
         //   Month = ledger rows of that month + forms still InApproval in that month;
         //   Year  = ledger rows of the year (including the Month = 0 opening balance) + forms still InApproval that year.
         // Completed forms are NOT added again for Month/Year because AccumulateEmployeeHoursAsync already put their
         // hours in the ledger, which is also where imported and hand-edited figures live. A valid form is
         // !IsRemoved && Status != Rejected && !IsDeleted. excludeFormId skips the form being edited so its current
         // rows are not counted against its own new hours.
-        private async Task<Dictionary<int, (decimal Day, decimal Month, decimal Year)>> ComputeAccumulatedHoursBatchAsync(
+        private async Task<AccumulatedByEmployee> ComputeAccumulatedHoursBatchAsync(
             IEnumerable<int> employeeIds, DateOnly targetDate, AttendanceSettingDto mealSettings, int? excludeFormId = null)
         {
             var employeeIdList = employeeIds.Distinct().ToList();
 
+            var spillFrom = new DateOnly(targetDate.Year, 1, 1).AddDays(-1);
+            var yearEnd = new DateOnly(targetDate.Year, 12, 31);
             var rows = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
                 x => employeeIdList.Contains(x.EmployeeId) && !x.IsRemoved && x.OtForm.Status != (int)OtFormStatus.Rejected
-                     && !x.OtForm.IsDeleted && x.OtForm.Date.Year == targetDate.Year
+                     && !x.OtForm.IsDeleted && x.OtForm.Date >= spillFrom && x.OtForm.Date <= yearEnd
                      && (excludeFormId == null || x.OtFormId != excludeFormId.Value),
                 x => x.OtForm);
             var ledgerRows = await _unitOfWork.EmployeeAccumulationHistories.FindAsync(
@@ -2322,23 +2357,31 @@ namespace Attendance.Application.Services
             var rowsByEmployee = rows.ToLookup(x => x.EmployeeId);
             var ledgerByEmployee = ledgerRows.ToLookup(x => x.EmployeeId);
 
-            var result = new Dictionary<int, (decimal Day, decimal Month, decimal Year)>();
+            var result = new AccumulatedByEmployee();
             foreach (var employeeId in employeeIdList)
             {
-                var employeeRows = rowsByEmployee[employeeId].ToList();
-                var pendingRows = employeeRows.Where(x => x.OtForm.Status != (int)OtFormStatus.Completed).ToList();
+                var (_, pendingMonth, pendingYear) = MealTicketCalculator.SumFormRows(targetDate, rowsByEmployee[employeeId], mealSettings);
                 var ledger = ledgerByEmployee[employeeId].ToList();
 
                 result[employeeId] = (
-                    Day: employeeRows.Where(x => x.OtForm.Date == targetDate)
-                        .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)),
-                    Month: ledger.Where(x => x.Month == targetDate.Month).Sum(x => x.TotalHours)
-                        + pendingRows.Where(x => x.OtForm.Date.Month == targetDate.Month)
-                            .Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)),
-                    Year: ledger.Sum(x => x.TotalHours)
-                        + pendingRows.Sum(x => CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings)));
+                    Month: ledger.Where(x => x.Month == targetDate.Month).Sum(x => x.TotalHours) + pendingMonth,
+                    Year: ledger.Sum(x => x.TotalHours) + pendingYear);
             }
             return result;
+        }
+
+        // Every valid form hour falling on `day`, including the after-midnight part of the previous day's forms.
+        private async Task<Dictionary<int, decimal>> ComputeDayHoursAsync(
+            IReadOnlyCollection<int> employeeIds, DateOnly day, AttendanceSettingDto settings, int? excludeFormId)
+        {
+            var previous = day.AddDays(-1);
+            var rows = await _unitOfWork.OtFormEmployees.FindWithIncludesAsync(
+                x => employeeIds.Contains(x.EmployeeId) && !x.IsRemoved && x.OtForm.Status != (int)OtFormStatus.Rejected
+                     && !x.OtForm.IsDeleted && (x.OtForm.Date == day || x.OtForm.Date == previous)
+                     && (excludeFormId == null || x.OtFormId != excludeFormId.Value),
+                x => x.OtForm);
+            return rows.GroupBy(x => x.EmployeeId)
+                .ToDictionary(g => g.Key, g => MealTicketCalculator.SumFormRows(day, g, settings).Day);
         }
 
         // Hard-blocks create/update when an employee's total OT hours in the day, including this form's hours,
@@ -2348,30 +2391,39 @@ namespace Attendance.Application.Services
         // MonthlyOtHourLimit/YearlyOtHourLimit (or the employee's own custom limit) forces the form to TH3 instead,
         // see EnsureOtCaseMatchesRulesAsync. Message wording is mirrored in CreateOtFormPage.tsx.
         private async Task ValidateOtHourLimitsAsync(
-            DateOnly date, Dictionary<int, decimal> newHoursByEmployeeId, AttendanceSettingDto settings, AccumulatedByEmployee accumulated)
+            DateOnly date, HoursByDay newHoursByDay, AttendanceSettingDto settings, int? excludeFormId)
         {
-            if (newHoursByEmployeeId.Count == 0) return;
+            if (newHoursByDay.Count == 0) return;
 
-            var employeesById = (await _unitOfWork.Employees.FindAsync(x => newHoursByEmployeeId.Keys.Contains(x.Id)))
+            var employeesById = (await _unitOfWork.Employees.FindAsync(x => newHoursByDay.Keys.Contains(x.Id)))
                 .ToDictionary(x => x.Id);
 
-            var dailyLimit = await IsNonWorkingDayAsync(date) ? settings.DailyOtHourLimitHoliday : settings.DailyOtHourLimit;
-
             var violations = new List<string>();
-            foreach (var (employeeId, newHours) in newHoursByEmployeeId)
+            foreach (var day in newHoursByDay.Values.SelectMany(p => p).Select(p => p.Date).Distinct().Order())
             {
-                var dayBefore = accumulated.TryGetValue(employeeId, out var acc) ? acc.Day : 0m;
-                var dayAfter = dayBefore + newHours;
-                if (dayAfter > dailyLimit)
+                var dailyLimit = await IsNonWorkingDayAsync(day) ? settings.DailyOtHourLimitHoliday : settings.DailyOtHourLimit;
+                var dayBefore = await ComputeDayHoursAsync(newHoursByDay.Keys, day, settings, excludeFormId);
+                var dayLabel = day == date ? "" : $" {day:dd/MM}";
+
+                foreach (var (employeeId, parts) in newHoursByDay)
                 {
-                    var code = employeesById.GetValueOrDefault(employeeId)?.Code ?? employeeId.ToString();
-                    violations.Add($"Nhân viên mã {code} quá giới hạn OT ngày ({dayAfter:0.##}h > {dailyLimit:0.##}h)");
+                    var newHours = parts.Where(p => p.Date == day).Sum(p => p.Hours);
+                    var dayAfter = dayBefore.GetValueOrDefault(employeeId) + newHours;
+                    if (newHours != 0 && dayAfter > dailyLimit)
+                    {
+                        var code = employeesById.GetValueOrDefault(employeeId)?.Code ?? employeeId.ToString();
+                        violations.Add($"Nhân viên mã {code} quá giới hạn OT ngày{dayLabel} ({dayAfter:0.##}h > {dailyLimit:0.##}h)");
+                    }
                 }
             }
 
             if (violations.Count > 0)
                 throw new DomainException(string.Join("; ", violations) + ". Vui lòng loại khỏi đơn hoặc giảm giờ OT rồi thử lại.");
         }
+
+        // 22:00-00:00 ends exactly at midnight and has no hours on the next day.
+        private async Task<bool> TouchesNonWorkingDayAsync(DateOnly date, TimeOnly start, TimeOnly end) =>
+            await IsNonWorkingDayAsync(date) || (end < start && end != TimeOnly.MinValue && await IsNonWorkingDayAsync(date.AddDays(1)));
 
         // A year with no calendar rows yet falls back to Sundays only, mirroring WorkCalendarService.GetByYearAsync.
         private async Task<bool> IsNonWorkingDayAsync(DateOnly date)
@@ -2388,38 +2440,40 @@ namespace Attendance.Application.Services
 
         // True when any employee's month or year accumulation, including this form's hours, passes
         // MonthlyOtHourLimit/YearlyOtHourLimit (the employee's custom limit wins when set). Such a form must be TH3.
+        // Only hours inside the form's own month/year count; the after-midnight part of a month-end form belongs to the next one.
         private async Task<bool> ExceedsMonthYearLimitAsync(
-            Dictionary<int, decimal> newHoursByEmployeeId, AttendanceSettingDto settings, AccumulatedByEmployee accumulated)
+            DateOnly date, HoursByDay newHoursByDay, AttendanceSettingDto settings, AccumulatedByEmployee accumulated)
         {
-            if (newHoursByEmployeeId.Count == 0) return false;
+            if (newHoursByDay.Count == 0) return false;
 
-            var employeesById = (await _unitOfWork.Employees.FindAsync(x => newHoursByEmployeeId.Keys.Contains(x.Id)))
+            var employeesById = (await _unitOfWork.Employees.FindAsync(x => newHoursByDay.Keys.Contains(x.Id)))
                 .ToDictionary(x => x.Id);
 
-            return newHoursByEmployeeId.Any(kv =>
+            return newHoursByDay.Any(kv =>
             {
-                var (_, monthBefore, yearBefore) = accumulated.TryGetValue(kv.Key, out var acc) ? acc : (0m, 0m, 0m);
+                var (monthBefore, yearBefore) = accumulated.TryGetValue(kv.Key, out var acc) ? acc : (0m, 0m);
                 var employee = employeesById.GetValueOrDefault(kv.Key);
                 var monthlyLimit = employee?.CustomMonthlyOtHourLimit ?? settings.MonthlyOtHourLimit;
                 var yearlyLimit = employee?.CustomYearlyOtHourLimit ?? settings.YearlyOtHourLimit;
-                return monthBefore + kv.Value > monthlyLimit || yearBefore + kv.Value > yearlyLimit;
+                var inYear = kv.Value.Where(p => p.Date.Year == date.Year).ToList();
+                return monthBefore + inYear.Where(p => p.Date.Month == date.Month).Sum(p => p.Hours) > monthlyLimit
+                    || yearBefore + inYear.Sum(p => p.Hours) > yearlyLimit;
             });
         }
 
-        // The OT case is derived, not chosen: TH3 when ExceedsMonthYearLimitAsync, otherwise TH2 on a non-working
-        // day and TH1 on a working day. The daily total never forces TH3. Rejects a request whose OtCaseId differs
-        // from the derived case. Returns the accumulation it computed so the create flow reuses it.
-        private async Task<AccumulatedByEmployee> EnsureOtCaseMatchesRulesAsync(CreateOtFormDto request, bool forceMeal, OtCase requestedCase)
+        // The OT case is derived, not chosen: TH3 when ExceedsMonthYearLimitAsync, otherwise TH2 when the form touches a
+        // non-working day and TH1 if not. The daily total never forces TH3. Rejects a request whose OtCaseId differs.
+        private async Task EnsureOtCaseMatchesRulesAsync(CreateOtFormDto request, bool forceMeal, OtCase requestedCase)
         {
             var settings = await _attendanceSettingService.GetAsync();
 
-            var newHoursByEmployeeId = request.Employees.ToDictionary(
+            var newHoursByDay = request.Employees.ToDictionary(
                 x => x.EmployeeId,
-                x => CalculateOtHours(x.StartTime ?? request.StartTime, x.EndTime, ResolveDidEat(forceMeal, x.DidEat), settings));
-            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByEmployeeId.Keys, request.Date, settings);
-            var exceedsTh3 = await ExceedsMonthYearLimitAsync(newHoursByEmployeeId, settings, accumulated);
+                x => SplitHoursByDay(request.Date, request.StartTime, x.StartTime ?? request.StartTime, x.EndTime, ResolveDidEat(forceMeal, x.DidEat), settings));
+            var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByDay.Keys, request.Date, settings);
+            var exceedsTh3 = await ExceedsMonthYearLimitAsync(request.Date, newHoursByDay, settings, accumulated);
 
-            var expectedCode = exceedsTh3 ? "TH3" : (await IsNonWorkingDayAsync(request.Date) ? "TH2" : "TH1");
+            var expectedCode = exceedsTh3 ? "TH3" : (await TouchesNonWorkingDayAsync(request.Date, request.StartTime, request.EndTime) ? "TH2" : "TH1");
             if (!string.Equals(requestedCase.Code, expectedCode, StringComparison.OrdinalIgnoreCase))
             {
                 var reason = exceedsTh3
@@ -2427,8 +2481,179 @@ namespace Attendance.Application.Services
                     : $"ngày {request.Date:dd/MM/yyyy} là {(expectedCode == "TH2" ? "ngày nghỉ" : "ngày làm việc")}";
                 throw new DomainException($"Trường hợp OT phải là {expectedCode} vì {reason}.");
             }
+        }
 
-            return accumulated;
+        // === Paper-signed forms ===
+        // A form stuck at a Factory Manager-or-higher step that nobody holds can close on a scanned paper copy, after Admin review.
+
+        private const int MaxPaperScanBytes = 10 * 1024 * 1024;
+
+        private static bool IsPaperScanStep(OtFormApprovalStep? step) =>
+            step is { Candidates.Count: 0, TerminalLevelSnapshot: >= (int)JobTitleTerminalLevel.WorkshopManager };
+
+        private async Task<OtFormApprovalStep?> GetPaperScanStepAsync(int otFormId)
+        {
+            var steps = await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
+                x => x.OtFormId == otFormId && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending, x => x.Candidates);
+            var current = steps.MinBy(x => x.StepOrder);
+            return IsPaperScanStep(current) ? current : null;
+        }
+
+        // The extension is user input, so the type comes from the file's own signature.
+        private static string DetectPaperScanContentType(byte[] content)
+        {
+            if (content.Length >= 4 && content[0] == 0x25 && content[1] == 0x50 && content[2] == 0x44 && content[3] == 0x46) return "application/pdf";
+            if (content.Length >= 4 && content[0] == 0x89 && content[1] == 0x50 && content[2] == 0x4E && content[3] == 0x47) return "image/png";
+            if (content.Length >= 3 && content[0] == 0xFF && content[1] == 0xD8 && content[2] == 0xFF) return "image/jpeg";
+            throw new DomainException("Bản scan phải là file PDF, JPG hoặc PNG.");
+        }
+
+        public async Task UploadPaperScanAsync(int id, string userName, string? fullName, string fileName, byte[] content)
+        {
+            if (content.Length == 0 || content.Length > MaxPaperScanBytes)
+                throw new DomainException("Bản scan phải có dung lượng từ 1 byte đến 10 MB.");
+            var contentType = DetectPaperScanContentType(content);
+
+            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+            otForm.OrThrowNotFound("Đơn tăng ca", id);
+            if (!string.Equals(otForm!.CreatedByUserName, userName, StringComparison.OrdinalIgnoreCase))
+                throw new DomainException("Chỉ người tạo đơn mới được gửi bản scan.");
+            if (otForm.Status != (int)OtFormStatus.InApproval || await GetPaperScanStepAsync(id) == null)
+                throw new DomainException("Chỉ gửi được bản scan khi đơn đang chờ cấp Trưởng xưởng trở lên mà chưa có người đảm nhiệm.");
+
+            var scan = await _unitOfWork.OtFormPaperScans.FirstOrDefaultAsync(x => x.OtFormId == id);
+            var isNew = scan == null;
+            scan ??= new OtFormPaperScan { OtFormId = id };
+            scan.FileName = Path.GetFileName(fileName);
+            scan.ContentType = contentType;
+            scan.FileContent = content;
+            scan.UploadedByUserName = userName;
+            scan.UploadedByFullName = fullName;
+            scan.UploadedAt = TimeHelper.GetCurrentUtcTime();
+            scan.Status = (int)OtFormPaperScanStatus.Pending;
+            scan.ReviewedByUserName = null;
+            scan.ReviewedByFullName = null;
+            scan.ReviewedAt = null;
+            scan.ReviewComment = null;
+            if (isNew) await _unitOfWork.OtFormPaperScans.AddAsync(scan);
+            else _unitOfWork.OtFormPaperScans.Update(scan);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task<(byte[] Content, string ContentType, string FileName)> GetPaperScanFileAsync(int id, string userName, bool isAdmin)
+        {
+            var scan = await _unitOfWork.OtFormPaperScans.FirstOrDefaultAsync(x => x.OtFormId == id);
+            scan.OrThrowNotFound("Bản scan", id);
+            var creator = (await _unitOfWork.OtForms.SelectAsync(x => x.Id == id, x => x.CreatedByUserName)).FirstOrDefault();
+            if (!isAdmin && !string.Equals(creator, userName, StringComparison.OrdinalIgnoreCase))
+                throw new DomainException("Chỉ người tạo đơn hoặc Admin mới xem được bản scan.");
+            return (scan!.FileContent, scan.ContentType, scan.FileName);
+        }
+
+        // ponytail: capped list without paging, this queue is only needed until those approval levels have accounts.
+        public async Task<List<OtFormPaperScanListItemDto>> GetPaperScansAsync(bool isAdmin, int? status)
+        {
+            EnsureAdminForPaperScan(isAdmin);
+            var items = await _unitOfWork.OtFormPaperScans.SelectAsync(
+                predicate: x => !x.OtForm.IsDeleted && (status == null || x.Status == status),
+                selector: x => new OtFormPaperScanListItemDto
+                {
+                    OtFormId = x.OtFormId,
+                    Date = x.OtForm.Date,
+                    StartTime = x.OtForm.StartTime,
+                    EndTime = x.OtForm.EndTime,
+                    OtCaseCode = x.OtForm.OtCase.Code,
+                    DepartmentNameVn = x.OtForm.Department.DepartmentNameVn,
+                    GroupNameVn = x.OtForm.Group != null ? x.OtForm.Group.GroupNameVn : null,
+                    FileName = x.FileName,
+                    ContentType = x.ContentType,
+                    UploadedByUserName = x.UploadedByUserName,
+                    UploadedByFullName = x.UploadedByFullName,
+                    UploadedAt = x.UploadedAt,
+                    Status = x.Status,
+                    ReviewedByFullName = x.ReviewedByFullName ?? x.ReviewedByUserName,
+                    ReviewedAt = x.ReviewedAt,
+                    ReviewComment = x.ReviewComment
+                });
+            return items.OrderByDescending(x => x.UploadedAt).Take(200).ToList();
+        }
+
+        private static void EnsureAdminForPaperScan(bool isAdmin)
+        {
+            if (!isAdmin) throw new DomainException("Chỉ Admin mới được duyệt bản scan.");
+        }
+
+        private async Task<(OtForm Form, OtFormPaperScan Scan, string Comment)> LoadPaperScanForReviewAsync(
+            int id, string userName, bool isAdmin, ReviewOtFormPaperScanDto request)
+        {
+            EnsureAdminForPaperScan(isAdmin);
+            var comment = request.Comment?.Trim();
+            if (string.IsNullOrEmpty(comment)) throw new DomainException("Vui lòng nhập lý do.");
+
+            var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+            otForm.OrThrowNotFound("Đơn tăng ca", id);
+            var scan = await _unitOfWork.OtFormPaperScans.FirstOrDefaultAsync(x => x.OtFormId == id);
+            scan.OrThrowNotFound("Bản scan", id);
+            if (scan!.Status != (int)OtFormPaperScanStatus.Pending)
+                throw new DomainException("Bản scan này đã được xử lý.");
+
+            await _secondaryPasswordService.VerifyAsync(userName, request.SecondaryPassword);
+            return (otForm!, scan, comment);
+        }
+
+        private static void MarkPaperScanReviewed(OtFormPaperScan scan, OtFormPaperScanStatus status, string userName, string? fullName, string comment)
+        {
+            scan.Status = (int)status;
+            scan.ReviewedByUserName = userName;
+            scan.ReviewedByFullName = fullName;
+            scan.ReviewedAt = TimeHelper.GetCurrentUtcTime();
+            scan.ReviewComment = comment;
+        }
+
+        // The paper carries every remaining signature, so all open steps close together and the form completes.
+        public async Task ApprovePaperScanAsync(int id, string userName, string? fullName, bool isAdmin, ReviewOtFormPaperScanDto request)
+        {
+            var (otForm, scan, comment) = await LoadPaperScanForReviewAsync(id, userName, isAdmin, request);
+            if (otForm.Status != (int)OtFormStatus.InApproval || await GetPaperScanStepAsync(id) == null)
+                throw new DomainException("Đơn không còn chờ ở cấp chưa có người đảm nhiệm, không thể duyệt bản scan.");
+
+            var pendingSteps = await _unitOfWork.OtFormApprovalSteps.FindAsync(
+                x => x.OtFormId == id && !x.IsDeleted && x.Status == (int)OtFormApprovalStepStatus.Pending);
+            foreach (var step in pendingSteps)
+            {
+                step.Status = (int)OtFormApprovalStepStatus.Approved;
+                _unitOfWork.OtFormApprovalSteps.Update(step);
+                await _unitOfWork.OtFormApprovalHistories.AddAsync(new OtFormApprovalHistory
+                {
+                    OtFormId = id,
+                    OtFormApprovalStepId = step.Id,
+                    ApproverUserName = userName,
+                    ApproverFullName = fullName,
+                    Action = (int)ApprovalAction.Approved,
+                    Comment = comment,
+                    IsPaperApproval = true,
+                    ActionAt = TimeHelper.GetCurrentUtcTime()
+                });
+            }
+
+            MarkPaperScanReviewed(scan, OtFormPaperScanStatus.Approved, userName, fullName, comment);
+            _unitOfWork.OtFormPaperScans.Update(scan);
+
+            otForm.Status = (int)OtFormStatus.Completed;
+            _unitOfWork.OtForms.Update(otForm);
+            var activeRows = await _unitOfWork.OtFormEmployees.FindAsync(x => x.OtFormId == id && !x.IsRemoved);
+            await AccumulateEmployeeHoursAsync(otForm, activeRows);
+
+            await _unitOfWork.SaveChangesAsync();
+            QueueApprovedNotification(id);
+        }
+
+        public async Task RejectPaperScanAsync(int id, string userName, string? fullName, bool isAdmin, ReviewOtFormPaperScanDto request)
+        {
+            var (_, scan, comment) = await LoadPaperScanForReviewAsync(id, userName, isAdmin, request);
+            MarkPaperScanReviewed(scan, OtFormPaperScanStatus.Rejected, userName, fullName, comment);
+            _unitOfWork.OtFormPaperScans.Update(scan);
+            await _unitOfWork.SaveChangesAsync();
         }
 
         // === Batch forms ("Don tong") ===

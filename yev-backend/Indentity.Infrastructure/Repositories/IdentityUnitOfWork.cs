@@ -19,6 +19,7 @@ namespace Identity.Infrastructure.Repositories
             typeof(LoginUserIP),
             typeof(LoginQrCode),
             typeof(LoginQrLog),
+            typeof(LocalLoginAccount),
         };
 
         private readonly IAuthSnapshotCache _authSnapshotCache;
@@ -35,7 +36,9 @@ namespace Identity.Infrastructure.Repositories
             ILoginQrCodeRepository loginQrCodes,
             ILoginQrLogRepository loginQrLogs,
             IUserEmailRepository userEmails,
-            IUserEmailModuleRepository userEmailModules) : base(dbContext)
+            IUserEmailModuleRepository userEmailModules,
+            ILocalAccountPrefixRepository localAccountPrefixes,
+            ILocalLoginAccountRepository localLoginAccounts) : base(dbContext)
         {
             _authSnapshotCache = authSnapshotCache;
             Users = users;
@@ -48,6 +51,8 @@ namespace Identity.Infrastructure.Repositories
             LoginQrLogs = loginQrLogs;
             UserEmails = userEmails;
             UserEmailModules = userEmailModules;
+            LocalAccountPrefixes = localAccountPrefixes;
+            LocalLoginAccounts = localLoginAccounts;
         }
 
         public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -71,5 +76,7 @@ namespace Identity.Infrastructure.Repositories
         public ILoginQrLogRepository LoginQrLogs { get; }
         public IUserEmailRepository UserEmails { get; }
         public IUserEmailModuleRepository UserEmailModules { get; }
+        public ILocalAccountPrefixRepository LocalAccountPrefixes { get; }
+        public ILocalLoginAccountRepository LocalLoginAccounts { get; }
     }
 }

@@ -40,6 +40,19 @@ export function computeActualHours(startTime: string, endTime: string, didEat: b
     return didEat ? raw - setting.mealBreakDeductionHours : raw;
 }
 
+// Mirrors BE MealTicketCalculator.SplitHoursByDay: the meal break comes off the longer part, the start day on a tie.
+export function splitHoursByDay(formStart: string, startTime: string, endTime: string, didEat: boolean, setting: AttendanceSettingDto) {
+    const actual = computeActualHours(startTime, endTime, didEat, setting);
+    if (toMinutes(endTime) >= toMinutes(startTime)) {
+        return toMinutes(startTime) < toMinutes(formStart) ? { firstDay: 0, nextDay: actual } : { firstDay: actual, nextDay: 0 };
+    }
+    const raw = computeRawHours(startTime, endTime);
+    const after = toMinutes(endTime) / 60;
+    const before = raw - after;
+    const deduction = raw - actual;
+    return before >= after ? { firstDay: before - deduction, nextDay: after } : { firstDay: before, nextDay: after - deduction };
+}
+
 export function computeMealTicketType(startTime: string, endTime: string, didEat: boolean, setting: AttendanceSettingDto): number {
     if (isEarlyMealWindowOt(startTime, endTime, setting)) return MEAL_TICKET_SECONDARY;
 

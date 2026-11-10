@@ -23,7 +23,9 @@ Chữ ký là `approvalHistories[].signatureImage`, lọc theo `approvalLevel`. 
 | Tổng giám đốc / 社長 | `approvalLevel == 3` (GeneralDirector) — chỉ có khi đơn đã đi tới cấp này |
 | Trưởng xưởng / 工場長 | `approvalLevel == 2` (WorkshopManager) |
 | Trưởng phòng / 部長 | `approvalLevel == 1` (DepartmentManager) |
-| Người đề nghị / 申請者 | Các bước trung gian `terminalLevelSnapshot == 0` + `requiresSignatureSnapshot` (1–2 bước). 1 bước → cả ô; 2 bước → chia đôi, phiếu xếp **phải → trái từ cấp thấp lên cao**: bước sau (cấp cao) ô trái, bước đầu (cấp thấp) ô phải. 0 bước → người tạo tự ký (`creatorSignatureImage`) |
+| Người đề nghị / 申請者 | Các bước trung gian `terminalLevelSnapshot == 0` + `requiresSignatureSnapshot` (1–2 bước). 1 bước → cả ô; 2 bước → chia đôi, phiếu xếp **phải → trái từ cấp thấp lên cao**: bước sau (cấp cao) ô trái, bước đầu (cấp thấp) ô phải. 0 bước → người tạo tự ký (`creatorSignatureImage`). Đơn theo Nhóm có `creatorSignatureImage` và còn 1 bước → chia đôi: người tạo ô phải, bước đó ô trái |
+
+Bước có `isPaperApproval` in chữ "Đã ký giấy" + "Xác nhận bởi <Admin>" + thời điểm thay cho ảnh chữ ký.
 
 ## 2. Khối thông tin chính
 

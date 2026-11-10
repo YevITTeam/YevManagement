@@ -7,7 +7,9 @@ namespace Identity.Application.Authentication
         string? FullName,
         string? Email,
         IReadOnlyList<string> Roles,
-        IReadOnlyList<string> Permissions);
+        IReadOnlyList<string> Permissions,
+        bool IsLocalAccount = false,
+        bool MustChangePassword = false);
 
     public interface IAuthSnapshotCache
     {

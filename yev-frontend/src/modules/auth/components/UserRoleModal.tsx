@@ -1,14 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Mail, Pencil, Plus, Printer, QrCode, Search, SquarePen, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, KeyRound, Mail, Pencil, Plus, Printer, QrCode, Search, SquarePen, Tags, Trash2, UserPlus } from "lucide-react";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import { LoginQrApi } from "@/modules/auth/api/login-qr.api";
 import { openLabelWindow, printLoginQrLabels } from "@/modules/auth/lib/loginQrLabelPrint";
 import type { UserDto, RoleDto, LoginQrStatusDto } from "@/modules/auth/types/auth.dto";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 import RoleSelectModal from "./RoleSelectModal";
 import CreateUserDialog from "./CreateUserDialog";
+import CreateLocalAccountDialog from "./CreateLocalAccountDialog";
+import LocalAccountPrefixDialog from "./LocalAccountPrefixDialog";
+import ResetLocalPasswordDialog from "./ResetLocalPasswordDialog";
 import EditUserDialog from "./EditUserDialog";
 import LoginQrDialog from "./LoginQrDialog";
 import UserEmailDialog from "./UserEmailDialog";
@@ -28,6 +32,7 @@ const PAGE_SIZE = 15;
 
 export default function UserRoleModal({ isOpen, onClose }: Props) {
     const { user: currentUser } = useAuth();
+    const tLocal = useTranslations("LocalAccount");
     const [users, setUsers] = useState<UserDto[]>([]);
     const [roles, setRoles] = useState<RoleDto[]>([]);
     const [selectedRolesMap, setSelectedRolesMap] = useState<Record<number, number[]>>({});
@@ -46,10 +51,14 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [isPrintConfirmOpen, setIsPrintConfirmOpen] = useState(false);
     const [isPrintingLabels, setIsPrintingLabels] = useState(false);
+    const [isPrefixDialogOpen, setIsPrefixDialogOpen] = useState(false);
+    const [isCreateLocalOpen, setIsCreateLocalOpen] = useState(false);
+    const [resetPasswordUser, setResetPasswordUser] = useState<UserDto | null>(null);
 
     // One permission covers create/revoke/log of YEV Scan login QR codes.
     const canManageLoginQr = hasPermission(currentUser, "Identity.LoginQr.Manage");
     const canManageUserEmail = hasPermission(currentUser, "Identity.UserEmail.Manage");
+    const canManageLocalAccount = hasPermission(currentUser, "Identity.LocalAccount.Manage");
 
     const fetchQrStatuses = useCallback(async () => {
         if (!canManageLoginQr) return;
@@ -228,12 +237,7 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
         <div className="space-y-4">
             {/* Header Section */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền người dùng</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        Cập nhật vai trò cho từng tài khoản hệ thống.
-                    </p>
-                </div>
+                <h1 className="text-2xl font-semibold text-[#191c1e]">Phân quyền người dùng</h1>
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="rounded-full border border-[#e0e3e5] bg-white px-3 py-1 text-xs font-semibold text-[#5e3f3a]">
                         <span className="text-[#191c1e]">{users.length}</span> người dùng
@@ -248,6 +252,22 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                         >
                             <Printer className="h-4 w-4" /> In QR ({selectedIds.size})
                         </button>
+                    )}
+                    {canManageLocalAccount && (
+                        <>
+                            <button
+                                onClick={() => setIsPrefixDialogOpen(true)}
+                                className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            >
+                                <Tags className="h-4 w-4" /> {tLocal("prefixes")}
+                            </button>
+                            <button
+                                onClick={() => setIsCreateLocalOpen(true)}
+                                className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            >
+                                <UserPlus className="h-4 w-4" /> {tLocal("createButton")}
+                            </button>
+                        </>
                     )}
                     {canCreateUser && (
                         <button
@@ -411,6 +431,16 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                                         </button>
 
                                         <div className="flex items-center justify-end gap-1">
+                                            {canManageLocalAccount && user.isLocalAccount && (
+                                                <button
+                                                    onClick={() => setResetPasswordUser(user)}
+                                                    title={tLocal("resetTitle")}
+                                                    aria-label={tLocal("resetTitle")}
+                                                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                >
+                                                    <KeyRound className="h-4 w-4" />
+                                                </button>
+                                            )}
                                             {canManageUserEmail && (
                                                 <button
                                                     onClick={() => setEmailUser(user)}
@@ -513,6 +543,23 @@ export default function UserRoleModal({ isOpen, onClose }: Props) {
                     void fetchData();
                 }}
             />
+
+            {isPrefixDialogOpen && <LocalAccountPrefixDialog onClose={() => setIsPrefixDialogOpen(false)} />}
+
+            {isCreateLocalOpen && (
+                <CreateLocalAccountDialog
+                    roles={roles}
+                    onClose={() => setIsCreateLocalOpen(false)}
+                    onCreated={() => {
+                        setIsCreateLocalOpen(false);
+                        void fetchData();
+                    }}
+                />
+            )}
+
+            {resetPasswordUser && (
+                <ResetLocalPasswordDialog user={resetPasswordUser} onClose={() => setResetPasswordUser(null)} />
+            )}
 
             <EditUserDialog
                 isOpen={editingUser !== null}

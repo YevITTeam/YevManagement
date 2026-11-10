@@ -44,7 +44,8 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useDragScroll } from "@/modules/common/hooks/useDragScroll";
-import { MEAL_TICKET_MAIN, MEAL_TICKET_NONE, MEAL_TICKET_SECONDARY, computeActualHours, computeMealTicketType, isEarlyMealWindowOt } from "@/modules/attendance/lib/mealTicket";
+import { isOvernight } from "@/modules/attendance/lib/time";
+import { MEAL_TICKET_MAIN, MEAL_TICKET_NONE, MEAL_TICKET_SECONDARY, computeActualHours, computeMealTicketType, isEarlyMealWindowOt, splitHoursByDay } from "@/modules/attendance/lib/mealTicket";
 import { MealTicketTypeBadge } from "./MealTicketTypeBadge";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
@@ -66,13 +67,26 @@ function getTodayStr(offsetDays = 0): string {
     return `${year}-${month}-${day}`;
 }
 
-// No overnight shifts: end must be after start on the same day (BE compares TimeOnly without dates).
-// Returns 0 when invalid; isTimeRangeInvalid shows the error.
+const wrapMinutes = (minutes: number) => (minutes + 24 * 60) % (24 * 60);
+
+// An end before the start means the next day; 0 only when they are equal (isTimeRangeInvalid shows the error).
 function computeTotalHour(startTime: string, endTime: string): number {
     if (!startTime || !endTime) return 0;
-    const diffMinutes = toMinutes(endTime) - toMinutes(startTime);
-    if (diffMinutes <= 0) return 0;
-    return Math.round((diffMinutes / 60) * 100) / 100;
+    return Math.round((wrapMinutes(toMinutes(endTime) - toMinutes(startTime)) / 60) * 100) / 100;
+}
+
+// Offsets from the form's start, so overnight forms need no special case (mirrors BE EnsureEmployeeTimeWithinForm).
+function isEmployeeTimeOutOfRange(formStart: string, formEnd: string, start: string, end: string): boolean {
+    const offset = wrapMinutes(toMinutes(start) - toMinutes(formStart));
+    const formLength = wrapMinutes(toMinutes(formEnd) - toMinutes(formStart));
+    const length = wrapMinutes(toMinutes(end) - toMinutes(start));
+    return offset >= formLength || length === 0 || offset + length > formLength;
+}
+
+function addOneDay(date: string): string {
+    const next = new Date(`${date}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    return next.toISOString().slice(0, 10);
 }
 
 type AccumulationKind = "Daily" | "Monthly" | "Yearly";
@@ -267,19 +281,28 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // the OT case becomes TH2 and the daily OT limit switches to the holiday limit.
     const calendarYear = date ? Number(date.slice(0, 4)) : null;
     const [calendarDays, setCalendarDays] = useState<WorkCalendarDayDto[]>([]);
+    const isOvernightForm = isOvernight(startTime, endTime);
+    const nextDate = date ? addOneDay(date) : "";
+    const spansNewYear = isOvernightForm && Boolean(date) && nextDate.slice(0, 4) !== date.slice(0, 4);
     useFetchEffect(
-        () => (calendarYear ? WorkCalendarApi.getByYear(calendarYear) : Promise.resolve([])),
-        [calendarYear],
+        async () => {
+            if (!calendarYear) return [];
+            const years = await Promise.all((spansNewYear ? [calendarYear, calendarYear + 1] : [calendarYear]).map((year) => WorkCalendarApi.getByYear(year)));
+            return years.flat();
+        },
+        [calendarYear, spansNewYear],
         setCalendarDays,
         t("workCalendarLoadError")
     );
     // A year with no calendar rows falls back to Sundays, same as the BE.
-    const isNonWorkingDay =
-        Boolean(date) &&
-        (calendarDays.length > 0
-            ? calendarDays.some((day) => day.date === date)
-            : new Date(`${date}T00:00:00Z`).getUTCDay() === 0);
-    const baseOtCaseCode = date ? (isNonWorkingDay ? "TH2" : "TH1") : null;
+    const isNonWorkingDate = (value: string) =>
+        calendarDays.some((day) => day.date.slice(0, 4) === value.slice(0, 4))
+            ? calendarDays.some((day) => day.date === value)
+            : new Date(`${value}T00:00:00Z`).getUTCDay() === 0;
+    const isNonWorkingDay = Boolean(date) && isNonWorkingDate(date);
+    // 22:00-00:00 ends exactly at midnight and has no hours on the next day.
+    const touchesNonWorkingDay = isNonWorkingDay || (isOvernightForm && endTime !== "00:00" && isNonWorkingDate(nextDate));
+    const baseOtCaseCode = date ? (touchesNonWorkingDay ? "TH2" : "TH1") : null;
     const baseOtCaseId = isEditMode ? loadedOtCaseId : (otCases.find((c) => c.code === baseOtCaseCode)?.id ?? null);
 
     // Hide the employee list until the core fields are filled so users fill the form top-down. groupId is
@@ -355,13 +378,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         return employeeIds.some((employeeId) => {
             const accumulation = accumulationById.get(employeeId);
             if (!accumulation) return false;
-            const hours = computeActualHours(
+            const { firstDay, nextDay } = splitHoursByDay(
+                startTime,
                 employeeOverrides[employeeId]?.startTime || startTime,
                 employeeOverrides[employeeId]?.endTime || endTime,
                 didEatOf(employeeId),
                 setting
             );
-            return accumulation.month + hours > accumulation.monthLimit || accumulation.year + hours > accumulation.yearLimit;
+            const monthHours = firstDay + (nextDate.slice(0, 7) === date.slice(0, 7) ? nextDay : 0);
+            const yearHours = firstDay + (nextDate.slice(0, 4) === date.slice(0, 4) ? nextDay : 0);
+            return accumulation.month + monthHours > accumulation.monthLimit || accumulation.year + yearHours > accumulation.yearLimit;
         });
     };
     const otCaseCodeFor = (employeeIds: number[]) => (exceedsTh3For(employeeIds) ? "TH3" : baseOtCaseCode);
@@ -700,7 +726,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [groupIds, isEditMode, date]);
 
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
-    const isTimeRangeInvalid = Boolean(startTime && endTime && toMinutes(endTime) <= toMinutes(startTime));
+    const isTimeRangeInvalid = Boolean(startTime && endTime && toMinutes(endTime) === toMinutes(startTime));
 
     // Lists every distinct Line/Team/shift group on the form, since people added later may differ from the creator's.
     const editProductionSummary = useMemo(() => {
@@ -991,7 +1017,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             return;
         }
         if ((!isEditMode || isOfficeEdit) && isTimeRangeInvalid) {
-            toast.error(t("endTimeBeforeStartError"));
+            toast.error(t("endTimeEqualsStartError"));
             return;
         }
         if (hasSecondaryPassword === false) {
@@ -1003,18 +1029,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             return;
         }
 
-        // No overnight shifts: each person's end time lies within the form's time range on the same day.
-        const orderStartMinutes = toMinutes(`${startTime}:00`);
-        const orderEndMinutes = toMinutes(`${endTime}:00`);
         for (const employeeId of selectedEmployeeIds) {
-            const employeeStartMinutes = toMinutes(`${employeeOverrides[employeeId]?.startTime || startTime}:00`);
-            const employeeEndTime = employeeOverrides[employeeId]?.endTime || endTime;
-            const employeeEndMinutes = toMinutes(`${employeeEndTime}:00`);
-            if (
-                employeeStartMinutes < orderStartMinutes ||
-                employeeEndMinutes <= employeeStartMinutes ||
-                employeeEndMinutes > orderEndMinutes
-            ) {
+            if (isEmployeeTimeOutOfRange(startTime, endTime, employeeOverrides[employeeId]?.startTime || startTime, employeeOverrides[employeeId]?.endTime || endTime)) {
                 const code = isEditMode
                     ? (editEmployees.find((e) => e.employeeId === employeeId)?.employeeCode ??
                       employeeAddedMeta[employeeId]?.employeeCode)
@@ -1282,13 +1298,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         <span className="rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-semibold tabular-nums text-[#5e3f3a]">
                                             {totalHour}h
                                         </span>
+                                        {isOvernightForm && <span className="ml-1.5 whitespace-nowrap text-xs font-semibold text-[#9a5b00]">{t("nextDayLabel")}</span>}
                                     </span>
                                 </div>
                             </div>
                             {isTimeRangeInvalid && (
                                 <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#930006]">
                                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                    {t("endTimeBeforeStartError")}
+                                    {t("endTimeEqualsStartError")}
                                 </p>
                             )}
                         </div>
@@ -1311,7 +1328,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 {t("fieldOtCase")}<RequiredMark />
                                 {!isEditMode && otCaseCode && (
                                     <InfoTooltip
-                                        text={t(exceedsTh3 ? "otCaseAutoHintTh3" : isNonWorkingDay ? "otCaseAutoHintNonWorking" : "otCaseAutoHintWorking")}
+                                        text={t(exceedsTh3 ? "otCaseAutoHintTh3" : touchesNonWorkingDay ? "otCaseAutoHintNonWorking" : "otCaseAutoHintWorking")}
                                     />
                                 )}
                                 {isOfficeEdit && <InfoTooltip text={t("otCaseAutoHintEdit")} />}
@@ -1898,14 +1915,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 const monthLimit = item.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit;
                                                 const yearLimit = item.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit;
                                                 const extraHours = checked && currentStartTime && currentEndTime && !isTimeRangeInvalid ? computeActualHours(currentStartTime, currentEndTime, true, setting) : 0;
-                                                const overDay = item.projectedDayToDate + extraHours > dailyOtHourLimit;
+                                                const dayHours = extraHours && splitHoursByDay(startTime, currentStartTime, currentEndTime, true, setting).firstDay;
+                                                const overDay = item.projectedDayToDate + dayHours > dailyOtHourLimit;
                                                 const overTh3 = item.projectedMonthToDate + extraHours > monthLimit || item.projectedYearToDate + extraHours > yearLimit;
                                                 const isTimeOutOfRange =
                                                     checked &&
                                                     Boolean(startTime && endTime && currentStartTime && currentEndTime) &&
-                                                    (toMinutes(`${currentStartTime}:00`) < toMinutes(`${startTime}:00`) ||
-                                                        toMinutes(`${currentEndTime}:00`) <= toMinutes(`${currentStartTime}:00`) ||
-                                                        toMinutes(`${currentEndTime}:00`) > toMinutes(`${endTime}:00`));
+                                                    isEmployeeTimeOutOfRange(startTime, endTime, currentStartTime, currentEndTime);
                                                 return (
                                                     <tr
                                                         key={item.employeeId}
@@ -1941,7 +1957,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                             )}
                                                         </td>
                                                         <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.congDoan || "—"}</td>
-                                                        <AccumulationCell t={t} code={item.employeeCode} kind="Daily" hours={item.projectedDayToDate} limit={dailyOtHourLimit} extraHours={extraHours} />
+                                                        <AccumulationCell t={t} code={item.employeeCode} kind="Daily" hours={item.projectedDayToDate} limit={dailyOtHourLimit} extraHours={dayHours} />
                                                         <AccumulationCell t={t} code={item.employeeCode} kind="Monthly" hours={item.projectedMonthToDate} limit={monthLimit} extraHours={extraHours} />
                                                         <AccumulationCell t={t} code={item.employeeCode} kind="Yearly" hours={item.projectedYearToDate} limit={yearLimit} extraHours={extraHours} />
                                                         <td className="px-3 py-2 align-top">
@@ -2092,14 +2108,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         const monthLimit = employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit;
                                         const yearLimit = employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit;
                                         const extraHours = checked && currentStartTime && currentEndTime && !isTimeRangeInvalid ? computeActualHours(currentStartTime, currentEndTime, currentDidEat, setting) : 0;
-                                        const overDay = employee.projectedDayToDate + extraHours > dailyOtHourLimit;
+                                        const dayHours = extraHours && splitHoursByDay(startTime, currentStartTime, currentEndTime, currentDidEat, setting).firstDay;
+                                        const overDay = employee.projectedDayToDate + dayHours > dailyOtHourLimit;
                                         const overTh3 = employee.projectedMonthToDate + extraHours > monthLimit || employee.projectedYearToDate + extraHours > yearLimit;
                                         const isTimeOutOfRange =
                                             checked &&
                                             Boolean(startTime && endTime && currentStartTime && currentEndTime) &&
-                                            (toMinutes(`${currentStartTime}:00`) < toMinutes(`${startTime}:00`) ||
-                                                toMinutes(`${currentEndTime}:00`) <= toMinutes(`${currentStartTime}:00`) ||
-                                                toMinutes(`${currentEndTime}:00`) > toMinutes(`${endTime}:00`));
+                                            isEmployeeTimeOutOfRange(startTime, endTime, currentStartTime, currentEndTime);
                                         return (
                                             <tr
                                                 key={employee.id}
@@ -2129,7 +2144,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         </div>
                                                     )}
                                                 </td>
-                                                <AccumulationCell t={t} code={employee.code} kind="Daily" hours={employee.projectedDayToDate} limit={dailyOtHourLimit} extraHours={extraHours} />
+                                                <AccumulationCell t={t} code={employee.code} kind="Daily" hours={employee.projectedDayToDate} limit={dailyOtHourLimit} extraHours={dayHours} />
                                                 <AccumulationCell t={t} code={employee.code} kind="Monthly" hours={employee.projectedMonthToDate} limit={monthLimit} extraHours={extraHours} />
                                                 <AccumulationCell t={t} code={employee.code} kind="Yearly" hours={employee.projectedYearToDate} limit={yearLimit} extraHours={extraHours} />
                                                 <td className="px-3 py-2 align-top">

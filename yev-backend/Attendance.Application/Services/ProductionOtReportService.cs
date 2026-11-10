@@ -180,7 +180,7 @@ namespace Attendance.Application.Services
                         first.FirstName,
                         CongDoan = g.Select(x => x.CongDoanSnapshot).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? UnknownLabel,
                         StartTime = g.Min(x => x.StartTime),
-                        EndTime = g.Max(x => x.EndTime),
+                        EndTime = MealTicketCalculator.LatestEnd(g.Select(x => (x.StartTime, x.EndTime))),
                         Reason = string.Join("; ", g.Select(x => x.ReasonNameVn).Distinct()),
                         ReasonJp = string.Join("; ", g.Select(x => x.ReasonNameJp).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()),
                         SubReason = string.Join("; ", g.Select(x => x.SubReason).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()),
@@ -566,7 +566,7 @@ namespace Attendance.Application.Services
                         FirstName = first.FirstName,
                         CongDoan = g.Select(x => x.CongDoanSnapshot).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? UnknownLabel,
                         StartTime = g.Min(x => x.StartTime),
-                        EndTime = g.Max(x => x.EndTime),
+                        EndTime = MealTicketCalculator.LatestEnd(g.Select(x => (x.StartTime, x.EndTime))),
                         Reason = string.Join("; ", g.Select(x => x.ReasonNameVn).Distinct()),
                         SubReason = string.Join("; ", g.Select(x => x.SubReason).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct()),
                         DidEat = g.Any(x => x.DidEat),
@@ -716,7 +716,7 @@ namespace Attendance.Application.Services
                                 EmployeeCode = first.EmployeeCode,
                                 FullName = first.FullName,
                                 StartTime = first.StartTime,
-                                EndTime = eg.Max(x => x.EndTime),
+                                EndTime = MealTicketCalculator.LatestEnd(eg.Select(x => (x.StartTime, x.EndTime))),
                                 // Same as the single-form print: the stored total excludes this day's hours, the paper includes them.
                                 MonthToDate = first.MonthToDate + eg.Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, settings)),
                                 YearToDate = first.YearToDate + eg.Sum(x => MealTicketCalculator.CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, settings)),
@@ -739,6 +739,7 @@ namespace Attendance.Application.Services
 
         private static string ResolveCa(TimeOnly startTime, TimeOnly endTime)
         {
+            if (endTime < startTime) return OtherShiftLabel;
             foreach (var window in ShiftWindows)
             {
                 if (startTime >= window.Start && endTime <= window.End) return window.Code;

@@ -1,4 +1,4 @@
-import { api } from "@/lib/client";
+import { api, getForBlob } from "@/lib/client";
 import type {
     ApproveOtFormDto,
     BulkApproveOtFormDto,
@@ -12,10 +12,12 @@ import type {
     MyProductionCreateScopeItemDto,
     OtFormDto,
     OtFormListItemDto,
+    OtFormPaperScanListItemDto,
     PendingApprovalDateCountDto,
     RejectOtFormDto,
     RemoveOtFormEmployeeByEmailTokenDto,
     RemoveOtFormEmployeeDto,
+    ReviewOtFormPaperScanDto,
     UpdateOtFormDto,
 } from "@/modules/attendance/types/ot-form.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
@@ -42,6 +44,10 @@ const ENDPOINTS = {
         bulkApprove: "/OtForm/bulk-approve",
         bulkReject: "/OtForm/bulk-reject",
         deleteOtForm: (id: number) => `/OtForm/${id}/delete`,
+        paperScans: "/OtForm/paper-scans",
+        paperScan: (id: number) => `/OtForm/${id}/paper-scan`,
+        approvePaperScan: (id: number) => `/OtForm/${id}/paper-scan/approve`,
+        rejectPaperScan: (id: number) => `/OtForm/${id}/paper-scan/reject`,
         emailConfirmGet: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}`,
         emailConfirmApprove: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/approve`,
         emailConfirmReject: (token: string) => `/OtForm/email-confirm/${encodeURIComponent(token)}/reject`,
@@ -197,6 +203,25 @@ export const OtFormApi = {
     // For forms stuck in the approval chain; BE rejects Completed forms.
     deleteOtForm: async (id: number, data: DeleteOtFormDto) => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.deleteOtForm(id), data);
+        return response.data;
+    },
+    uploadPaperScan: async (id: number, file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await api.postForm<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.paperScan(id), formData);
+        return response.data;
+    },
+    getPaperScanFile: (id: number) => getForBlob(ENDPOINTS.OT_FORM.paperScan(id)),
+    getPaperScans: async (status: number) => {
+        const response = await api.get<ApiResponse<OtFormPaperScanListItemDto[]>>(`${ENDPOINTS.OT_FORM.paperScans}?status=${status}`);
+        return response.data;
+    },
+    approvePaperScan: async (id: number, data: ReviewOtFormPaperScanDto) => {
+        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.approvePaperScan(id), data);
+        return response.data;
+    },
+    rejectPaperScan: async (id: number, data: ReviewOtFormPaperScanDto) => {
+        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.OT_FORM.rejectPaperScan(id), data);
         return response.data;
     },
     // Public [AllowAnonymous] email-link approval.

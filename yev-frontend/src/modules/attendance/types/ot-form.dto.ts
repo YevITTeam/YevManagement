@@ -217,6 +217,7 @@ export interface OtFormApprovalHistoryDto {
     comment: string | null;
     hasSignature: boolean;
     signatureImage: string | null;
+    isPaperApproval: boolean;
     actionAt: string;
 }
 
@@ -301,6 +302,9 @@ export interface OtFormDto {
     resubmitDeadline: string | null;
     // Chain inference warning (null when complete), shown as a banner.
     approvalChainWarning: string | null;
+    paperScan: OtFormPaperScanDto | null;
+    // The current step needs a paper copy because nobody holds it; only the creator may send one.
+    canUploadPaperScan: boolean;
     employees: OtFormEmployeeDto[];
     processPart: ProcessPartDto | null;
     approvalHistories: OtFormApprovalHistoryDto[];
@@ -313,6 +317,34 @@ export interface OtFormDto {
 // Signature is taken by BE from UserSignature/me; secondaryPassword is re-verified before writing.
 export interface ApproveOtFormDto {
     comment: string | null;
+    secondaryPassword: string;
+}
+
+// status: 0 pending, 1 approved, 2 sent back.
+export interface OtFormPaperScanDto {
+    fileName: string;
+    contentType: string;
+    uploadedByUserName: string;
+    uploadedByFullName: string | null;
+    uploadedAt: string;
+    status: number;
+    reviewedByFullName: string | null;
+    reviewedAt: string | null;
+    reviewComment: string | null;
+}
+
+export interface OtFormPaperScanListItemDto extends OtFormPaperScanDto {
+    otFormId: number;
+    date: string;
+    startTime: string;
+    endTime: string;
+    otCaseCode: string;
+    departmentNameVn: string;
+    groupNameVn: string | null;
+}
+
+export interface ReviewOtFormPaperScanDto {
+    comment: string;
     secondaryPassword: string;
 }
 

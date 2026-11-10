@@ -78,10 +78,19 @@ namespace Identity.Infrastructure.Authentication
                     .Include(x => x.Roles).ThenInclude(r => r.Permissions)
                     .Include(x => x.LoginUserIPs)
                     .Include(x => x.UserPermissions).ThenInclude(up => up.Permission)
+                    .Include(x => x.LocalLoginAccount)
                     .FirstOrDefaultAsync(a => a.UserName == windowsUsername);
 
                 if (user == null)
                 {
+                    // A deleted local account must not come back through JIT provisioning on its still-valid JWT.
+                    var slash = windowsUsername.IndexOf('\\');
+                    var prefix = slash > 0 ? windowsUsername[..slash] : null;
+                    if (prefix != null && await dbContext.LocalAccountPrefixes.AnyAsync(x => x.Prefix == prefix))
+                    {
+                        return new ClaimsPrincipal(new ClaimsIdentity());
+                    }
+
                     string actualFullName = GetActualFullName(principal, windowsUsername);
 
                     user = new User
@@ -116,6 +125,7 @@ namespace Identity.Infrastructure.Authentication
                 // A user without any email gets the AD "mail" as primary UserEmail (and its User.Email mirror).
                 // Once an address exists, admins own the list (UserEmailService) and login never changes it.
                 if (string.IsNullOrEmpty(user.Email)
+                    && user.LocalLoginAccount == null
                     && (user.Id == 0 || !await dbContext.UserEmails.AnyAsync(x => x.UserId == user.Id)))
                 {
                     var resolvedEmail = GetActualEmail(windowsUsername);
@@ -188,7 +198,9 @@ namespace Identity.Infrastructure.Authentication
                     string.IsNullOrEmpty(user.FullName) ? null : user.FullName,
                     string.IsNullOrEmpty(user.Email) ? null : user.Email,
                     roleNames,
-                    permissionCodes);
+                    permissionCodes,
+                    user.LocalLoginAccount != null,
+                    user.LocalLoginAccount?.MustChangePassword == true);
 
                 AddSnapshotClaims(dbIdentity, snapshot);
                 _authSnapshotCache.Set(windowsUsername, snapshot);
@@ -230,6 +242,16 @@ namespace Identity.Infrastructure.Authentication
             foreach (var code in snapshot.Permissions)
             {
                 dbIdentity.AddClaim(new Claim(IdentityClaimTypes.Permission, code));
+            }
+
+            if (snapshot.IsLocalAccount)
+            {
+                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.IsLocalAccount, "true"));
+            }
+
+            if (snapshot.MustChangePassword)
+            {
+                dbIdentity.AddClaim(new Claim(IdentityClaimTypes.MustChangePassword, "true"));
             }
         }
 

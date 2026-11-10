@@ -55,6 +55,11 @@ namespace Attendance.Application.Dtos.OtForms
         // Null when the chain is complete.
         public string? ApprovalChainWarning { get; set; }
 
+        public OtFormPaperScanDto? PaperScan { get; set; }
+
+        // The current step needs a paper copy because nobody holds it; only the creator may send one.
+        public bool CanUploadPaperScan { get; set; }
+
         public List<OtFormEmployeeDto> Employees { get; set; } = new();
         public ProcessPartDto? ProcessPart { get; set; }
         public List<OtFormApprovalHistoryDto> ApprovalHistories { get; set; } = new();
