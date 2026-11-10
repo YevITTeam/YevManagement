@@ -175,6 +175,10 @@ namespace Attendance.Application.Services
             var fileNames = await BuildPdfFileNamesAsync(date, workshop.Id, department, sentFormIds);
             var isFollowUp = version > 1 || replaced.Count > 0 || dropped.Count > 0;
 
+            var scans = await LoadClosingPaperScansAsync(notes.Keys.ToList());
+            foreach (var (id, scan) in scans)
+                fileNames[id] = Path.ChangeExtension(fileNames[id], scan.ContentType switch { "image/png" => ".png", "image/jpeg" => ".jpg", _ => ".pdf" });
+
             var attachments = new List<MailAttachment>();
             if (notes.Count > 0)
             {
@@ -182,8 +186,9 @@ namespace Attendance.Application.Services
                 var label = ToAsciiFileName($"{workshop.WorkshopCode} {department.DepartmentCode} {date:dd-MM-yyyy}{suffix}");
                 attachments.Add(new($"Du lieu tang ca {label}.xlsx", BuildExcel(attachedRows, showNote: isFollowUp)));
                 var dtos = new List<OtFormDto>();
-                foreach (var id in notes.Keys.Order()) dtos.Add(await _otFormService.GetByIdAsync(id));
-                attachments.AddRange(await RenderPdfsAsync(dtos, fileNames, setting));
+                foreach (var id in notes.Keys.Where(x => !scans.ContainsKey(x)).Order()) dtos.Add(await _otFormService.GetByIdAsync(id));
+                if (dtos.Count > 0) attachments.AddRange(await RenderPdfsAsync(dtos, fileNames, setting));
+                attachments.AddRange(scans.OrderBy(x => x.Key).Select(x => new MailAttachment(fileNames[x.Key], x.Value.FileContent)));
             }
 
             var replacedIds = replaced.Select(x => x.Id).ToList();
@@ -201,7 +206,7 @@ namespace Attendance.Application.Services
                 ["FormCount"] = notes.Count.ToString(),
                 ["EmployeeCount"] = attachedRows.Count.ToString(),
                 ["AttachmentNote"] = notes.Count > 0
-                    ? "Đính kèm: file Excel dữ liệu tăng ca và phiếu tăng ca (PDF) của từng đơn."
+                    ? $"Đính kèm: file Excel dữ liệu tăng ca và phiếu tăng ca của từng đơn{(scans.Count > 0 ? " (đơn ký giấy gửi bản scan)" : " (PDF)")}."
                     : "Mail này không có tệp đính kèm.",
                 ["ChangeSections"] = isFollowUp
                     ? BuildChangeSections(date, version > 1 ? added : [], replaced, dropped, fileNames, history, rows, reasons, resigningCount)
@@ -467,6 +472,21 @@ namespace Attendance.Application.Services
                 throw new InvalidOperationException($"Tạo PDF phiếu tăng ca thất bại: {stderr}");
 
             return forms.Select((form, i) => new MailAttachment(fileNames[form.Id], Convert.FromBase64String(pdfs[i]))).ToList();
+        }
+
+        // The signed paper replaces the printout only while the form's latest approval is the paper one; a later re-sign supersedes it.
+        private async Task<Dictionary<int, OtFormPaperScan>> LoadClosingPaperScansAsync(List<int> formIds)
+        {
+            var closedByPaper = (await _unitOfWork.OtFormApprovalHistories.SelectAsync(
+                    x => formIds.Contains(x.OtFormId) && x.Action == (int)ApprovalAction.Approved,
+                    x => new { x.OtFormId, x.Id, x.IsPaperApproval }))
+                .GroupBy(x => x.OtFormId)
+                .Where(g => g.MaxBy(x => x.Id)!.IsPaperApproval)
+                .Select(g => g.Key)
+                .ToList();
+            if (closedByPaper.Count == 0) return new();
+            return (await _unitOfWork.OtFormPaperScans.FindAsync(x => closedByPaper.Contains(x.OtFormId) && x.Status == (int)OtFormPaperScanStatus.Approved))
+                .ToDictionary(x => x.OtFormId);
         }
 
         // Base name as otFormPdfFileName in the web app. _2, _3 count every form of the group and day, rejected or moved ones
