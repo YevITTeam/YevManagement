@@ -1,3 +1,4 @@
+using Attendance.Domain.Constants;
 using Attendance.Application.Dtos.DepartmentApprovalSteps;
 using Attendance.Application.Dtos.Departments;
 using Attendance.Application.Interfaces.Service;
@@ -56,7 +57,7 @@ namespace Attendance.Application.Services
 
         public async Task<List<DepartmentApprovalStepDto>> ReplaceAsync(string userName, bool isAdmin, int departmentId, ReplaceDepartmentApprovalStepsDto request)
         {
-            await _departmentAccessGuard.EnsureCanManageDepartmentAsync(userName, isAdmin, departmentId);
+            if (!isAdmin) throw new DomainException(ApprovalStepCoordinatorPermissions.TreeEditAdminOnlyMessage);
 
             var department = await _unitOfWork.Departments.GetByIdAsync(departmentId);
             department.OrThrowNotFound("Phòng ban", departmentId);

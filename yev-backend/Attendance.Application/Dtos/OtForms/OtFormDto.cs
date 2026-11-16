@@ -41,8 +41,11 @@ namespace Attendance.Application.Dtos.OtForms
         // Enum Attendance.Domain.Enums.OtFormStatus.
         public int Status { get; set; }
 
-        // Normal edit is open (InApproval, office forms: no Manager-level step approved yet).
+        // Normal edit is open (InApproval, office forms: no Manager-level step approved yet, unless the group edits stepwise).
         public bool IsEditable { get; set; }
+
+        // Accounts allowed to edit right now (delegates of a step holder may edit too).
+        public List<string> EditorUserNames { get; set; } = new();
 
         // OtFormResubmitKind when the form can only be changed through a re-submission (PUT with ResubmitReason).
         public int? ResubmitKind { get; set; }
@@ -56,6 +59,10 @@ namespace Attendance.Application.Dtos.OtForms
         public string? ApprovalChainWarning { get; set; }
 
         public OtFormPaperScanDto? PaperScan { get; set; }
+
+        // The company limits, for the anonymous e-mail page that can't read AttendanceSetting.
+        public decimal MonthlyOtHourLimit { get; set; }
+        public decimal YearlyOtHourLimit { get; set; }
 
         // The current step needs a paper copy because nobody holds it; only the creator may send one.
         public bool CanUploadPaperScan { get; set; }

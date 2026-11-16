@@ -24,8 +24,7 @@ interface OtNavItem {
 
 const navItems: OtNavItem[] = [
     { key: "otOverview", href: "/ot/overview", icon: LayoutDashboard, permissions: ["Attendance.OTForm.Approve"], requiresOverviewAccess: true },
-    // Line Leaders have only CreateProduction but still need this item.
-    { key: "otCreate", href: "/ot/create", icon: FilePlus2, permissions: ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"] },
+    { key: "otCreate", href: "/ot/create", icon: FilePlus2, permissions: ["Attendance.OTForm.Create"] },
     // Separate permission so the AI chat (first AI tool that writes data) can be rolled out independently.
     { key: "otAiChat", href: "/ot/ai-chat", icon: Bot, permissions: ["Attendance.AiChat.Use"] },
     // One screen with tabs; each tab gates itself on finer permissions (OtFormTabsPage.tsx).

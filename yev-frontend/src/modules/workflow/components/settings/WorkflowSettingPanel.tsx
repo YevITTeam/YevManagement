@@ -12,7 +12,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
 const inputClassName =
-    "w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+    "h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
 // Single-row settings: Get/Update only.
 export default function WorkflowSettingPanel() {
@@ -51,16 +51,13 @@ export default function WorkflowSettingPanel() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
-            </div>
+            <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
 
-            <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+            <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-6">
                 {isLoading || !values ? (
                     <div className="space-y-4">
-                        <Skeleton className="h-10 w-full" />
-                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-24" />
+                        <Skeleton className="h-10 w-24" />
                         <Skeleton className="h-10 w-full" />
                     </div>
                 ) : (
@@ -73,7 +70,7 @@ export default function WorkflowSettingPanel() {
                                 max={1000}
                                 value={values.maxAttachmentSizeMb}
                                 onChange={(e) => setValues({ ...values, maxAttachmentSizeMb: Number(e.target.value) })}
-                                className={inputClassName}
+                                className={`${inputClassName} w-24`}
                             />
                         </label>
 
@@ -85,7 +82,7 @@ export default function WorkflowSettingPanel() {
                                 max={100}
                                 value={values.maxAttachmentPerRequest}
                                 onChange={(e) => setValues({ ...values, maxAttachmentPerRequest: Number(e.target.value) })}
-                                className={inputClassName}
+                                className={`${inputClassName} w-24`}
                             />
                         </label>
 
@@ -96,7 +93,7 @@ export default function WorkflowSettingPanel() {
                                 value={values.allowedFileExtensions}
                                 onChange={(e) => setValues({ ...values, allowedFileExtensions: e.target.value })}
                                 placeholder=".pdf,.jpg,.jpeg,.png,.docx,.xlsx"
-                                className={inputClassName}
+                                className={`${inputClassName} w-full`}
                             />
                         </label>
 

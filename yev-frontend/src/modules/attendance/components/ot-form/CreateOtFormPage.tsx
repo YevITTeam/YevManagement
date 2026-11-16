@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, Car, Check, Printer, RefreshCw, Undo2, UserMinus, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
@@ -18,13 +18,10 @@ import type { WorkCalendarDayDto } from "@/modules/attendance/types/work-calenda
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
-import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
-import type { ProductionEmployeeSearchItemDto, ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type {
     CreateOtFormDto,
     MyCreateScopeItemDto,
-    MyProductionCreateScopeItemDto,
     OtFormEmployeeDto,
     OtFormEmployeeInputDto,
     ProcessPartDto,
@@ -101,6 +98,7 @@ function AccumulationCell({
     kind,
     hours,
     limit,
+    sharedLimit,
     extraHours = 0,
 }: {
     t: (key: string, values?: Record<string, string | number>) => string;
@@ -108,10 +106,13 @@ function AccumulationCell({
     kind: AccumulationKind;
     hours: number;
     limit: number;
+    // The company limit, when `limit` may be the person's own raised one.
+    sharedLimit?: number;
     extraHours?: number;
 }) {
     const total = Math.round((hours + extraHours) * 100) / 100;
     const isOver = total > limit;
+    const withinRaisedLimit = !isOver && sharedLimit !== undefined && total > sharedLimit;
     const overClassName = kind === "Daily" ? "font-semibold text-[#930006]" : "font-semibold text-[#b45309]";
     return (
         <td
@@ -123,6 +124,11 @@ function AccumulationCell({
                 {hours}h
                 {extraHours > 0 && <span className="text-[11px] font-normal text-[#8a8f94]">+{Math.round(extraHours * 100) / 100}h</span>}
             </span>
+            {withinRaisedLimit && (
+                <div className="text-[11px] text-[#8a8f94]" title={t("customLimitHint", { limit: sharedLimit })}>
+                    {t("customLimitNote", { hours: limit })}
+                </div>
+            )}
         </td>
     );
 }
@@ -163,8 +169,7 @@ interface EmployeeOverride {
     // "" = follow the form's start time; otherwise a per-employee start within the form's time range.
     startTime: string;
     endTime: string;
-    // BE field: true = eats during the shift (MealBreakDeductionHours deducted). Production forms always send true;
-    // office forms show it inverted as "eat later" (ticked = false, no deduction).
+    // BE field: true = eats during the shift (MealBreakDeductionHours deducted); shown inverted as "eat later".
     didEat: boolean;
     noteVn: string;
     noteJp: string;
@@ -227,20 +232,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // Admin-only permission used as the "unrestricted" signal when my-create-scopes is empty, to tell Admin apart
     // from an unconfigured account (which must be blocked).
     const isUnrestrictedAdmin = hasPermission(user, "Attendance.Department.Create");
-    // Hide the production tab without its dedicated permission.
-    const canCreateProductionForm = hasPermission(user, "Attendance.OTForm.CreateProduction");
-    // CreateProduction alone doesn't grant group mode; hide the tab rather than show it and block it.
-    const canUseGroupMode = isUnrestrictedAdmin || hasPermission(user, "Attendance.OTForm.Create");
-
-    // Chosen only on create (an existing form keeps isProductionForm). Production-only accounts start in production
-    // mode from `user` permissions directly; the my-create-scopes effect still switches as a fallback for empty group scope.
-    const [formMode, setFormMode] = useState<"group" | "production">(() =>
-        canCreateProductionForm && !canUseGroupMode ? "production" : "group"
-    );
-
-    // Office (group) forms can edit everything but Department/Group; production forms only their employees.
-    const isOfficeEdit = isEditMode && formMode === "group";
-    const isHeaderLocked = isEditMode && formMode === "production";
 
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [groups, setGroups] = useState<GroupDto[]>([]);
@@ -249,22 +240,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // Group-mode create loads one list per selected group; edit mode keeps the form's single group.
     const [employeeGroups, setEmployeeGroups] = useState<{ groupId: number; employees: EmployeeDto[] }[]>([]);
     const groupEmployees = useMemo(() => employeeGroups.flatMap((g) => g.employees), [employeeGroups]);
-
-    // ── Production mode: filters + ProductionEmployee search ──
-    const [lineOptions, setLineOptions] = useState<ProductionOptionDto[]>([]);
-    const [teamOptions, setTeamOptions] = useState<ProductionOptionDto[]>([]);
-    const [shiftTeamOptions, setShiftTeamOptions] = useState<ProductionOptionDto[]>([]);
-    const [productionLineId, setProductionLineId] = useState<number | "">("");
-    const [productionTeamId, setProductionTeamId] = useState<number | "">("");
-    const [productionShiftTeamId, setProductionShiftTeamId] = useState<number | "">("");
-    const [productionKeyword, setProductionKeyword] = useState("");
-    const [productionResults, setProductionResults] = useState<ProductionEmployeeSearchItemDto[]>([]);
-    // Team/Line/shift-group combos where the creator is Line Leader; null = still loading.
-    const [productionCreateScopes, setProductionCreateScopes] = useState<MyProductionCreateScopeItemDto[] | null>(null);
-    const isProductionScopeRestricted = productionCreateScopes !== null && productionCreateScopes.length > 0;
-    // One combo → lock all three dropdowns; several → only restrict the choices. Declared here because the
-    // Team/Line reset blocks below need it before the fetch effect.
-    const isProductionScopeLocked = isProductionScopeRestricted && productionCreateScopes!.length === 1;
 
     const [departmentId, setDepartmentId] = useState<number | null>(null);
     const [groupIds, setGroupIds] = useState<number[]>([]);
@@ -317,8 +292,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     // Adds/removals while editing are staged and applied in one PUT on save. employeeAddedMeta only holds
     // display info, since newly added people have no OtFormEmployeeDto or accumulation until saved.
     const [employeeAddedMeta, setEmployeeAddedMeta] = useState<Record<number, { employeeCode: string; fullName: string }>>({});
-    const [addSearchQuery, setAddSearchQuery] = useState("");
-    const addSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [addSearchResults, setAddSearchResults] = useState<{ employeeId: number; employeeCode: string; fullName: string }[]>([]);
     const [pendingRemovals, setPendingRemovals] = useState<Record<number, string>>({});
     const [removeTarget, setRemoveTarget] = useState<{ employeeId: number; employeeCode: string; fullName: string } | null>(null);
@@ -333,20 +306,19 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     const { setting } = useAttendanceSetting();
 
-    // Production forms: always true (meals mandatory); office forms: false = "eat later" ticked, no deduction.
-    const defaultDidEatForNewEmployee = formMode === "production";
+    // New rows default to "eat later" ticked (didEat = false, no deduction).
+    const defaultDidEatForNewEmployee = false;
 
     // Groups that disallow eating later always eat during the shift (BE forces the same); unknown groups stay allowed.
     const noEatLaterGroupIds = useMemo(() => new Set(groups.filter((g) => !g.allowEatLater).map((g) => g.id)), [groups]);
     const groupIdByEmployeeId = useMemo(() => new Map(groupEmployees.map((e) => [e.id, e.groupId])), [groupEmployees]);
     const canEatLater = (employeeId: number) => {
-        if (formMode === "production") return false;
         const employeeGroupId = isEditMode ? groupId : groupIdByEmployeeId.get(employeeId);
         return employeeGroupId == null || !noEatLaterGroupIds.has(employeeGroupId);
     };
     const didEatOf = (employeeId: number) =>
         !canEatLater(employeeId) || (employeeOverrides[employeeId]?.didEat ?? defaultDidEatForNewEmployee);
-    const showAteLaterColumn = formMode !== "production" && groupIds.some((id) => !noEatLaterGroupIds.has(id));
+    const showAteLaterColumn = groupIds.some((id) => !noEatLaterGroupIds.has(id));
 
     const dailyOtHourLimit = isNonWorkingDay ? setting.dailyOtHourLimitHoliday : setting.dailyOtHourLimit;
 
@@ -363,16 +335,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 yearLimit: employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit,
             });
         }
-        for (const item of productionResults) {
-            accumulationById.set(item.employeeId, {
-                month: item.projectedMonthToDate,
-                year: item.projectedYearToDate,
-                monthLimit: item.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit,
-                yearLimit: item.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit,
-            });
-        }
         return accumulationById;
-    }, [groupEmployees, productionResults, setting]);
+    }, [groupEmployees, setting]);
     const exceedsTh3For = (employeeIds: number[]) => {
         if (isEditMode || !date || !startTime || !endTime) return false;
         return employeeIds.some((employeeId) => {
@@ -402,7 +366,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         !employeeKeyword || normalizeText(`${employee.code} ${employee.lastName} ${employee.firstName}`).includes(employeeKeyword);
 
     // Group-mode create: one form per selected group, each with its own OT case and support request.
-    const isGroupCreate = !isEditMode && formMode === "group";
+    const isGroupCreate = !isEditMode;
     const isMultiGroup = isGroupCreate && groupIds.length > 1;
     const groupSections = isGroupCreate
         ? groupIds.map((id) => {
@@ -441,68 +405,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
         ReasonApi.getAllReasons().then(setReasons).catch((err) => console.error(err));
         OtCaseApi.getAllOtCases().then(setOtCases).catch((err) => console.error(err));
-        ProductionEmployeeApi.getTeamOptions().then(setTeamOptions).catch((err) => console.error(err));
     }, []);
-
-    // Reset Line when Team changes, via render-time snapshot instead of an effect. Skipped when locked, otherwise
-    // the auto-prefill of Team/Line/shift group in one render would clear the Line it just set.
-    const [prevProductionTeamId, setPrevProductionTeamId] = useState(productionTeamId);
-    if (prevProductionTeamId !== productionTeamId) {
-        setPrevProductionTeamId(productionTeamId);
-        if (!isProductionScopeLocked) {
-            setProductionLineId("");
-        }
-    }
-
-    // Lines are real children of a Team (FK); an empty Team makes BE return all Lines.
-    useFetchEffect(
-        () => ProductionEmployeeApi.getLineOptions(productionTeamId === "" ? undefined : productionTeamId),
-        [productionTeamId],
-        setLineOptions,
-        t("lineOptionsLoadError")
-    );
-
-    // Shift groups aren't FK children of Line/Team, so options are derived from who actually works in the filtered
-    // Line/Team. Reset via render-time snapshot, skipped when locked (same reason as the Line reset).
-    const shiftTeamFilterKey = `${productionLineId}|${productionTeamId}`;
-    const [prevShiftTeamFilterKey, setPrevShiftTeamFilterKey] = useState(shiftTeamFilterKey);
-    if (prevShiftTeamFilterKey !== shiftTeamFilterKey) {
-        setPrevShiftTeamFilterKey(shiftTeamFilterKey);
-        if (!isProductionScopeLocked) {
-            setProductionShiftTeamId("");
-        }
-    }
-
-    useFetchEffect(
-        () =>
-            ProductionEmployeeApi.getShiftTeamOptions(
-                productionLineId === "" ? undefined : productionLineId,
-                productionTeamId === "" ? undefined : productionTeamId
-            ),
-        [productionLineId, productionTeamId],
-        setShiftTeamOptions,
-        t("shiftTeamOptionsLoadError")
-    );
-
-    // Require Team + Line + shift group: partial filters return thousands of rows and make the table lag.
-    const canSearchProduction =
-        isCoreFormInfoFilled && productionTeamId !== "" && productionLineId !== "" && productionShiftTeamId !== "";
-    useFetchEffect(
-        () =>
-            formMode === "production" && !isEditMode && canSearchProduction
-                ? ProductionEmployeeApi.search({
-                      productionLineId,
-                      teamId: productionTeamId,
-                      // canSearchProduction guarantees a number here.
-                      shiftTeamId: productionShiftTeamId,
-                      keyword: productionKeyword.trim() || undefined,
-                      date: date || undefined,
-                  })
-                : Promise.resolve([]),
-        [formMode, isEditMode, canSearchProduction, productionLineId, productionTeamId, productionShiftTeamId, productionKeyword, date],
-        setProductionResults,
-        t("productionSearchError")
-    );
 
     useEffect(() => {
         OtFormApi.getMyCreateScopes()
@@ -513,50 +416,20 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     setDepartmentId(scopes[0].departmentId);
                     if (scopes.length === 1) setGroupIds([scopes[0].groupId]);
                 }
-                // Production-only accounts have empty group scopes and would be blocked in group mode; switch them to
-                // production without locking the tab.
-                if (!isEditMode && scopes.length === 0 && !isUnrestrictedAdmin && canCreateProductionForm) {
-                    setFormMode("production");
-                }
             })
             .catch((err) => {
                 console.error(err);
                 setCreateScopes([]); // On error don't block the page; fall back to free dropdowns.
             });
-        // Both flags derive from `user`, stable for the page's lifetime.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isEditMode]);
-
-    // Same prefill/lock mechanism for the production dropdowns. Only called with CreateProduction, otherwise always 403.
-    useEffect(() => {
-        if (isEditMode || !canCreateProductionForm) return;
-        OtFormApi.getMyProductionCreateScopes()
-            .then((scopes) => {
-                setProductionCreateScopes(scopes);
-                // The department is the caller's own and identical across items, so it is always prefilled and locked.
-                if (scopes.length > 0) {
-                    setDepartmentId(scopes[0].departmentId);
-                }
-                if (scopes.length === 1) {
-                    setProductionTeamId(scopes[0].teamId);
-                    setProductionLineId(scopes[0].productionLineId);
-                    setProductionShiftTeamId(scopes[0].shiftTeamId);
-                }
-            })
-            .catch((err) => {
-                console.error(err);
-                setProductionCreateScopes([]); // On error don't block the page; fall back to free dropdowns.
-            });
-    }, [isEditMode, canCreateProductionForm]);
 
     const isScopeRestricted = createScopes !== null && createScopes.length > 0;
     // Lock only on create; edit still allows changing within scope.
     const isScopeLocked = !isEditMode && isScopeRestricted && createScopes!.length === 1;
     const isScopeDepartmentLocked = !isEditMode && isScopeRestricted && new Set(createScopes!.map((s) => s.departmentId)).size === 1;
     // Empty scopes and not Admin → no department to create for; block instead of failing with 400 later.
-    // Group mode only: production forms don't need createScopes.
     const isBlockedNoScope =
-        !isEditMode && formMode === "group" && createScopes !== null && createScopes.length === 0 && !isUnrestrictedAdmin;
+        !isEditMode && createScopes !== null && createScopes.length === 0 && !isUnrestrictedAdmin;
 
     const visibleDepartments = useMemo(() => {
         if (!isScopeRestricted) return departments.map((d) => ({ id: d.id, label: d.departmentNameVn }));
@@ -586,37 +459,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }, [isScopeRestricted, createScopes, groups, departmentId, groupIds]);
     const groupLabel = (id: number) => visibleGroups.find((g) => g.id === id)?.label ?? String(id);
 
-    // When restricted, build options from productionCreateScopes instead of the catalog; Line depends on Team,
-    // shift group on both, same as the unrestricted dropdowns.
-    const visibleTeamOptions = useMemo((): ProductionOptionDto[] => {
-        if (!isProductionScopeRestricted) return teamOptions;
-        const map = new Map<number, ProductionOptionDto>();
-        productionCreateScopes!.forEach((s) => map.set(s.teamId, { id: s.teamId, code: s.teamCode, nameVn: s.teamNameVn }));
-        return Array.from(map.values());
-    }, [isProductionScopeRestricted, productionCreateScopes, teamOptions]);
-
-    const visibleLineOptions = useMemo((): ProductionOptionDto[] => {
-        if (!isProductionScopeRestricted) return lineOptions;
-        const map = new Map<number, ProductionOptionDto>();
-        productionCreateScopes!
-            .filter((s) => productionTeamId === "" || s.teamId === productionTeamId)
-            .forEach((s) => map.set(s.productionLineId, { id: s.productionLineId, code: s.lineCode, nameVn: s.lineNameVn }));
-        return Array.from(map.values());
-    }, [isProductionScopeRestricted, productionCreateScopes, lineOptions, productionTeamId]);
-
-    const visibleShiftTeamOptions = useMemo((): ProductionOptionDto[] => {
-        if (!isProductionScopeRestricted) return shiftTeamOptions;
-        const map = new Map<number, ProductionOptionDto>();
-        productionCreateScopes!
-            .filter(
-                (s) =>
-                    (productionTeamId === "" || s.teamId === productionTeamId) &&
-                    (productionLineId === "" || s.productionLineId === productionLineId)
-            )
-            .forEach((s) => map.set(s.shiftTeamId, { id: s.shiftTeamId, code: s.shiftTeamCode, nameVn: s.shiftTeamNameVn }));
-        return Array.from(map.values());
-    }, [isProductionScopeRestricted, productionCreateScopes, shiftTeamOptions, productionTeamId, productionLineId]);
-
     useEffect(() => {
         if (isEditMode) return; // Edits are not re-signed.
         UserSignatureApi.getMySignature()
@@ -641,13 +483,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 const canResubmit =
                     data.resubmitKind != null &&
                     (data.resubmitUserNames.some((n) => n.toLowerCase() === myUserName) || (data.resubmitKind === 2 && Boolean(user?.roles.includes("Admin"))));
-                if (!data.isEditable && !canResubmit) {
+                // Legacy production-line forms have no Group, so this page has no UI to edit them.
+                if ((!data.isEditable && !canResubmit) || data.isProductionForm) {
                     setLoadError(t("notEditableError"));
                     return;
                 }
                 setResubmitKind(data.isEditable ? null : data.resubmitKind);
-                // Without this, editing a production form would render the group-mode UI.
-                setFormMode(data.isProductionForm ? "production" : "group");
                 setDepartmentId(data.departmentId);
                 setGroupIds(data.groupId ? [data.groupId] : []);
                 setReasonId(data.reasonId);
@@ -727,17 +568,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
     const totalHour = useMemo(() => computeTotalHour(startTime, endTime), [startTime, endTime]);
     const isTimeRangeInvalid = Boolean(startTime && endTime && toMinutes(endTime) === toMinutes(startTime));
-
-    // Lists every distinct Line/Team/shift group on the form, since people added later may differ from the creator's.
-    const editProductionSummary = useMemo(() => {
-        if (!isEditMode || formMode !== "production") return null;
-        const distinct = (values: (string | null)[]) => Array.from(new Set(values.filter((v): v is string => Boolean(v))));
-        return {
-            lines: distinct(editEmployees.map((e) => e.blockCodeSnapshot)),
-            teams: distinct(editEmployees.map((e) => e.teamCodeSnapshot)),
-            shiftTeams: distinct(editEmployees.map((e) => e.shiftTeamCodeSnapshot)),
-        };
-    }, [isEditMode, formMode, editEmployees]);
 
     // Tiers from lib/mealTicket.ts on each person's actual hours; milk is never auto-computed.
     const countMealTickets = (employeeIds: number[]) => {
@@ -899,27 +729,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         </th>
     );
 
-    // Candidates for "add employee" while editing. Group forms: the whole Group (small), filtered by the
-    // dropdown itself. Production forms: searched on the server by the typed keyword (empty = nothing).
-    // The server (UpdateAsync) is what rejects a wrong Line/shift team on save.
-    const handleAddQueryChange = (query: string) => {
-        if (addSearchTimer.current) clearTimeout(addSearchTimer.current);
-        addSearchTimer.current = setTimeout(() => setAddSearchQuery(query.trim()), 300);
-    };
-
+    // Candidates for "add employee" while editing: the whole Group (small), filtered by the dropdown itself.
     useFetchEffect(
         async () => {
-            if (!isEditMode) return [];
-            if (formMode === "production") {
-                if (!addSearchQuery) return [];
-                const results = await ProductionEmployeeApi.search({ keyword: addSearchQuery, date: date || undefined });
-                return results.map((item) => ({ employeeId: item.employeeId, employeeCode: item.employeeCode, fullName: item.fullName }));
-            }
-            if (!groupId) return [];
+            if (!isEditMode || !groupId) return [];
             const results = await EmployeeApi.getEmployeesByGroup(groupId, date || undefined);
             return results.map((item) => ({ employeeId: item.id, employeeCode: item.code, fullName: `${item.lastName} ${item.firstName}` }));
         },
-        [isEditMode, formMode, groupId, date, formMode === "production" ? addSearchQuery : ""],
+        [isEditMode, groupId, date],
         setAddSearchResults,
         t("productionSearchError")
     );
@@ -989,21 +806,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         setSelectedEmployeeIds((current) => current.filter((id) => !removedEmployeeIds.has(id)));
     };
 
-    const handleModeChange = (nextMode: "group" | "production") => {
-        setFormMode(nextMode);
-        setGroupIds([]);
-        setSelectedEmployeeIds([]);
-        setEmployeeOverrides({});
-    };
-
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
 
-        // Edit mode locks the other fields, so only require at least one person. groupId is required in group mode only.
-        if (
-            (!isEditMode || isOfficeEdit) &&
-            ((formMode === "group" && groupIds.length === 0) || !departmentId || !reasonId || !otCaseId || !date || !startTime || !endTime)
-        ) {
+        if (groupIds.length === 0 || !departmentId || !reasonId || !otCaseId || !date || !startTime || !endTime) {
             toast.error(t("requiredFieldsError"));
             return;
         }
@@ -1016,7 +822,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             toast.error(t("groupNoEmployeeError", { group: groupLabel(emptyGroup.groupId) }));
             return;
         }
-        if ((!isEditMode || isOfficeEdit) && isTimeRangeInvalid) {
+        if (isTimeRangeInvalid) {
             toast.error(t("endTimeEqualsStartError"));
             return;
         }
@@ -1059,9 +865,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             noteVn: employeeOverrides[employeeId]?.noteVn?.trim() ? employeeOverrides[employeeId].noteVn.trim() : null,
             noteJp: employeeOverrides[employeeId]?.noteJp?.trim() ? employeeOverrides[employeeId].noteJp.trim() : null,
         });
-        const buildCreateDto = (employeeIds: number[], processPartKey: number, formGroupId: number | null): CreateOtFormDto => ({
+        const buildCreateDto = (employeeIds: number[], processPartKey: number, formGroupId: number): CreateOtFormDto => ({
             groupId: formGroupId,
-            isProductionForm: formGroupId === null,
             departmentId: departmentId!,
             reasonId: reasonId!,
             otCaseId: otCases.find((c) => c.code === otCaseCodeFor(employeeIds))?.id ?? otCaseId!,
@@ -1083,22 +888,20 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     reason,
                 }));
                 result = await OtFormApi.updateOtForm(otFormId, {
-                    header: isOfficeEdit
-                        ? {
-                              date,
-                              startTime: `${startTime}:00`,
-                              endTime: `${endTime}:00`,
-                              reasonId: reasonId!,
-                              subReason: subReason.trim() || null,
-                              processPart: getSubmitProcessPart(0, selectedEmployeeIds),
-                          }
-                        : null,
+                    header: {
+                        date,
+                        startTime: `${startTime}:00`,
+                        endTime: `${endTime}:00`,
+                        reasonId: reasonId!,
+                        subReason: subReason.trim() || null,
+                        processPart: getSubmitProcessPart(0, selectedEmployeeIds),
+                    },
                     employees: selectedEmployeeIds.map(toEmployeeInput),
                     removedEmployees,
                     secondaryPassword,
                     resubmitReason: resubmitKind != null ? resubmitReason.trim() : null,
                 });
-            } else if (formMode === "group") {
+            } else {
                 const created = await OtFormApi.createOtForms({
                     secondaryPassword,
                     forms: groupSections.map((section) => buildCreateDto(section.selectedIds, section.groupId, section.groupId)),
@@ -1109,8 +912,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     return;
                 }
                 result = created[0];
-            } else {
-                result = await OtFormApi.createOtForm(buildCreateDto(selectedEmployeeIds, 0, null));
             }
             toast.success(isEditMode ? t("updateSuccess") : t("createSuccess"));
             router.push({ pathname: "/ot/forms", query: { id: String(result.id) } });
@@ -1131,29 +932,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     }
 
     if (isBlockedNoScope) {
-        // Keep the header and mode tabs instead of returning early, so users with both permissions can still switch to production.
         return (
             <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <h1 className="text-xl font-semibold text-[#191c1e]">{t("titleCreate")}</h1>
-                    {canCreateProductionForm && canUseGroupMode && (
-                        <div className="inline-flex gap-1 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-1">
-                            {(["group", "production"] as const).map((mode) => (
-                                <button
-                                    key={mode}
-                                    type="button"
-                                    onClick={() => handleModeChange(mode)}
-                                    className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                                        formMode === mode
-                                            ? "bg-white text-[#e3000f] shadow-sm"
-                                            : "text-[#5e3f3a] hover:text-[#191c1e]"
-                                    }`}
-                                >
-                                    {mode === "group" ? t("modeGroupLabel") : t("modeProductionLabel")}
-                                </button>
-                            ))}
-                        </div>
-                    )}
                 </div>
                 <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">
                     {t("blockedNoScopeMessage")}
@@ -1166,36 +948,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <h1 className="text-xl font-semibold text-[#191c1e]">{isEditMode ? t("titleEdit", { id: otFormId }) : t("titleCreate")}</h1>
-                {!isEditMode && canCreateProductionForm && canUseGroupMode && (
-                    <div className="inline-flex gap-1 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-1">
-                        {(["group", "production"] as const).map((mode) => (
-                            <button
-                                key={mode}
-                                type="button"
-                                onClick={() => handleModeChange(mode)}
-                                className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                                    formMode === mode
-                                        ? "bg-white text-[#e3000f] shadow-sm"
-                                        : "text-[#5e3f3a] hover:text-[#191c1e]"
-                                }`}
-                            >
-                                {mode === "group" ? t("modeGroupLabel") : t("modeProductionLabel")}
-                            </button>
-                        ))}
-                    </div>
-                )}
             </div>
-
-            {/* Same rule: a single combo is already prefilled and locked; several need the banner. */}
-            {!isEditMode && formMode === "production" && isProductionScopeRestricted && !isProductionScopeLocked && (
-                <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm text-[#5e3f3a]">
-                    {t("productionScopeRestrictedMessage", {
-                        combos: productionCreateScopes!
-                            .map((s) => `${s.teamNameVn || s.teamCode} / ${s.lineCode} / ${s.shiftTeamNameVn || s.shiftTeamCode}`)
-                            .join(", "),
-                    })}
-                </div>
-            )}
 
             {!isEditMode && hasSignature === false && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
@@ -1225,50 +978,30 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 value={departmentId ?? ""}
                                 onChange={handleDepartmentChange}
                                 placeholder={t("fieldDepartmentPlaceholder")}
-                                // Production mode locks as soon as any scope exists: the Line Leader's department is known from one combo.
-                                disabled={isSubmitting || isEditMode || (formMode === "group" ? isScopeDepartmentLocked : isProductionScopeRestricted)}
+                                disabled={isSubmitting || isEditMode || isScopeDepartmentLocked}
                             />
                         </label>
 
-                        {formMode === "group" && (
-                            <label className="block">
-                                <span className={fieldLabelClassName}>{t("fieldGroup")}<RequiredMark /></span>
-                                {isEditMode || isScopeLocked ? (
-                                    <SearchableSelect
-                                        options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
-                                        value={groupId ?? ""}
-                                        onChange={() => {}}
-                                        placeholder={t("fieldGroupPlaceholder")}
-                                        disabled
-                                    />
-                                ) : (
-                                    <MultiSelect
-                                        options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
-                                        values={groupIds}
-                                        onChange={handleGroupIdsChange}
-                                        placeholder={departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
-                                        disabled={isSubmitting || !departmentId}
-                                    />
-                                )}
-                            </label>
-                        )}
-
-                        {editProductionSummary && (
-                            <>
-                                <label className="block">
-                                    <span className={fieldLabelClassName}>{t("colBlockCode")}</span>
-                                    <input value={editProductionSummary.lines.join(", ") || "—"} disabled className={fieldClassName} />
-                                </label>
-                                <label className="block">
-                                    <span className={fieldLabelClassName}>{t("colTeamCode")}</span>
-                                    <input value={editProductionSummary.teams.join(", ") || "—"} disabled className={fieldClassName} />
-                                </label>
-                                <label className="block">
-                                    <span className={fieldLabelClassName}>{t("colShiftTeam")}</span>
-                                    <input value={editProductionSummary.shiftTeams.join(", ") || "—"} disabled className={fieldClassName} />
-                                </label>
-                            </>
-                        )}
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldGroup")}<RequiredMark /></span>
+                            {isEditMode || isScopeLocked ? (
+                                <SearchableSelect
+                                    options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
+                                    value={groupId ?? ""}
+                                    onChange={() => {}}
+                                    placeholder={t("fieldGroupPlaceholder")}
+                                    disabled
+                                />
+                            ) : (
+                                <MultiSelect
+                                    options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
+                                    values={groupIds}
+                                    onChange={handleGroupIdsChange}
+                                    placeholder={departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
+                                    disabled={isSubmitting || !departmentId}
+                                />
+                            )}
+                        </label>
 
                         <div className="sm:col-span-2">
                             <div className="flex flex-wrap items-end gap-3">
@@ -1278,7 +1011,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         type="date"
                                         value={date}
                                         onChange={(event) => setDate(event.target.value)}
-                                        disabled={isSubmitting || isHeaderLocked}
+                                        disabled={isSubmitting}
                                         required
                                         min={isEditMode ? undefined : getTodayStr(-setting.backdateDays)}
                                         className={fieldClassName.replace("w-full", "w-40")}
@@ -1287,11 +1020,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 <div className="flex items-end gap-3">
                                     <label className="block">
                                         <span className={fieldLabelClassName}>{t("fieldStartTime")}<RequiredMark /></span>
-                                        <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting || isHeaderLocked} />
+                                        <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting} />
                                     </label>
                                     <label className="block">
                                         <span className={fieldLabelClassName}>{t("fieldEndTime")}<RequiredMark /></span>
-                                        <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting || isHeaderLocked} />
+                                        <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting} />
                                     </label>
                                     {/* Form hours are only the outer frame; the daily limit is warned per employee row. */}
                                     <span className="flex h-9 items-center" title={t("fieldTotalHour")}>
@@ -1317,7 +1050,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 value={reasonId ?? ""}
                                 onChange={(v) => setReasonId(v === "" ? null : v)}
                                 placeholder={t("fieldReasonPlaceholder")}
-                                disabled={isSubmitting || isHeaderLocked}
+                                disabled={isSubmitting}
                             />
                         </label>
 
@@ -1331,7 +1064,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         text={t(exceedsTh3 ? "otCaseAutoHintTh3" : touchesNonWorkingDay ? "otCaseAutoHintNonWorking" : "otCaseAutoHintWorking")}
                                     />
                                 )}
-                                {isOfficeEdit && <InfoTooltip text={t("otCaseAutoHintEdit")} />}
+                                {isEditMode && <InfoTooltip text={t("otCaseAutoHintEdit")} />}
                             </span>
                             <SearchableSelect
                                 options={otCases.map((otCase) => ({
@@ -1355,7 +1088,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <textarea
                             value={subReason}
                             onChange={(event) => setSubReason(event.target.value)}
-                            disabled={isSubmitting || isHeaderLocked}
+                            disabled={isSubmitting}
                             rows={2}
                             className="w-full resize-none rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                         />
@@ -1380,14 +1113,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 label={t("transportationLabel")}
                                 checked={part.isTransportation}
                                 onChange={(value) => updateProcessPart(section.key, { isTransportation: value })}
-                                disabled={isSubmitting || isHeaderLocked}
+                                disabled={isSubmitting}
                             />
                             <ToggleOptionCard
                                 icon={<Printer size={13} />}
                                 label={t("copyRoomLabel")}
                                 checked={part.isUseCopyRoom}
                                 onChange={(value) => updateProcessPart(section.key, { isUseCopyRoom: value })}
-                                disabled={isSubmitting || isHeaderLocked}
+                                disabled={isSubmitting}
                             />
                         </div>
 
@@ -1447,7 +1180,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     min={0}
                                     value={part.milkCount}
                                     onChange={(event) => updateProcessPart(section.key, { milkCount: Number(event.target.value) })}
-                                    disabled={isSubmitting || isHeaderLocked}
+                                    disabled={isSubmitting}
                                     className={`${compactFieldClassName.replace("w-full", "w-20")} text-center`}
                                 />
                             </label>
@@ -1459,7 +1192,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             <input
                                 value={part.anotherSuggestionVn ?? ""}
                                 onChange={(event) => updateProcessPart(section.key, { anotherSuggestionVn: event.target.value })}
-                                disabled={isSubmitting || isHeaderLocked}
+                                disabled={isSubmitting}
                                 className={compactFieldClassName}
                             />
                         </label>
@@ -1499,7 +1232,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             const item = addSearchResults.find((r) => r.employeeId === employeeId);
                                             if (item) handlePickAddEmployee(item);
                                         }}
-                                        onQueryChange={handleAddQueryChange}
                                         placeholder={t("addEmployeeSectionTitle")}
                                         disabled={isSubmitting}
                                         triggerClassName="h-8 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-xs! text-[#191c1e] outline-none transition focus:border-[#e3000f]"
@@ -1525,17 +1257,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
-                                        {formMode === "production" && (
-                                            <>
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colBlockCode")}</th>
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colTeamCode")}</th>
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colShiftTeam")}</th>
-                                            </>
-                                        )}
                                         <th colSpan={2} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
-                                        {/* Production forms: meals mandatory, nothing to choose. Office forms show it inverted as "eat later". */}
                                         {showAteLaterColumn && ateLaterHeader}
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
@@ -1557,7 +1281,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     </td>
                                                     <td
                                                         className="px-3 py-2 align-top text-sm text-[#930006]"
-                                                        colSpan={formMode === "production" ? 10 : showAteLaterColumn ? 8 : 7}
+                                                        colSpan={showAteLaterColumn ? 8 : 7}
                                                     >
                                                         <span className="line-through">{employee.fullName}</span> —{" "}
                                                         {removalReason ? t("willBeRemovedNote", { reason: removalReason }) : t("willBeRemovedNoteNoReason")}
@@ -1589,21 +1313,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     {employee.employeeCode}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#191c1e]">{employee.fullName}</td>
-                                                {formMode === "production" && (
-                                                    <>
-                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">
-                                                            {employee.blockCodeSnapshot || "—"}
-                                                        </td>
-                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">
-                                                            {employee.teamCodeSnapshot || "—"}
-                                                        </td>
-                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">
-                                                            {employee.shiftTeamCodeSnapshot || "—"}
-                                                        </td>
-                                                    </>
-                                                )}
-                                                <AccumulationCell t={t} code={employee.employeeCode} kind="Monthly" hours={employee.monthToDate} limit={employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit} />
-                                                <AccumulationCell t={t} code={employee.employeeCode} kind="Yearly" hours={employee.yearToDate} limit={employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit} />
+                                                <AccumulationCell t={t} code={employee.employeeCode} kind="Monthly" hours={employee.monthToDate} limit={employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit} sharedLimit={setting.monthlyOtHourLimit} />
+                                                <AccumulationCell t={t} code={employee.employeeCode} kind="Yearly" hours={employee.yearToDate} limit={employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit} sharedLimit={setting.yearlyOtHourLimit} />
                                                 <td className="px-3 py-2 align-top">
                                                     <TimePicker24h compact
                                                         value={currentStartTime}
@@ -1687,13 +1398,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                             {t("newlyAddedBadge")}
                                                         </span>
                                                     </td>
-                                                    {formMode === "production" && (
-                                                        <>
-                                                            <td className="px-3 py-2 align-top text-sm text-[#8a8f94]">—</td>
-                                                            <td className="px-3 py-2 align-top text-sm text-[#8a8f94]">—</td>
-                                                            <td className="px-3 py-2 align-top text-sm text-[#8a8f94]">—</td>
-                                                        </>
-                                                    )}
                                                     <td className="px-3 py-2 text-center align-top text-sm text-[#8a8f94]">—</td>
                                                     <td className="px-3 py-2 text-center align-top text-sm text-[#8a8f94]">—</td>
                                                     <td className="px-3 py-2 align-top">
@@ -1793,211 +1497,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 </div>
                             </div>
                         )}
-                        </div>
-                    ) : formMode === "production" ? (
-                        <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
-                            <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-                                {/* Team first: Line is its FK child, so Line stays locked until a Team is picked. */}
-                                <label className="block w-full sm:w-44">
-                                    <span className={fieldLabelClassName}>{t("productionFilterTeamLabel")}</span>
-                                    <SearchableSelect
-                                        options={visibleTeamOptions.map((option) => ({
-                                            value: option.id,
-                                            label: option.nameVn || option.code,
-                                            searchText: `${option.code} ${option.nameVn ?? ""}`.toLowerCase(),
-                                        }))}
-                                        value={productionTeamId}
-                                        onChange={setProductionTeamId}
-                                        placeholder={t("productionFilterTeamPlaceholder")}
-                                        disabled={!isCoreFormInfoFilled || isProductionScopeLocked}
-                                    />
-                                </label>
-                                <label className="block w-full sm:w-44">
-                                    <span className={fieldLabelClassName}>{t("productionFilterLineLabel")}</span>
-                                    <SearchableSelect
-                                        options={visibleLineOptions.map((option) => ({
-                                            value: option.id,
-                                            label: option.nameVn || option.code,
-                                            searchText: `${option.code} ${option.nameVn ?? ""}`.toLowerCase(),
-                                        }))}
-                                        value={productionLineId}
-                                        onChange={(v) => setProductionLineId(v)}
-                                        placeholder={
-                                            productionTeamId === "" ? t("productionFilterLinePlaceholderNeedTeam") : t("productionFilterLinePlaceholder")
-                                        }
-                                        disabled={!isCoreFormInfoFilled || productionTeamId === "" || isProductionScopeLocked}
-                                    />
-                                </label>
-                                <label className="block w-full sm:w-44">
-                                    <span className={fieldLabelClassName}>{t("productionFilterShiftTeamLabel")}</span>
-                                    <SearchableSelect
-                                        options={visibleShiftTeamOptions.map((option) => ({
-                                            value: option.id,
-                                            label: option.nameVn || option.code,
-                                            searchText: `${option.code} ${option.nameVn ?? ""}`.toLowerCase(),
-                                        }))}
-                                        value={productionShiftTeamId}
-                                        onChange={setProductionShiftTeamId}
-                                        placeholder={t("productionFilterShiftTeamPlaceholder")}
-                                        disabled={!isCoreFormInfoFilled || isProductionScopeLocked}
-                                    />
-                                </label>
-                                <label className="block w-full sm:w-64">
-                                    <span className={fieldLabelClassName}>{t("productionFilterKeywordLabel")}</span>
-                                    <input
-                                        value={productionKeyword}
-                                        onChange={(event) => setProductionKeyword(event.target.value)}
-                                        placeholder={t("productionFilterKeywordPlaceholder")}
-                                        disabled={!isCoreFormInfoFilled}
-                                        className={fieldClassName}
-                                    />
-                                </label>
-                            </div>
-
-                            {!isCoreFormInfoFilled ? null : !canSearchProduction ? (
-                                <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#e0e3e5] bg-[#f8fafc] px-4 py-16 text-center text-sm text-[#5e3f3a]">
-                                    <Users className="h-8 w-8 text-[#c7ccd1]" />
-                                    {t("chooseTeamLineFirstHint")}
-                                </div>
-                            ) : productionResults.length === 0 ? (
-                                <p className="text-sm text-[#5e3f3a]">{t("noProductionResults")}</p>
-                            ) : (
-                                <div
-                            ref={tableScrollRef}
-                            onMouseDown={onTableScrollMouseDown}
-                            className="-mx-5 -mb-5 max-h-[70vh] cursor-grab overflow-auto rounded-b-xl border-y lg:max-h-none lg:min-h-0 lg:flex-1 border-[#e0e3e5]"
-                        >
-                                    <table className={tableClassName}>
-                                        <thead className="sticky top-0 z-10 bg-white">
-                                            <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                <th rowSpan={2} className="h-px w-10 p-0 align-bottom">
-                                                    <label className="flex h-full cursor-pointer items-end justify-center px-3 py-2 has-disabled:cursor-not-allowed">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={productionResults.length > 0 && productionResults.every((item) => selectedEmployeeIds.includes(item.employeeId))}
-                                                            onChange={() =>
-                                                                setEmployeesSelected(
-                                                                    productionResults.map((item) => item.employeeId),
-                                                                    !productionResults.every((item) => selectedEmployeeIds.includes(item.employeeId))
-                                                                )
-                                                            }
-                                                            disabled={isSubmitting}
-                                                            aria-label={t("selectAllLabel")}
-                                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                        />
-                                                    </label>
-                                                </th>
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
-                                                {/* No Block/shift-group columns: every row matches the filter above. Process stays since it isn't filtered. */}
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colCongDoan")}</th>
-                                                <th colSpan={3} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
-                                                {/* No "ate" column: meals are mandatory for production forms. */}
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
-                                                <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
-                                            </tr>
-                                            <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                                <th className="px-3 py-2 text-center">{t("colDay")}</th>
-                                                <th className="px-3 py-2 text-center">{t("colMonth")}</th>
-                                                <th className="px-3 py-2 text-center">{t("colYear")}</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {productionResults.map((item) => {
-                                                const checked = selectedEmployeeIds.includes(item.employeeId);
-                                                // Early warning only (per-employee custom limits first); BE ValidateOtHourLimitsAsync is the real guard.
-                                                const currentStartTime = employeeOverrides[item.employeeId]?.startTime || startTime;
-                                                const currentEndTime = employeeOverrides[item.employeeId]?.endTime || endTime;
-                                                // Meals mandatory: ticket type always computed as having eaten.
-                                                const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, true, setting);
-                                                const monthLimit = item.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit;
-                                                const yearLimit = item.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit;
-                                                const extraHours = checked && currentStartTime && currentEndTime && !isTimeRangeInvalid ? computeActualHours(currentStartTime, currentEndTime, true, setting) : 0;
-                                                const dayHours = extraHours && splitHoursByDay(startTime, currentStartTime, currentEndTime, true, setting).firstDay;
-                                                const overDay = item.projectedDayToDate + dayHours > dailyOtHourLimit;
-                                                const overTh3 = item.projectedMonthToDate + extraHours > monthLimit || item.projectedYearToDate + extraHours > yearLimit;
-                                                const isTimeOutOfRange =
-                                                    checked &&
-                                                    Boolean(startTime && endTime && currentStartTime && currentEndTime) &&
-                                                    isEmployeeTimeOutOfRange(startTime, endTime, currentStartTime, currentEndTime);
-                                                return (
-                                                    <tr
-                                                        key={item.employeeId}
-                                                        onClick={(event) => {
-                                                            if (!isSubmitting && !isControlClick(event)) toggleEmployee(item.employeeId);
-                                                        }}
-                                                        className={`cursor-pointer border-b border-[#f1f5f9] transition-colors ${checked ? "bg-[#fff4f2]" : "bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"}`}
-                                                    >
-                                                        <td className="px-3 py-2 align-top">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={checked}
-                                                                onChange={() => toggleEmployee(item.employeeId)}
-                                                                disabled={isSubmitting}
-                                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                                            />
-                                                        </td>
-                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
-                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm">
-                                                            <span className={overlappingEmployeeIds.includes(item.employeeId) ? "line-through text-[#930006]" : "text-[#191c1e]"}>
-                                                                {item.fullName}
-                                                            </span>
-                                                            {item.isLeader && (
-                                                                <span className="ml-1.5 inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-1.5 py-0.5 text-[10px] font-semibold text-[#5e3f3a]">
-                                                                    {t("leaderBadge")}
-                                                                </span>
-                                                            )}
-                                                            <OverLimitBadges t={t} overDay={overDay} overTh3={overTh3} />
-                                                            {overlappingEmployeeIds.includes(item.employeeId) && (
-                                                                <div className="mt-1 text-xs font-semibold text-[#930006]">
-                                                                    {t("colOverlapWarning")}
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                        <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#5e3f3a]">{item.congDoan || "—"}</td>
-                                                        <AccumulationCell t={t} code={item.employeeCode} kind="Daily" hours={item.projectedDayToDate} limit={dailyOtHourLimit} extraHours={dayHours} />
-                                                        <AccumulationCell t={t} code={item.employeeCode} kind="Monthly" hours={item.projectedMonthToDate} limit={monthLimit} extraHours={extraHours} />
-                                                        <AccumulationCell t={t} code={item.employeeCode} kind="Yearly" hours={item.projectedYearToDate} limit={yearLimit} extraHours={extraHours} />
-                                                        <td className="px-3 py-2 align-top">
-                                                            <TimePicker24h compact
-                                                                value={currentStartTime}
-                                                                onChange={(value) => handleEmployeeOverrideChange(item.employeeId, "startTime", value)}
-                                                                disabled={isSubmitting || !checked}
-                                                            />
-                                                        </td>
-                                                        <td className="relative px-3 py-2 align-top">
-                                                            <TimePicker24h compact
-                                                                value={currentEndTime}
-                                                                onChange={(value) => handleEmployeeOverrideChange(item.employeeId, "endTime", value)}
-                                                                disabled={isSubmitting || !checked}
-                                                            />
-                                                            {isTimeOutOfRange && (
-<AlertTriangle aria-label={t("employeeTimeOutOfRange", { start: startTime, end: endTime })} className="absolute right-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white text-[#930006]">
-<title>{t("employeeTimeOutOfRange", { start: startTime, end: endTime })}</title>
-</AlertTriangle>
-)}
-                                                        </td>
-                                                        <td className="px-3 py-2 align-top">
-                                                            {mealTicketType !== MEAL_TICKET_NONE && <MealTicketTypeBadge type={mealTicketType} t={t} />}
-                                                        </td>
-                                                        <td className="px-3 py-2 align-top">
-                                                            <input
-                                                                value={employeeOverrides[item.employeeId]?.noteVn ?? ""}
-                                                                onChange={(event) => handleEmployeeOverrideChange(item.employeeId, "noteVn", event.target.value)}
-                                                                placeholder={t("notePlaceholder")}
-                                                                disabled={isSubmitting || !checked}
-                                                                className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                                                            />
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
                         </div>
                     ) : !isCoreFormInfoFilled || groupIds.length === 0 ? (
                         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#e0e3e5] bg-[#f8fafc] px-4 py-16 text-center text-sm text-[#5e3f3a]">
@@ -2145,8 +1644,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     )}
                                                 </td>
                                                 <AccumulationCell t={t} code={employee.code} kind="Daily" hours={employee.projectedDayToDate} limit={dailyOtHourLimit} extraHours={dayHours} />
-                                                <AccumulationCell t={t} code={employee.code} kind="Monthly" hours={employee.projectedMonthToDate} limit={monthLimit} extraHours={extraHours} />
-                                                <AccumulationCell t={t} code={employee.code} kind="Yearly" hours={employee.projectedYearToDate} limit={yearLimit} extraHours={extraHours} />
+                                                <AccumulationCell t={t} code={employee.code} kind="Monthly" hours={employee.projectedMonthToDate} limit={monthLimit} sharedLimit={setting.monthlyOtHourLimit} extraHours={extraHours} />
+                                                <AccumulationCell t={t} code={employee.code} kind="Yearly" hours={employee.projectedYearToDate} limit={yearLimit} sharedLimit={setting.yearlyOtHourLimit} extraHours={extraHours} />
                                                 <td className="px-3 py-2 align-top">
                                                     <TimePicker24h compact
                                                         value={currentStartTime}

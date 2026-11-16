@@ -11,9 +11,5 @@ namespace Attendance.Application.Interfaces.Service
         // groupId/departmentId are passed in because the caller has already validated them.
         Task<ResolveApprovalChainResultDto> ResolveChainForCreationAsync(int? creatorEmployeeId, int groupId, int departmentId, int workshopId, int otCaseId);
 
-        // Production forms read the single ProductionApprovalStep chain; Group/Line scope of intermediate steps
-        // is inferred from employeeIds, so mixed groups/lines yield no candidate for that step.
-        Task<ResolveApprovalChainResultDto> ResolveChainForProductionCreationAsync(
-            int? creatorEmployeeId, int departmentId, int workshopId, List<int> employeeIds, int otCaseId);
     }
 }

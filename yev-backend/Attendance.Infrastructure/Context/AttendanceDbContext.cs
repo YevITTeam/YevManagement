@@ -41,12 +41,13 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<DepartmentApprovalStepCoordinator> DepartmentApprovalStepCoordinators { get; set; }
     public virtual DbSet<GroupApprovalStepCoordinator> GroupApprovalStepCoordinators { get; set; }
     public virtual DbSet<GroupBorrowedApprover> GroupBorrowedApprovers { get; set; }
+    public virtual DbSet<GroupApprovalStepMember> GroupApprovalStepMembers { get; set; }
 
     public virtual DbSet<EmployeeAccumulationHistory> EmployeeAccumulationHistories { get; set; }
     public virtual DbSet<ProductionLine> ProductionLines { get; set; }
+    public virtual DbSet<GroupLine> GroupLines { get; set; }
     public virtual DbSet<ProductionShiftTeam> ProductionShiftTeams { get; set; }
     public virtual DbSet<ProductionTeam> ProductionTeams { get; set; }
-    public virtual DbSet<ProductionApprovalStep> ProductionApprovalSteps { get; set; }
     public virtual DbSet<OtFormEditLog> OtFormEditLogs { get; set; }
 
     public virtual DbSet<OtFormPaperScan> OtFormPaperScans { get; set; }
@@ -105,6 +106,20 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.WorkshopId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_Groups_Workshops_WorkshopId");
+
+            entity.Property(e => e.LineKind).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<GroupLine>(entity =>
+        {
+            entity.HasIndex(e => new { e.GroupId, e.ProductionLineId, e.ShiftTeamId }, "IX_GroupLines_GroupId_ProductionLineId_ShiftTeamId").IsUnique();
+            entity.HasIndex(e => e.ProductionLineId, "IX_GroupLines_ProductionLineId");
+            entity.HasOne(d => d.Group).WithMany(p => p.GroupLines).HasForeignKey(d => d.GroupId)
+                .OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_GroupLines_Groups_GroupId");
+            entity.HasOne(d => d.ProductionLine).WithMany().HasForeignKey(d => d.ProductionLineId)
+                .OnDelete(DeleteBehavior.Restrict).HasConstraintName("FK_GroupLines_ProductionLines_ProductionLineId");
+            entity.HasOne(d => d.ShiftTeam).WithMany().HasForeignKey(d => d.ShiftTeamId)
+                .OnDelete(DeleteBehavior.Restrict).HasConstraintName("FK_GroupLines_ProductionShiftTeams_ShiftTeamId");
         });
 
         modelBuilder.Entity<Workshop>(entity =>
@@ -148,6 +163,7 @@ public partial class AttendanceDbContext : DbContext
 
             entity.Property(e => e.CongDoan).HasMaxLength(50);
             entity.Property(e => e.TaskName).HasMaxLength(255);
+            entity.Property(e => e.StaffKind).HasMaxLength(20);
 
             entity.HasOne(d => d.ProductionLine).WithMany(p => p.Employees)
                 .HasForeignKey(d => d.ProductionLineId)
@@ -263,6 +279,21 @@ public partial class AttendanceDbContext : DbContext
                 .HasConstraintName("FK_GroupApprovalStepCoordinators_Employees_EmployeeId");
         });
 
+        modelBuilder.Entity<GroupApprovalStepMember>(entity =>
+        {
+            entity.HasIndex(e => new { e.GroupApprovalStepId, e.EmployeeId }, "IX_GroupApprovalStepMembers_GroupApprovalStepId_EmployeeId").IsUnique();
+            entity.HasIndex(e => e.EmployeeId, "IX_GroupApprovalStepMembers_EmployeeId");
+
+            entity.HasOne(d => d.GroupApprovalStep).WithMany(p => p.Members)
+                .HasForeignKey(d => d.GroupApprovalStepId)
+                .HasConstraintName("FK_GroupApprovalStepMembers_GroupApprovalSteps_GroupApprovalStepId");
+
+            entity.HasOne(d => d.Employee).WithMany()
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_GroupApprovalStepMembers_Employees_EmployeeId");
+        });
+
         modelBuilder.Entity<GroupBorrowedApprover>(entity =>
         {
             entity.HasIndex(e => new { e.GroupId, e.EmployeeId }, "IX_GroupBorrowedApprovers_GroupId_EmployeeId").IsUnique();
@@ -358,6 +389,8 @@ public partial class AttendanceDbContext : DbContext
             entity.Property(e => e.YearToDate).HasPrecision(10, 2);
             entity.Property(e => e.LedgerHours).HasPrecision(10, 2);
             entity.Property(e => e.LedgerHoursNextMonth).HasPrecision(10, 2);
+            entity.Property(e => e.CustomMonthlyOtHourLimitSnapshot).HasPrecision(10, 2);
+            entity.Property(e => e.CustomYearlyOtHourLimitSnapshot).HasPrecision(10, 2);
             entity.Property(e => e.RemovedByUserName).HasMaxLength(100);
             entity.Property(e => e.RemovedByFullName).HasMaxLength(255);
             entity.Property(e => e.RemoveReason).HasMaxLength(500);
@@ -627,8 +660,16 @@ public partial class AttendanceDbContext : DbContext
 
         modelBuilder.Entity<ProductionLine>(entity =>
         {
+            entity.HasIndex(e => new { e.WorkshopId, e.LineCode }, "IX_ProductionLines_WorkshopId_LineCode").IsUnique().HasFilter("[IsDeleted] = 0");
             entity.Property(e => e.LineCode).HasMaxLength(50);
             entity.Property(e => e.CongDoan).HasMaxLength(50);
+            entity.Property(e => e.CdMae).HasMaxLength(50);
+            entity.Property(e => e.SortCode).HasMaxLength(50);
+
+            entity.HasOne(d => d.Workshop).WithMany()
+                .HasForeignKey(d => d.WorkshopId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionLines_Workshops_WorkshopId");
 
             entity.HasOne(d => d.Team).WithMany(p => p.ProductionLines)
                 .HasForeignKey(d => d.TeamId)
@@ -638,30 +679,20 @@ public partial class AttendanceDbContext : DbContext
 
         modelBuilder.Entity<ProductionTeam>(entity =>
         {
+            entity.HasIndex(e => new { e.WorkshopId, e.Code }, "IX_ProductionTeams_WorkshopId_Code").IsUnique().HasFilter("[IsDeleted] = 0");
             entity.Property(e => e.Code).HasMaxLength(20);
             entity.Property(e => e.NameVn).HasMaxLength(100);
+
+            entity.HasOne(d => d.Workshop).WithMany()
+                .HasForeignKey(d => d.WorkshopId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionTeams_Workshops_WorkshopId");
         });
 
         modelBuilder.Entity<ProductionShiftTeam>(entity =>
         {
             entity.Property(e => e.Code).HasMaxLength(20);
             entity.Property(e => e.NameVn).HasMaxLength(100);
-        });
-
-        modelBuilder.Entity<ProductionApprovalStep>(entity =>
-        {
-            entity.HasIndex(e => e.DepartmentId, "IX_ProductionApprovalSteps_DepartmentId");
-            entity.HasIndex(e => e.JobTitleId, "IX_ProductionApprovalSteps_JobTitleId");
-
-            entity.HasOne(d => d.Department).WithMany(p => p.ProductionApprovalSteps)
-                .HasForeignKey(d => d.DepartmentId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_ProductionApprovalSteps_Departments_DepartmentId");
-
-            entity.HasOne(d => d.JobTitle).WithMany(p => p.ProductionApprovalSteps)
-                .HasForeignKey(d => d.JobTitleId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_ProductionApprovalSteps_JobTitles_JobTitleId");
         });
 
         OnModelCreatingPartial(modelBuilder);

@@ -122,37 +122,51 @@ export default function RouteCard({
     };
 
     return (
-        <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-2">
-                <span className="mt-1.5 shrink-0 rounded-full bg-[#f2f4f6] px-2.5 py-1 text-xs font-semibold text-[#191c1e]">
+        <div className="rounded-xl border border-[#e0e3e5] bg-white p-3 shadow-sm sm:p-4">
+            <div className="flex items-center justify-between gap-2">
+                <span className="shrink-0 rounded-full bg-[#f2f4f6] px-2.5 py-1 text-xs font-semibold text-[#191c1e]">
                     {t("routeOrderLabel", { order: index + 1 })}
                 </span>
                 <div className="flex shrink-0 items-center gap-1">
-                    <button type="button" onClick={onMoveUp} disabled={index === 0} className="cursor-pointer p-1 text-[#5e3f3a] hover:text-[#191c1e] disabled:opacity-30">
+                    <button
+                        type="button"
+                        onClick={onMoveUp}
+                        disabled={index === 0}
+                        aria-label={t("moveUp")}
+                        title={t("moveUp")}
+                        className="cursor-pointer p-1 text-[#5e3f3a] hover:text-[#191c1e] disabled:opacity-30"
+                    >
                         <ArrowUp className="h-4 w-4" />
                     </button>
-                    <button type="button" onClick={onMoveDown} disabled={index === totalRoutes - 1} className="cursor-pointer p-1 text-[#5e3f3a] hover:text-[#191c1e] disabled:opacity-30">
+                    <button
+                        type="button"
+                        onClick={onMoveDown}
+                        disabled={index === totalRoutes - 1}
+                        aria-label={t("moveDown")}
+                        title={t("moveDown")}
+                        className="cursor-pointer p-1 text-[#5e3f3a] hover:text-[#191c1e] disabled:opacity-30"
+                    >
                         <ArrowDown className="h-4 w-4" />
                     </button>
-                    <button type="button" onClick={onRemove} className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e0e3e5] px-2 py-1 text-xs font-semibold text-[#930006] hover:bg-[#fff4f2]">
+                    <button type="button" onClick={onRemove} className="flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-lg border border-[#e0e3e5] px-2 py-1 text-xs font-semibold text-[#930006] hover:bg-[#fff4f2]">
                         <Trash2 className="h-3.5 w-3.5" /> {t("removeRoute")}
                     </button>
                 </div>
             </div>
 
-            <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
-                <label className="col-span-2 block">
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:flex sm:flex-wrap sm:items-end">
+                <label className="col-span-2 block sm:w-64">
                     <span className={labelClassName}>{t("routeNameVn")}</span>
                     <input value={route.nameVn} onChange={(e) => onChange({ nameVn: e.target.value })} className={fieldClassName} />
                 </label>
-                <label className="col-span-2 block">
+                <label className="col-span-2 block sm:w-64">
                     <span className={labelClassName}>{t("fieldNameJp")}</span>
                     <input value={route.nameJp ?? ""} onChange={(e) => onChange({ nameJp: e.target.value || null })} className={fieldClassName} />
                 </label>
 
                 {showNumericRange && !route.isDefault && (
                     <>
-                        <label className="block">
+                        <label className="block sm:w-32">
                             <span className={labelClassName}>{t("routeMinValue")}</span>
                             <input
                                 type="number"
@@ -161,7 +175,7 @@ export default function RouteCard({
                                 className={fieldClassName}
                             />
                         </label>
-                        <label className="block">
+                        <label className="block sm:w-32">
                             <span className={labelClassName}>{t("routeMaxValue")}</span>
                             <input
                                 type="number"
@@ -173,13 +187,13 @@ export default function RouteCard({
                     </>
                 )}
                 {showClassValue && !route.isDefault && (
-                    <label className="col-span-2 block">
+                    <label className="col-span-2 block sm:w-48">
                         <span className={labelClassName}>{t("routeClassValue")}</span>
                         <input value={route.classValue ?? ""} onChange={(e) => onChange({ classValue: e.target.value || null })} className={fieldClassName} />
                     </label>
                 )}
 
-                <label className="flex items-center gap-1.5 pt-5">
+                <label className="col-span-2 flex h-9 cursor-pointer items-center gap-1.5">
                     <input type="checkbox" checked={route.isDefault} onChange={(e) => onChange({ isDefault: e.target.checked })} className="h-4 w-4 rounded border-[#e0e3e5] text-[#e3000f]" />
                     <span className="text-xs font-semibold text-[#5e3f3a]">{t("routeIsDefault")}</span>
                 </label>
@@ -188,13 +202,13 @@ export default function RouteCard({
             <div className="mt-3 border-t border-[#e0e3e5] pt-3">
                 <div className="mb-2 flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase text-[#8a8f94]">{t("stepsTitle")}</span>
-                    <button type="button" onClick={addStep} className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1 text-xs font-semibold text-[#191c1e] hover:bg-[#f2f4f6]">
+                    <button type="button" onClick={addStep} className="flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1 text-xs font-semibold text-[#191c1e] hover:bg-[#f2f4f6]">
                         <Plus className="h-3.5 w-3.5" /> {t("addStep")}
                     </button>
                 </div>
 
                 <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-dashed border-[#e0e3e5] bg-[#f8fafc] p-2.5">
-                    <div className="min-w-[180px] flex-1">
+                    <div className="w-full min-w-0 sm:w-72">
                         <span className={labelClassName}>{t("autoFillChainFromLabel")}</span>
                         <SearchableSelect
                             options={orgUnitOptions}
@@ -204,7 +218,7 @@ export default function RouteCard({
                             triggerClassName={fieldClassName}
                         />
                     </div>
-                    <div className="min-w-[180px] flex-1">
+                    <div className="w-full min-w-0 sm:w-72">
                         <span className={labelClassName}>{t("autoFillChainToLabel")}</span>
                         <SearchableSelect
                             options={orgUnitOptions}
@@ -218,7 +232,7 @@ export default function RouteCard({
                         type="button"
                         onClick={autoFillChain}
                         disabled={autoFillFromId === "" || autoFillToId === "" || isAutoFilling}
-                        className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <ListTree className="h-3.5 w-3.5" /> {isAutoFilling ? t("saving") : t("autoFillChainButton")}
                     </button>

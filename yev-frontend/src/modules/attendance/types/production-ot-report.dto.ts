@@ -36,6 +36,8 @@ export interface ProductionTicketBatchEmployeeDto {
     blockCodeSnapshot: string | null;
     teamCodeSnapshot: string | null;
     shiftTeamCodeSnapshot: string | null;
+    customMonthlyOtHourLimitSnapshot: number | null;
+    customYearlyOtHourLimitSnapshot: number | null;
 }
 
 export interface ProductionTicketBatchGroupDto {

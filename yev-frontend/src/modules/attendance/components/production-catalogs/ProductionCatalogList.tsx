@@ -3,10 +3,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Inbox, Search, Pencil, Trash2 } from "lucide-react";
+import { Check, Inbox, Search, Pencil, Trash2 } from "lucide-react";
 
 import { ProductionCatalogApi } from "@/modules/attendance/api/production-catalog.api";
-import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
+import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
 import type {
     ProductionCatalogItemDto,
     ProductionCatalogKind,
@@ -31,12 +31,15 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
     const tCommon = useTranslations("Common");
     const kindLabel = { Line: t("kindLine"), Team: t("kindTeam"), ShiftTeam: t("kindShiftTeam") }[kind];
     const isLine = kind === "Line";
+    const hasWorkshop = kind !== "ShiftTeam";
 
     const [items, setItems] = useState<ProductionCatalogItemDto[]>([]);
     const [keyword, setKeyword] = useState("");
     const [appliedKeyword, setAppliedKeyword] = useState("");
     const [teamFilter, setTeamFilter] = useState<number | "">("");
-    const [teamOptions, setTeamOptions] = useState<SelectOption[]>([]);
+    const [workshopFilter, setWorkshopFilter] = useState<number | "">("");
+    const [teams, setTeams] = useState<ProductionCatalogItemDto[]>([]);
+    const [workshopOptions, setWorkshopOptions] = useState<SelectOption[]>([]);
 
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -56,8 +59,9 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                 pageSize: PAGE_SIZE,
                 keyword: appliedKeyword || undefined,
                 teamId: teamFilter === "" ? undefined : teamFilter,
+                workshopId: workshopFilter === "" ? undefined : workshopFilter,
             }),
-        [kind, pageIndex, appliedKeyword, teamFilter],
+        [kind, pageIndex, appliedKeyword, teamFilter, workshopFilter],
         (result) => {
             setItems(result.data);
             setTotalCount(result.totalCount);
@@ -69,11 +73,19 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
     );
 
     useEffect(() => {
-        if (!isLine) return;
-        ProductionEmployeeApi.getTeamOptions()
-            .then((data) => setTeamOptions(data.map((team) => ({ value: team.id, label: team.code, searchText: team.code.toLowerCase() }))))
+        if (!hasWorkshop) return;
+        WorkshopApi.getAllWorkshops()
+            .then((list) => setWorkshopOptions(list.map((w) => ({ value: w.id, label: w.workshopCode, searchText: w.workshopCode.toLowerCase() }))))
             .catch((err) => console.error(err));
-    }, [isLine]);
+        if (!isLine) return;
+        ProductionCatalogApi.getPage("Team", { pageIndex: 1, pageSize: 500 })
+            .then((res) => setTeams(res.data))
+            .catch((err) => console.error(err));
+    }, [hasWorkshop, isLine]);
+
+    const teamFilterOptions: SelectOption[] = teams
+        .filter((team) => workshopFilter === "" || team.workshopId === workshopFilter)
+        .map((team) => ({ value: team.id, label: `${team.workshopCode} · ${team.code}`, searchText: team.code.toLowerCase() }));
 
     useEffect(() => {
         onLoadingChange?.(isLoading);
@@ -134,7 +146,7 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
         }
     };
 
-    const columnCount = isLine ? 5 : 4;
+    const columnCount = isLine ? 10 : hasWorkshop ? 5 : 4;
 
     return (
         <div className="space-y-4">
@@ -147,9 +159,22 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                         placeholder={t("searchPlaceholder")}
                         className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
+                    {hasWorkshop && (
+                        <SearchableSelect
+                            options={workshopOptions}
+                            value={workshopFilter}
+                            onChange={(value) => {
+                                setPageIndex(1);
+                                setWorkshopFilter(value);
+                                setTeamFilter("");
+                            }}
+                            placeholder={t("allWorkshops")}
+                            triggerClassName="h-9 w-32 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                        />
+                    )}
                     {isLine && (
                         <SearchableSelect
-                            options={teamOptions}
+                            options={teamFilterOptions}
                             value={teamFilter}
                             onChange={(value) => {
                                 setPageIndex(1);
@@ -176,11 +201,16 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                                {hasWorkshop && <th className="px-3 py-2">{t("colWorkshop")}</th>}
                                 <th className="px-3 py-2">{t("colCode")}</th>
                                 {isLine ? (
                                     <>
                                         <th className="px-3 py-2">{t("colTeam")}</th>
                                         <th className="px-3 py-2">{t("colCongDoan")}</th>
+                                        <th className="px-3 py-2">{t("colCdMae")}</th>
+                                        <th className="px-3 py-2">{t("colSortCode")}</th>
+                                        <th className="px-3 py-2 text-center">TT</th>
+                                        <th className="px-3 py-2 text-center">GT</th>
                                     </>
                                 ) : (
                                     <th className="px-3 py-2">{t("colName")}</th>
@@ -202,11 +232,16 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                             )}
                             {items.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
+                                    {hasWorkshop && <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.workshopCode}</td>}
                                     <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{item.code}</td>
                                     {isLine ? (
                                         <>
-                                            <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.teamCode}</td>
+                                            <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.teamCode || "-"}</td>
                                             <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.congDoan || "-"}</td>
+                                            <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.cdMae || "-"}</td>
+                                            <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.sortCode || "-"}</td>
+                                            <td className="px-3 py-2 text-center text-sm text-[#5e3f3a]">{item.hasDirectStaff && <Check className="mx-auto h-4 w-4" />}</td>
+                                            <td className="px-3 py-2 text-center text-sm text-[#5e3f3a]">{item.hasIndirectStaff && <Check className="mx-auto h-4 w-4" />}</td>
                                         </>
                                     ) : (
                                         <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.nameVn || "-"}</td>
@@ -254,7 +289,8 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                 isOpen={formOpen}
                 mode={editing ? "edit" : "create"}
                 initial={editing}
-                teamOptions={teamOptions}
+                workshopOptions={workshopOptions}
+                teams={teams}
                 loading={isSaving}
                 onClose={closeForm}
                 onSubmit={handleSubmit}

@@ -104,16 +104,16 @@ export default function FormDefinitionForm({ isOpen, mode, initial, formCategori
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="fixed inset-0 bg-black/40" onClick={() => !loading && onClose()} />
 
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="form-definition-form-title"
-                className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 flex max-h-full w-full max-w-lg flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl"
             >
-                <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
+                <div className="flex items-center justify-between border-b border-[#e0e3e5] px-4 py-4 sm:px-6">
                     <h3 id="form-definition-form-title" className="text-lg font-semibold text-[#191c1e]">
                         {mode === "create" ? t("createTitle") : t("editTitle")}
                     </h3>
@@ -127,156 +127,158 @@ export default function FormDefinitionForm({ isOpen, mode, initial, formCategori
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-                    <div className="grid grid-cols-2 gap-4">
+                <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6">
+                        <div className="grid grid-cols-2 gap-4">
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldCode")}</span>
+                                <input
+                                    value={values.code}
+                                    onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
+                                    placeholder={t("fieldCodePlaceholder")}
+                                    disabled={loading}
+                                    autoFocus
+                                    required
+                                    className={fieldClassName}
+                                />
+                            </label>
+    
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldCodePrefix")}</span>
+                                <input
+                                    value={values.codePrefix}
+                                    onChange={(event) => setValues((current) => ({ ...current, codePrefix: event.target.value }))}
+                                    placeholder={t("fieldCodePrefixPlaceholder")}
+                                    disabled={loading}
+                                    required
+                                    className={fieldClassName}
+                                />
+                            </label>
+                        </div>
+    
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldCode")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldNameVn")}</span>
                             <input
-                                value={values.code}
-                                onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
-                                placeholder={t("fieldCodePlaceholder")}
+                                value={values.nameVn}
+                                onChange={(event) => setValues((current) => ({ ...current, nameVn: event.target.value }))}
+                                placeholder={t("fieldNameVnPlaceholder")}
                                 disabled={loading}
-                                autoFocus
                                 required
                                 className={fieldClassName}
                             />
                         </label>
-
+    
                         <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldCodePrefix")}</span>
+                            <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
                             <input
-                                value={values.codePrefix}
-                                onChange={(event) => setValues((current) => ({ ...current, codePrefix: event.target.value }))}
-                                placeholder={t("fieldCodePrefixPlaceholder")}
+                                value={values.nameJp ?? ""}
+                                onChange={(event) => setValues((current) => ({ ...current, nameJp: event.target.value }))}
+                                placeholder={t("fieldNameJpPlaceholder")}
                                 disabled={loading}
-                                required
                                 className={fieldClassName}
                             />
                         </label>
-                    </div>
-
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldNameVn")}</span>
-                        <input
-                            value={values.nameVn}
-                            onChange={(event) => setValues((current) => ({ ...current, nameVn: event.target.value }))}
-                            placeholder={t("fieldNameVnPlaceholder")}
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
-
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldNameJp")}</span>
-                        <input
-                            value={values.nameJp ?? ""}
-                            onChange={(event) => setValues((current) => ({ ...current, nameJp: event.target.value }))}
-                            placeholder={t("fieldNameJpPlaceholder")}
-                            disabled={loading}
-                            className={fieldClassName}
-                        />
-                    </label>
-
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldFormCategory")}</span>
-                        <SearchableSelect
-                            options={formCategoryOptions}
-                            value={values.formCategoryId || ""}
-                            onChange={(v) => setValues((current) => ({ ...current, formCategoryId: v === "" ? 0 : v }))}
-                            placeholder={t("fieldFormCategoryPlaceholder")}
-                            disabled={loading}
-                        />
-                    </label>
-
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldDescription")}</span>
-                        <textarea
-                            value={values.description ?? ""}
-                            onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))}
-                            placeholder={t("fieldDescriptionPlaceholder")}
-                            disabled={loading}
-                            rows={2}
-                            className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                        />
-                    </label>
-
-                    <div className="flex gap-6">
-                        <label className="flex cursor-pointer items-center gap-2 text-sm text-[#191c1e]">
-                            <input
-                                type="checkbox"
-                                checked={values.allowAttachment}
+    
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldFormCategory")}</span>
+                            <SearchableSelect
+                                options={formCategoryOptions}
+                                value={values.formCategoryId || ""}
+                                onChange={(v) => setValues((current) => ({ ...current, formCategoryId: v === "" ? 0 : v }))}
+                                placeholder={t("fieldFormCategoryPlaceholder")}
+                                disabled={loading}
+                            />
+                        </label>
+    
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldDescription")}</span>
+                            <textarea
+                                value={values.description ?? ""}
+                                onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))}
+                                placeholder={t("fieldDescriptionPlaceholder")}
+                                disabled={loading}
+                                rows={2}
+                                className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                            />
+                        </label>
+    
+                        <div className="flex flex-wrap gap-x-6 gap-y-2">
+                            <label className="flex cursor-pointer items-center gap-2 text-sm text-[#191c1e]">
+                                <input
+                                    type="checkbox"
+                                    checked={values.allowAttachment}
+                                    onChange={(event) =>
+                                        setValues((current) => ({
+                                            ...current,
+                                            allowAttachment: event.target.checked,
+                                            requireAttachment: event.target.checked ? current.requireAttachment : false,
+                                        }))
+                                    }
+                                    disabled={loading}
+                                    className="h-4 w-4 rounded border-[#e0e3e5] text-[#e3000f] focus:ring-[#e3000f]"
+                                />
+                                {t("fieldAllowAttachment")}
+                            </label>
+                            <label className="flex cursor-pointer items-center gap-2 text-sm text-[#191c1e]">
+                                <input
+                                    type="checkbox"
+                                    checked={values.requireAttachment}
+                                    onChange={(event) => setValues((current) => ({ ...current, requireAttachment: event.target.checked }))}
+                                    disabled={loading || !values.allowAttachment}
+                                    className="h-4 w-4 rounded border-[#e0e3e5] text-[#e3000f] focus:ring-[#e3000f] disabled:opacity-50"
+                                />
+                                {t("fieldRequireAttachment")}
+                            </label>
+                        </div>
+    
+                        <label className="block">
+                            <span className={fieldLabelClassName}>{t("fieldRouteConditionType")}</span>
+                            <select
+                                value={values.routeConditionType}
                                 onChange={(event) =>
-                                    setValues((current) => ({
-                                        ...current,
-                                        allowAttachment: event.target.checked,
-                                        requireAttachment: event.target.checked ? current.requireAttachment : false,
-                                    }))
+                                    setValues((current) => ({ ...current, routeConditionType: Number(event.target.value) as RouteConditionType }))
                                 }
-                                disabled={loading}
-                                className="h-4 w-4 rounded border-[#e0e3e5] text-[#e3000f] focus:ring-[#e3000f]"
-                            />
-                            {t("fieldAllowAttachment")}
+                                disabled={loading || mode === "edit"}
+                                className={fieldClassName}
+                            >
+                                <option value={RouteConditionType.None}>{t("routeConditionNone")}</option>
+                                <option value={RouteConditionType.NumericRange}>{t("routeConditionNumericRange")}</option>
+                                <option value={RouteConditionType.ClassValue}>{t("routeConditionClassValue")}</option>
+                                <option value={RouteConditionType.Both}>{t("routeConditionBoth")}</option>
+                            </select>
+                            {mode === "edit" && <p className="mt-1 text-xs text-[#8a8f94]">{t("routeConditionImmutableNote")}</p>}
                         </label>
-                        <label className="flex cursor-pointer items-center gap-2 text-sm text-[#191c1e]">
-                            <input
-                                type="checkbox"
-                                checked={values.requireAttachment}
-                                onChange={(event) => setValues((current) => ({ ...current, requireAttachment: event.target.checked }))}
-                                disabled={loading || !values.allowAttachment}
-                                className="h-4 w-4 rounded border-[#e0e3e5] text-[#e3000f] focus:ring-[#e3000f] disabled:opacity-50"
-                            />
-                            {t("fieldRequireAttachment")}
-                        </label>
+    
+                        {needsNumericKey && (
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldRouteNumericFieldKey")}</span>
+                                <input
+                                    value={values.routeNumericFieldKey ?? ""}
+                                    onChange={(event) => setValues((current) => ({ ...current, routeNumericFieldKey: event.target.value }))}
+                                    placeholder={t("fieldRouteFieldKeyPlaceholder")}
+                                    disabled={loading}
+                                    required
+                                    className={fieldClassName}
+                                />
+                            </label>
+                        )}
+    
+                        {needsClassKey && (
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldRouteClassFieldKey")}</span>
+                                <input
+                                    value={values.routeClassFieldKey ?? ""}
+                                    onChange={(event) => setValues((current) => ({ ...current, routeClassFieldKey: event.target.value }))}
+                                    placeholder={t("fieldRouteFieldKeyPlaceholder")}
+                                    disabled={loading}
+                                    required
+                                    className={fieldClassName}
+                                />
+                            </label>
+                        )}
                     </div>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldRouteConditionType")}</span>
-                        <select
-                            value={values.routeConditionType}
-                            onChange={(event) =>
-                                setValues((current) => ({ ...current, routeConditionType: Number(event.target.value) as RouteConditionType }))
-                            }
-                            disabled={loading || mode === "edit"}
-                            className={fieldClassName}
-                        >
-                            <option value={RouteConditionType.None}>{t("routeConditionNone")}</option>
-                            <option value={RouteConditionType.NumericRange}>{t("routeConditionNumericRange")}</option>
-                            <option value={RouteConditionType.ClassValue}>{t("routeConditionClassValue")}</option>
-                            <option value={RouteConditionType.Both}>{t("routeConditionBoth")}</option>
-                        </select>
-                        {mode === "edit" && <p className="mt-1 text-xs text-[#8a8f94]">{t("routeConditionImmutableNote")}</p>}
-                    </label>
-
-                    {needsNumericKey && (
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldRouteNumericFieldKey")}</span>
-                            <input
-                                value={values.routeNumericFieldKey ?? ""}
-                                onChange={(event) => setValues((current) => ({ ...current, routeNumericFieldKey: event.target.value }))}
-                                placeholder={t("fieldRouteFieldKeyPlaceholder")}
-                                disabled={loading}
-                                required
-                                className={fieldClassName}
-                            />
-                        </label>
-                    )}
-
-                    {needsClassKey && (
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldRouteClassFieldKey")}</span>
-                            <input
-                                value={values.routeClassFieldKey ?? ""}
-                                onChange={(event) => setValues((current) => ({ ...current, routeClassFieldKey: event.target.value }))}
-                                placeholder={t("fieldRouteFieldKeyPlaceholder")}
-                                disabled={loading}
-                                required
-                                className={fieldClassName}
-                            />
-                        </label>
-                    )}
-
-                    <div className="flex justify-end gap-3 pt-2">
+                    <div className="flex justify-end gap-3 border-t border-[#e0e3e5] px-4 py-3 sm:px-6">
                         <button
                             type="button"
                             onClick={onClose}

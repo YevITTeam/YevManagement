@@ -1,4 +1,14 @@
-// Only the 3 intermediate levels (Staff/Group Leader/Team Leader); terminal levels live in DepartmentApprovalStep.
+export interface GroupApprovalStepMemberDto {
+    employeeId: number;
+    employeeCode: string;
+    lastName: string;
+    firstName: string;
+    groupNameVn: string | null;
+    // Everyone on the level may approve; only these people are mailed.
+    receivesMail: boolean;
+}
+
+// Only the intermediate levels; terminal levels live in DepartmentApprovalStep.
 // Replace-whole-list API, no per-row CRUD.
 export interface GroupApprovalStepDto {
     id: number;
@@ -11,7 +21,8 @@ export interface GroupApprovalStepDto {
     requiresSignature: boolean;
     // "Responsible person" on the printed form; at most one step per group.
     isResponsible: boolean;
-    // Holders of this step may edit and re-sign a form after a Manager signed or rejected it.
+    members: GroupApprovalStepMemberDto[];
+    // People on this step may edit and re-sign a form after a Manager signed or rejected it.
     canResubmit: boolean;
     // With canResubmit: re-submission goes straight to the Manager, group steps re-signed with the current time.
     resubmitSkipsIntermediate: boolean;
@@ -19,10 +30,10 @@ export interface GroupApprovalStepDto {
     terminalLevel: number;
 }
 
-// Someone from elsewhere in the Department lent to this Group: creates its forms and approves steps matching their title.
 export interface GroupBorrowedApproverDto {
     employeeId: number;
     jobTitleId: number | null;
+    jobTitleName: string | null;
     employeeCode: string;
     lastName: string;
     firstName: string;
@@ -30,10 +41,12 @@ export interface GroupBorrowedApproverDto {
     groupNameJp: string | null;
 }
 
-// approvers = already lent; candidates = everyone else in the Department with an account, outside this Group.
+// candidates = everyone in the Department with an account; the source of the level pickers.
 export interface GroupBorrowedApproversDto {
-    approvers: GroupBorrowedApproverDto[];
     candidates: GroupBorrowedApproverDto[];
+    creatorMustSign: boolean;
+    // Office forms: the edit right climbs with the approvals instead of staying with the creator.
+    stepwiseEdit: boolean;
 }
 
 // Array order is the StepOrder.
@@ -43,4 +56,24 @@ export interface ReplaceGroupApprovalStepItem {
     isResponsible: boolean;
     canResubmit: boolean;
     resubmitSkipsIntermediate: boolean;
+    members: { employeeId: number; receivesMail: boolean }[];
+}
+
+export interface ReplaceGroupApprovalTree {
+    steps: ReplaceGroupApprovalStepItem[];
+    creatorMustSign: boolean;
+    stepwiseEdit: boolean;
+}
+
+export interface ApplyGroupLevelMember {
+    employeeId: number;
+    jobTitleId: number;
+    receivesMail: boolean;
+    groupIds: number[];
+}
+
+export interface ApplyGroupLevelMemberResult {
+    appliedCount: number;
+    skippedGroupNames: string[];
+    onOtherLevelGroupNames: string[];
 }

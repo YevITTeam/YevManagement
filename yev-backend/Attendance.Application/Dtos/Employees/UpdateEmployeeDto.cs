@@ -28,5 +28,13 @@ namespace Attendance.Application.Dtos.Employees
         public int? JobTitleId { get; set; }
 
         // OT limits are edited via PUT /api/Employee/{id}/ot-limit, which has a narrower permission.
+
+        // Line × Ca the group covers (the form derives the group from Line × Ca × TT/GT); null = keep or default from the group.
+        public int? ProductionLineId { get; set; }
+        public int? ShiftTeamId { get; set; }
+        [MaxLength(50, ErrorMessage = "Công đoạn tối đa 50 ký tự")]
+        public string? CongDoan { get; set; }
+        [MaxLength(255, ErrorMessage = "Công việc tối đa 255 ký tự")]
+        public string? TaskName { get; set; }
     }
 }

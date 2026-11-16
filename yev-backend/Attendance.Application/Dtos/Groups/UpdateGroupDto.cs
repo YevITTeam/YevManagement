@@ -21,5 +21,14 @@ namespace Attendance.Application.Dtos.Groups
         public int WorkshopId { get; set; }
 
         public bool AllowEatLater { get; set; } = true;
+
+        // TT/GT; required when Lines is not empty.
+        [MaxLength(20)]
+        public string? LineKind { get; set; }
+
+        public List<GroupLineDto> Lines { get; set; } = new();
+
+        // Pairs another group of the same workshop, department and kind owns move here with the people standing on them.
+        public bool TakeOverLines { get; set; }
     }
 }

@@ -16,8 +16,9 @@ interface FormFieldConditionsPanelProps {
     formDefinitionId: number;
 }
 
-const selectClassName =
-    "h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+const fieldBaseClassName =
+    "h-9 rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+const selectClassName = `${fieldBaseClassName} w-full`;
 
 // Target/Source must be saved fields (FKs to FormFields.Id), not unsaved ones from the fields tab. No autosave.
 export default function FormFieldConditionsPanel({ formDefinitionId }: FormFieldConditionsPanelProps) {
@@ -113,29 +114,27 @@ export default function FormFieldConditionsPanel({ formDefinitionId }: FormField
     }
 
     if (fields.length < 2) {
-        return <div className="rounded-lg border border-[#f5d0a9] bg-[#fff8ee] px-4 py-3 text-sm text-[#8a5a00]">{t("needAtLeastTwoFields")}</div>;
+        return <div className="rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">{t("needAtLeastTwoFields")}</div>;
     }
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={addRow}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                    >
-                        <Plus className="h-3.5 w-3.5" /> {t("addCondition")}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <Save className="h-3.5 w-3.5" /> {isSaving ? t("saving") : t("saveChanges")}
-                    </button>
-                </div>
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={addRow}
+                    className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                >
+                    <Plus className="h-3.5 w-3.5" /> {t("addCondition")}
+                </button>
+                <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    <Save className="h-3.5 w-3.5" /> {isSaving ? t("saving") : t("saveChanges")}
+                </button>
             </div>
 
             {items.length === 0 ? (
@@ -150,8 +149,8 @@ export default function FormFieldConditionsPanel({ formDefinitionId }: FormField
 
                         return (
                             <div key={index} className="rounded-lg border border-[#e0e3e5] bg-white p-3">
-                                <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-                                    <label className="block">
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:flex sm:flex-wrap sm:items-end">
+                                    <label className="block sm:w-48">
                                         <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("conditionTarget")}</span>
                                         <select
                                             value={item.targetFieldId}
@@ -166,7 +165,7 @@ export default function FormFieldConditionsPanel({ formDefinitionId }: FormField
                                         </select>
                                     </label>
 
-                                    <label className="block">
+                                    <label className="block sm:w-48">
                                         <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("conditionSource")}</span>
                                         <select
                                             value={item.sourceFieldId}
@@ -181,7 +180,7 @@ export default function FormFieldConditionsPanel({ formDefinitionId }: FormField
                                         </select>
                                     </label>
 
-                                    <label className="block">
+                                    <label className="block sm:w-36">
                                         <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("conditionOperator")}</span>
                                         <select
                                             value={item.operator}
@@ -200,7 +199,7 @@ export default function FormFieldConditionsPanel({ formDefinitionId }: FormField
                                     </label>
 
                                     {needsCompareValue && (
-                                        <label className="block">
+                                        <label className="block sm:w-36">
                                             <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">
                                                 {t("conditionCompareValue")}
                                             </span>
@@ -213,7 +212,7 @@ export default function FormFieldConditionsPanel({ formDefinitionId }: FormField
                                     )}
 
                                     {needsCompareValue2 && (
-                                        <label className="block">
+                                        <label className="block sm:w-36">
                                             <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">
                                                 {t("conditionCompareValue2")}
                                             </span>
@@ -225,7 +224,7 @@ export default function FormFieldConditionsPanel({ formDefinitionId }: FormField
                                         </label>
                                     )}
 
-                                    <label className="block">
+                                    <label className="block sm:w-36">
                                         <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("conditionEffect")}</span>
                                         <select
                                             value={item.effect}
@@ -246,18 +245,18 @@ export default function FormFieldConditionsPanel({ formDefinitionId }: FormField
                                             min={1}
                                             value={item.logicGroup}
                                             onChange={(event) => updateRow(index, { logicGroup: Number(event.target.value) })}
-                                            className={selectClassName}
+                                            className={`${fieldBaseClassName} w-20`}
                                         />
                                     </label>
-                                </div>
 
-                                <div className="mt-2 flex justify-end">
                                     <button
                                         type="button"
                                         onClick={() => removeRow(index)}
-                                        className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-[#930006] hover:text-[#e3000f]"
+                                        title={t("removeCondition")}
+                                        aria-label={t("removeCondition")}
+                                        className="col-span-2 flex h-9 w-9 cursor-pointer items-center justify-center justify-self-end rounded-md text-[#930006] transition hover:bg-[#fff4f2] sm:ml-auto"
                                     >
-                                        <Trash2 className="h-3.5 w-3.5" /> {t("removeCondition")}
+                                        <Trash2 className="h-4 w-4" />
                                     </button>
                                 </div>
                             </div>

@@ -9,7 +9,6 @@ import type {
     CreateOtFormsDto,
     DeleteOtFormDto,
     MyCreateScopeItemDto,
-    MyProductionCreateScopeItemDto,
     OtFormDto,
     OtFormListItemDto,
     OtFormPaperScanListItemDto,
@@ -25,7 +24,6 @@ import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 const ENDPOINTS = {
     OT_FORM: {
         getMyCreateScopes: "/OtForm/my-create-scopes",
-        getMyProductionCreateScopes: "/OtForm/my-production-create-scopes",
         checkOverlap: "/OtForm/check-overlap",
         createOtForm: "/OtForm",
         createOtForms: "/OtForm/multi-group",
@@ -92,11 +90,6 @@ export const OtFormApi = {
     // Lets the create screen prefill/lock the department dropdowns.
     getMyCreateScopes: async () => {
         const response = await api.get<ApiResponse<MyCreateScopeItemDto[]>>(ENDPOINTS.OT_FORM.getMyCreateScopes);
-        return response.data;
-    },
-    // Lets the production tab prefill/lock the Team/Line/shift-group dropdowns.
-    getMyProductionCreateScopes: async () => {
-        const response = await api.get<ApiResponse<MyProductionCreateScopeItemDto[]>>(ENDPOINTS.OT_FORM.getMyProductionCreateScopes);
         return response.data;
     },
     checkOverlap: async (data: CheckOtFormOverlapDto) => {

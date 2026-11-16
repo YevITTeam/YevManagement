@@ -140,17 +140,17 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
         "h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="fixed inset-0 bg-black/40" onClick={() => !isSaving && onClose()} />
 
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="employee-org-units-title"
-                className="z-60 mx-4 w-full max-w-3xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 flex max-h-full w-full max-w-3xl flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl"
             >
-                <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
-                    <div>
+                <div className="flex items-center justify-between gap-3 border-b border-[#e0e3e5] px-6 py-4">
+                    <div className="min-w-0">
                         <h3 id="employee-org-units-title" className="text-lg font-semibold text-[#191c1e]">
                             {t("orgUnitsTitle")}
                         </h3>
@@ -169,99 +169,103 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
                 </div>
 
                 {isLoading ? (
-                    <div className="py-10 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
+                    <div className="px-6 py-10 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
                 ) : error ? (
-                    <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
+                    <div className="m-6 rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 ) : (
-                    <div className="space-y-4">
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full border-collapse text-left">
-                                <thead>
-                                    <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                        <th className="py-2 pr-3">{t("orgUnitsColOrgUnit")}</th>
-                                        <th className="py-2 pr-3">{t("orgUnitsColJobTitle")}</th>
-                                        <th className="py-2 pr-3 text-center">{t("orgUnitsColPrimary")}</th>
-                                        <th className="py-2 pr-3"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {items.length === 0 && (
-                                        <tr>
-                                            <td colSpan={4} className="py-6 text-center text-sm text-[#5e3f3a]">
-                                                {t("orgUnitsNoData")}
-                                            </td>
+                    <>
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[34rem] border-collapse text-left">
+                                    <thead>
+                                        <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                            <th className="py-2 pr-3">{t("orgUnitsColOrgUnit")}</th>
+                                            <th className="py-2 pr-3">{t("orgUnitsColJobTitle")}</th>
+                                            <th className="py-2 pr-3 text-center">{t("orgUnitsColPrimary")}</th>
+                                            <th className="py-2 pr-3"></th>
                                         </tr>
-                                    )}
-                                    {items.map((item) => (
-                                        <tr key={item.clientId} className="border-b border-[#f1f5f9]">
-                                            <td className="py-2 pr-3">
-                                                <select
-                                                    value={item.orgUnitId}
-                                                    onChange={(event) => updateRow(item.clientId, { orgUnitId: Number(event.target.value) })}
-                                                    disabled={isSaving}
-                                                    className={fieldClassName}
-                                                >
-                                                    {flatUnits.map((unit) => (
-                                                        <option key={unit.id} value={unit.id}>
-                                                            {unit.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                            <td className="py-2 pr-3">
-                                                <select
-                                                    value={item.jobTitleId ?? 0}
-                                                    onChange={(event) =>
-                                                        updateRow(item.clientId, {
-                                                            jobTitleId: Number(event.target.value) === 0 ? null : Number(event.target.value),
-                                                        })
-                                                    }
-                                                    disabled={isSaving}
-                                                    className={fieldClassName}
-                                                >
-                                                    <option value={0}>{t("orgUnitsNoJobTitle")}</option>
-                                                    {jobTitles.map((jt) => (
-                                                        <option key={jt.id} value={jt.id}>
-                                                            {jt.nameVn}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                            <td className="py-2 pr-3 text-center">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={item.isPrimary}
-                                                    onChange={(event) => updateRow(item.clientId, { isPrimary: event.target.checked })}
-                                                    disabled={isSaving}
-                                                    className="h-4 w-4 rounded border-[#e0e3e5] text-[#e3000f] focus:ring-[#e3000f]"
-                                                />
-                                            </td>
-                                            <td className="py-2 pr-1 text-right">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeRow(item.clientId)}
-                                                    disabled={isSaving}
-                                                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-[#930006] hover:bg-[#fff4f2] disabled:opacity-50"
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {items.length === 0 && (
+                                            <tr>
+                                                <td colSpan={4} className="py-6 text-center text-sm text-[#5e3f3a]">
+                                                    {t("orgUnitsNoData")}
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {items.map((item) => (
+                                            <tr key={item.clientId} className="border-b border-[#f1f5f9]">
+                                                <td className="py-2 pr-3">
+                                                    <select
+                                                        value={item.orgUnitId}
+                                                        onChange={(event) => updateRow(item.clientId, { orgUnitId: Number(event.target.value) })}
+                                                        disabled={isSaving}
+                                                        className={fieldClassName}
+                                                    >
+                                                        {flatUnits.map((unit) => (
+                                                            <option key={unit.id} value={unit.id}>
+                                                                {unit.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                                <td className="py-2 pr-3">
+                                                    <select
+                                                        value={item.jobTitleId ?? 0}
+                                                        onChange={(event) =>
+                                                            updateRow(item.clientId, {
+                                                                jobTitleId: Number(event.target.value) === 0 ? null : Number(event.target.value),
+                                                            })
+                                                        }
+                                                        disabled={isSaving}
+                                                        className={fieldClassName}
+                                                    >
+                                                        <option value={0}>{t("orgUnitsNoJobTitle")}</option>
+                                                        {jobTitles.map((jt) => (
+                                                            <option key={jt.id} value={jt.id}>
+                                                                {jt.nameVn}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                                <td className="py-2 pr-3 text-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={item.isPrimary}
+                                                        onChange={(event) => updateRow(item.clientId, { isPrimary: event.target.checked })}
+                                                        disabled={isSaving}
+                                                        className="h-4 w-4 rounded border-[#e0e3e5] text-[#e3000f] focus:ring-[#e3000f]"
+                                                    />
+                                                </td>
+                                                <td className="py-2 pr-1 text-right">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeRow(item.clientId)}
+                                                        disabled={isSaving}
+                                                        title={tCommon("delete")}
+                                                        aria-label={tCommon("delete")}
+                                                        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-[#930006] hover:bg-[#fff4f2] disabled:opacity-50"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={addRow}
+                                disabled={isSaving || flatUnits.length === 0}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            >
+                                <Plus className="h-3.5 w-3.5" /> {t("orgUnitsAddRow")}
+                            </button>
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={addRow}
-                            disabled={isSaving || flatUnits.length === 0}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                        >
-                            <Plus className="h-3.5 w-3.5" /> {t("orgUnitsAddRow")}
-                        </button>
-
-                        <div className="flex justify-end gap-3 border-t border-[#e0e3e5] pt-4">
+                        <div className="flex justify-end gap-3 border-t border-[#e0e3e5] px-6 py-4">
                             <button
                                 type="button"
                                 onClick={onClose}
@@ -279,7 +283,7 @@ export default function EmployeeOrgUnitsDialog({ employee, onClose }: EmployeeOr
                                 {isSaving ? tCommon("processing") : tCommon("save")}
                             </button>
                         </div>
-                    </div>
+                    </>
                 )}
             </div>
         </div>

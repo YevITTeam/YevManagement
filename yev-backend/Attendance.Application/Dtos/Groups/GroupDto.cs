@@ -11,5 +11,16 @@ namespace Attendance.Application.Dtos.Groups
         public int WorkshopId { get; set; }
         public string WorkshopNameVn { get; set; } = null!;
         public bool AllowEatLater { get; set; }
+        public string? LineKind { get; set; }
+        public List<GroupLineDto> Lines { get; set; } = new();
+    }
+
+    // Codes are filled on read only.
+    public class GroupLineDto
+    {
+        public int ProductionLineId { get; set; }
+        public int ShiftTeamId { get; set; }
+        public string? LineCode { get; set; }
+        public string? ShiftTeamCode { get; set; }
     }
 }

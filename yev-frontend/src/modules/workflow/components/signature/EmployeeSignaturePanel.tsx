@@ -51,15 +51,15 @@ export default function EmployeeSignaturePanel() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
+                <p className="mt-1 text-sm text-[#5e3f3a]">{t("description")}</p>
             </div>
 
-            <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+            <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-6">
                 {isLoading ? (
                     <div className="space-y-4">
                         <div>
                             <Skeleton className="mb-1.5 h-3 w-32" />
-                            <Skeleton className="h-24 w-48" />
+                            <Skeleton className="h-24 w-full" />
                         </div>
                         <Skeleton className="h-4 w-48" />
                     </div>

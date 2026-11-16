@@ -7,7 +7,6 @@ import {
     AlertTriangle,
     CalendarClock,
     Clock,
-    Factory,
     FileSpreadsheet,
     History,
     Inbox,
@@ -18,6 +17,7 @@ import {
     SlidersHorizontal,
     Trash2,
     Upload,
+    UserCheck,
 } from "lucide-react";
 
 import { EmployeeApi, type EmployeeScopeDto } from "@/modules/attendance/api/employee.api";
@@ -40,7 +40,6 @@ import EmployeeMonthlyAccumulationImportDialog from "./EmployeeMonthlyAccumulati
 import EmployeeIdentityLinkImportDialog from "./EmployeeIdentityLinkImportDialog";
 import EmployeeOtLimitDialog from "./EmployeeOtLimitDialog";
 import EmployeeSignatureDialog from "./EmployeeSignatureDialog";
-import ProductionEmployeeEditDialog from "./ProductionEmployeeEditDialog";
 import AccumulationHistoryModal from "./AccumulationHistoryModal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -71,7 +70,6 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const canUpdateOtLimit = hasPermission(user, "Attendance.Employee.UpdateOtLimit");
     const canUpdateAccumulation = hasPermission(user, "Attendance.EmployeeAccumulation.Update");
     const canCreateEmployee = hasPermission(user, "Attendance.Employee.Create");
-    const canUpdateProduction = hasPermission(user, "Attendance.ProductionEmployee.Update");
     // Admin-only permission, never auto-granted via JobTitle/Coordinator.
     const canImportIdentityLink = hasPermission(user, "Identity.User.BulkImport");
     const isAdmin = Boolean(user?.roles.includes("Admin"));
@@ -96,7 +94,11 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [productionLineId, setProductionLineId] = useState<number | "">("");
     const [shiftTeamId, setShiftTeamId] = useState<number | "">("");
     const [congDoan, setCongDoan] = useState<number | "">("");
-    const [productionEditEmployee, setProductionEditEmployee] = useState<EmployeeDto | null>(null);
+    // 1 = resigned only, 0 = working only.
+    const [resignedFilter, setResignedFilter] = useState<number | "">("");
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [bulkAction, setBulkAction] = useState<"delete" | "restore" | null>(null);
+    const [isBulkRunning, setIsBulkRunning] = useState(false);
 
     // UX only: narrows the filter dropdowns to what the caller can see (BE already scopes the data),
     // avoiding unexplained empty tables.
@@ -211,6 +213,17 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         setPageIndex(1);
     };
 
+    const handleSelectResigned = (nextValue: number | "") => {
+        setResignedFilter(nextValue);
+        setSelectedIds([]);
+        setPageIndex(1);
+    };
+    const resignedSelectOptions: SelectOption[] = [
+        { value: 0, label: t("statusWorking"), searchText: t("statusWorking").toLowerCase() },
+        { value: 1, label: t("statusResigned"), searchText: t("statusResigned").toLowerCase() },
+    ];
+    const resigned = resignedFilter === "" ? undefined : resignedFilter === 1;
+
     const selectedCongDoan = congDoan === "" ? undefined : congDoanOptions[congDoan];
     const congDoanSelectOptions: SelectOption[] = congDoanOptions.map((value, index) => ({
         value: index,
@@ -249,10 +262,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 teamId: teamId || undefined,
                 shiftTeamId: shiftTeamId || undefined,
                 congDoan: selectedCongDoan,
+                resigned,
             }),
-        [pageIndex, appliedKeyword, departmentId, groupId, workshopId, productionLineId, teamId, shiftTeamId, selectedCongDoan],
+        [pageIndex, appliedKeyword, departmentId, groupId, workshopId, productionLineId, teamId, shiftTeamId, selectedCongDoan, resigned],
         (result) => {
             setEmployees(result.data);
+            setSelectedIds([]);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
         },
@@ -332,6 +347,23 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         }
     };
 
+    const handleBulkAction = async () => {
+        if (!bulkAction) return;
+        setIsBulkRunning(true);
+        try {
+            const count =
+                bulkAction === "delete" ? await EmployeeApi.bulkDelete(selectedIds) : await EmployeeApi.restoreResigned(selectedIds);
+            toast.success(t(bulkAction === "delete" ? "bulkDeleteSuccess" : "restoreResignedSuccess", { count }));
+            setBulkAction(null);
+            await fetchEmployees();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, t("bulkActionError")));
+        } finally {
+            setIsBulkRunning(false);
+        }
+    };
+
     const handleDelete = async () => {
         if (!deletingEmployee) return;
         setIsDeleting(true);
@@ -360,7 +392,13 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         teamId: teamId || undefined,
         shiftTeamId: shiftTeamId || undefined,
         congDoan: selectedCongDoan,
+        resigned,
     };
+    // Picking rows only matters for resigned people: delete them for good, or bring them back.
+    const canSelect = resignedFilter === 1 && (canDeleteEmployee || canUpdateEmployee);
+    const allSelected = employees.length > 0 && employees.every((e) => selectedIds.includes(e.id));
+    const toggleSelected = (id: number) =>
+        setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
     const employeeExcelItems = [
         ...(canCreateEmployee
             ? [{ label: t("importExcel"), onClick: () => setImportOpen(true), icon: <Upload className="h-3.5 w-3.5" /> }]
@@ -388,15 +426,15 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
 
     const getRowActions = (employee: EmployeeDto): RowAction[] => [
         ...(canUpdateEmployee ? [{ label: tCommon("edit"), icon: Pencil, onClick: () => openEditForm(employee) }] : []),
-        ...(canUpdateProduction
-            ? [{ label: tProduction("editAction"), icon: Factory, onClick: () => setProductionEditEmployee(employee) }]
-            : []),
         ...(canUpdateOtLimit && !canUpdateEmployee
             ? [{ label: t("otLimitEditAction"), icon: SlidersHorizontal, onClick: () => setOtLimitEmployee(employee) }]
             : []),
         { label: t("viewAccumulationHistory"), icon: History, onClick: () => setHistoryEmployee(employee) },
         ...(isAdmin && employee.userName
             ? [{ label: t("signatureEditAction"), icon: PenLine, onClick: () => setSignatureEmployee(employee) }]
+            : []),
+        ...(canUpdateEmployee && employee.resignedAt
+            ? [{ label: t("restoreResignedAction"), icon: UserCheck, onClick: () => { setSelectedIds([employee.id]); setBulkAction("restore"); } }]
             : []),
         ...(canDeleteEmployee
             ? [{ label: tCommon("delete"), icon: Trash2, onClick: () => setDeletingEmployee(employee), variant: "danger" as const }]
@@ -475,7 +513,36 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                             placeholder={tProduction("filterCongDoanPlaceholder")}
                             triggerClassName={filterTrigger("w-32")}
                         />
+                        <SearchableSelect
+                            options={resignedSelectOptions}
+                            value={resignedFilter}
+                            onChange={handleSelectResigned}
+                            placeholder={t("filterStatusPlaceholder")}
+                            triggerClassName={filterTrigger("w-32")}
+                        />
                         {employeeExcelActions}
+                        {canSelect && selectedIds.length > 0 && (
+                            <>
+                                {canUpdateEmployee && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setBulkAction("restore")}
+                                        className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                    >
+                                        <UserCheck className="h-4 w-4" /> {t("restoreResignedBulk", { count: selectedIds.length })}
+                                    </button>
+                                )}
+                                {canDeleteEmployee && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setBulkAction("delete")}
+                                        className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-3 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                                    >
+                                        <Trash2 className="h-4 w-4" /> {t("bulkDeleteButton", { count: selectedIds.length })}
+                                    </button>
+                                )}
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -487,6 +554,17 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="whitespace-nowrap border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                {canSelect && (
+                                    <th className="w-8 py-1.5 pl-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={allSelected}
+                                            onChange={() => setSelectedIds(allSelected ? [] : employees.map((e) => e.id))}
+                                            aria-label={t("selectAllOnPage")}
+                                            className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                        />
+                                    </th>
+                                )}
                                 <th className="py-1.5 pl-3 pr-2">{t("colCode")}</th>
                                 <th className="px-2 py-1.5">{t("colFullName")}</th>
                                 <th className="px-2 py-1.5">{t("colUserName")}</th>
@@ -508,7 +586,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                         <tbody>
                             {!isLoading && employees.length === 0 && (
                                 <tr>
-                                    <td colSpan={14} className="px-4 py-12">
+                                    <td colSpan={canSelect ? 15 : 14} className="px-4 py-12">
                                         <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                             <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                             {t("noData")}
@@ -527,9 +605,25 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     }`;
                                 return (
                                 <tr key={employee.id} className="whitespace-nowrap border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
+                                    {canSelect && (
+                                        <td className="w-8 py-1.5 pl-3">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.includes(employee.id)}
+                                                onChange={() => toggleSelected(employee.id)}
+                                                aria-label={employee.code}
+                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                            />
+                                        </td>
+                                    )}
                                     <td className="py-1.5 pl-3 pr-2 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
                                         {employee.lastName} {employee.firstName}
+                                        {employee.resignedAt && (
+                                            <span className="ml-1.5">
+                                                <Badge variant="warning">{t("statusResigned")}</Badge>
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
@@ -555,6 +649,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     </td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
                                         {employee.lineCode ?? "-"}
+                                        {employee.staffKind && <span className="ml-1 text-xs text-[#8a8f94]">{employee.staffKind}</span>}
                                     </td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.teamCode ?? "-"}</td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.shiftTeamCode ?? "-"}</td>
@@ -606,15 +701,6 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 exportFilter={exportFilter}
             />
 
-            <ProductionEmployeeEditDialog
-                item={productionEditEmployee}
-                onClose={() => setProductionEditEmployee(null)}
-                onSaved={() => {
-                    setProductionEditEmployee(null);
-                    fetchEmployees();
-                }}
-            />
-
             <EmployeeOtHourLimitImportDialog
                 isOpen={otHourLimitImportOpen}
                 onClose={() => setOtHourLimitImportOpen(false)}
@@ -653,6 +739,19 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 onApprove={handleDelete}
                 onDenied={() => {
                     if (!isDeleting) setDeletingEmployee(null);
+                }}
+            />
+
+            <ConfirmDialog
+                isOpen={bulkAction !== null}
+                title={t(bulkAction === "delete" ? "bulkDeleteTitle" : "restoreResignedTitle")}
+                message={t(bulkAction === "delete" ? "bulkDeleteMessage" : "restoreResignedMessage", { count: selectedIds.length })}
+                approveLabel={bulkAction === "delete" ? tCommon("confirmDeleteApprove") : t("restoreResignedApprove")}
+                deniedLabel={tCommon("cancel")}
+                loading={isBulkRunning}
+                onApprove={handleBulkAction}
+                onDenied={() => {
+                    if (!isBulkRunning) setBulkAction(null);
                 }}
             />
 

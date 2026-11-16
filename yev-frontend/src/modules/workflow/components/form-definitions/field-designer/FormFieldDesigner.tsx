@@ -130,14 +130,14 @@ export default function FormFieldDesigner({ formDefinitionId, layoutHtml, onLayo
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <p className="text-sm text-[#5e3f3a]">{isDocumentMode ? t("documentFieldsHint") : t("fieldsHint")}</p>
-                <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="min-w-0 text-sm text-[#5e3f3a]">{isDocumentMode ? t("documentFieldsHint") : t("fieldsHint")}</p>
+                <div className="flex shrink-0 items-center gap-2">
                     {!isDocumentMode && (
                         <button
                             type="button"
                             onClick={() => setIsImportOpen(true)}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
                             <FileInput className="h-3.5 w-3.5" /> {t("importDocxAction")}
                         </button>
@@ -146,16 +146,18 @@ export default function FormFieldDesigner({ formDefinitionId, layoutHtml, onLayo
                         <button
                             type="button"
                             onClick={() => setIsClearLayoutConfirmOpen(true)}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
+                            title={t("clearLayoutAction")}
+                            aria-label={t("clearLayoutAction")}
+                            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
                         >
-                            <Trash2 className="h-3.5 w-3.5" /> {t("clearLayoutAction")}
+                            <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{t("clearLayoutAction")}</span>
                         </button>
                     )}
                     <button
                         type="button"
                         onClick={handleSave}
                         disabled={isSaving}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         <Save className="h-3.5 w-3.5" /> {isSaving ? t("saving") : t("saveChanges")}
                     </button>
@@ -163,7 +165,7 @@ export default function FormFieldDesigner({ formDefinitionId, layoutHtml, onLayo
             </div>
 
             {isDocumentMode && documentContent ? (
-                <div className="flex gap-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
                     <DocumentFieldPalette />
                     <div className="min-w-0 flex-1">
                         <DocumentFieldCanvas

@@ -2,6 +2,7 @@ using Attendance.Application.Dtos.EmployeeImports;
 using Attendance.Application.Dtos.Employees;
 using Attendance.Application.Dtos.ProductionEmployeeImports;
 using Attendance.Application.Interfaces.Service;
+using Attendance.Domain.Constants;
 using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
 using ClosedXML.Excel;
@@ -26,10 +27,10 @@ namespace Attendance.Application.Services
             _employeeService = employeeService;
         }
 
-        public async Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string userName, bool isAdmin)
+        public async Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream, EmployeeImportMode mode, string userName, bool isAdmin)
         {
             var rawRows = ParseXlsx(excelFileStream);
-            var (validatedRows, departmentPlans, groupPlans, removedRows) = await ValidateAndResolveRowsAsync(rawRows, userName, isAdmin);
+            var (validatedRows, departmentPlans, groupPlans, removedRows) = await ValidateAndResolveRowsAsync(rawRows, mode, userName, isAdmin);
 
             return new EmployeeImportPreviewResultDto
             {
@@ -37,8 +38,8 @@ namespace Attendance.Application.Services
                 TotalRows = validatedRows.Count,
                 ValidRows = validatedRows.Count(r => r.IsValid),
                 InvalidRows = validatedRows.Count(r => !r.IsValid),
-                NewDepartmentCount = departmentPlans.Values.Count(p => p.ExistingId == null),
-                NewGroupCount = groupPlans.Values.Count(p => p.ExistingId == null),
+                NewDepartmentCount = validatedRows.Where(r => r.IsValid && r.IsNewDepartment).Select(r => r.DepartmentCode).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                NewGroupCount = validatedRows.Where(r => r.IsValid && r.IsNewGroup).Select(r => r.GroupCode).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
                 RemovedRows = removedRows
             };
         }
@@ -46,7 +47,7 @@ namespace Attendance.Application.Services
         public async Task<EmployeeImportConfirmResultDto> ConfirmAsync(ConfirmEmployeeImportDto request, string userName, bool isAdmin)
         {
             // Re-validate against current DB data; never trust client-sent Resolved*/IsNew* fields.
-            var (validatedRows, departmentPlans, groupPlans, removedRows) = await ValidateAndResolveRowsAsync(request.Rows, userName, isAdmin);
+            var (validatedRows, departmentPlans, groupPlans, removedRows) = await ValidateAndResolveRowsAsync(request.Rows, request.Mode, userName, isAdmin);
 
             var invalidRows = validatedRows.Where(x => !x.IsValid).ToList();
             var validRows = validatedRows.Where(x => x.IsValid).ToList();
@@ -61,56 +62,36 @@ namespace Attendance.Application.Services
 
             if (validRows.Count == 0) return result;
 
-            // Create only codes used by at least one valid row, to avoid orphan Department/Group records.
-            var usedDepartmentCodes = validRows.Select(r => r.DepartmentCode!).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var usedGroupCodes = validRows.Select(r => r.GroupCode!).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
             await _unitOfWork.BeginTransactionAsync();
             try
             {
+                // Only groups used by a valid row are created, and a new department only exists to hold a new group.
+                var newGroupPlans = validRows.Where(r => r.IsNewGroup).Select(r => groupPlans[r.GroupCode!]).Distinct().ToList();
+
                 // New entities have no Id yet, so link via navigation and let EF fix up FKs on save.
                 var newDepartmentsByCode = new Dictionary<string, Department>(StringComparer.OrdinalIgnoreCase);
-                foreach (var code in usedDepartmentCodes)
+                foreach (var code in newGroupPlans.Select(p => p.DepartmentCode).Distinct(StringComparer.OrdinalIgnoreCase))
                 {
                     var plan = departmentPlans[code];
                     if (plan.ExistingId.HasValue) continue;
 
-                    var newDepartment = new Department
-                    {
-                        DepartmentCode = code,
-                        DepartmentNameVn = plan.Name,
-                        IsDeleted = false
-                    };
+                    var newDepartment = new Department { DepartmentCode = code, DepartmentNameVn = plan.Name, IsDeleted = false };
                     await _unitOfWork.Departments.AddAsync(newDepartment);
                     newDepartmentsByCode[code] = newDepartment;
                     result.CreatedDepartmentCount++;
                 }
 
-                // The Excel has no workshop column, so new groups land in the default (first) workshop.
-                var defaultWorkshop = usedGroupCodes.Any(c => !groupPlans[c].ExistingId.HasValue)
-                    ? (await _unitOfWork.Workshops.FirstOrDefaultAsync(x => !x.IsDeleted)).OrThrowNotFound("Xưởng", "mặc định")
-                    : null;
                 var newGroupsByCode = new Dictionary<string, Group>(StringComparer.OrdinalIgnoreCase);
-                foreach (var code in usedGroupCodes)
+                foreach (var plan in newGroupPlans)
                 {
-                    var plan = groupPlans[code];
-                    if (plan.ExistingId.HasValue) continue;
-
-                    var newGroup = new Group
-                    {
-                        GroupCode = code,
-                        GroupNameVn = plan.Name,
-                        WorkshopId = defaultWorkshop!.Id,
-                        IsDeleted = false
-                    };
-
+                    var newGroup = new Group { GroupCode = plan.Code, GroupNameVn = plan.Name, WorkshopId = plan.NewWorkshopId!.Value, IsDeleted = false };
                     if (newDepartmentsByCode.TryGetValue(plan.DepartmentCode, out var newDepartmentEntity))
                         newGroup.Department = newDepartmentEntity;
                     else
                         newGroup.DepartmentId = departmentPlans[plan.DepartmentCode].ExistingId!.Value;
 
                     await _unitOfWork.Groups.AddAsync(newGroup);
-                    newGroupsByCode[code] = newGroup;
+                    newGroupsByCode[plan.Code] = newGroup;
                     result.CreatedGroupCount++;
                 }
 
@@ -123,56 +104,54 @@ namespace Attendance.Application.Services
 
                 foreach (var row in validRows)
                 {
-                    int? resolvedGroupId = newGroupsByCode.TryGetValue(row.GroupCode!, out var newGroupEntity)
-                        ? null
-                        : groupPlans[row.GroupCode!].ExistingId!.Value;
+                    var employee = row.IsNewEmployee
+                        ? new Employee { Code = row.EmployeeCode!, FirstName = row.ResolvedFirstName!, LastName = row.ResolvedLastName!, IsDeleted = false }
+                        : employeesToUpdateByCode[row.EmployeeCode!];
+                    employee.FirstName = row.ResolvedFirstName!;
+                    employee.LastName = row.ResolvedLastName!;
+                    // Listed again, so a person marked resigned by an earlier full-roster import is back at work.
+                    employee.ResignedAt = null;
+                    // Blank line columns keep the current roster data; the group check below fixes anything the group no longer covers.
+                    if (row.ResolvedProductionLineId != null) ApplyProductionFields(employee, row);
+
+                    if (newGroupsByCode.TryGetValue(row.GroupCode!, out var newGroupEntity)) employee.Group = newGroupEntity;
+                    else employee.GroupId = groupPlans[row.GroupCode!].ExistingId!.Value;
 
                     if (row.IsNewEmployee)
                     {
-                        var newEmployee = new Employee
-                        {
-                            Code = row.EmployeeCode!,
-                            FirstName = row.ResolvedFirstName!,
-                            LastName = row.ResolvedLastName!,
-                            IsDeleted = false
-                        };
-                        ApplyProductionFields(newEmployee, row);
-
-                        if (newGroupEntity != null) newEmployee.Group = newGroupEntity;
-                        else newEmployee.GroupId = resolvedGroupId!.Value;
-
-                        await _unitOfWork.Employees.AddAsync(newEmployee);
+                        await _unitOfWork.Employees.AddAsync(employee);
                         result.CreatedEmployeeCount++;
                     }
                     else
                     {
                         // The file has no accumulation/UserName columns, so re-import must not wipe them.
-                        var existingEmployee = employeesToUpdateByCode[row.EmployeeCode!];
-                        existingEmployee.FirstName = row.ResolvedFirstName!;
-                        existingEmployee.LastName = row.ResolvedLastName!;
-                        ApplyProductionFields(existingEmployee, row);
-
-                        if (newGroupEntity != null) existingEmployee.Group = newGroupEntity;
-                        else existingEmployee.GroupId = resolvedGroupId!.Value;
-
-                        _unitOfWork.Employees.Update(existingEmployee);
+                        _unitOfWork.Employees.Update(employee);
                         result.UpdatedEmployeeCount++;
                     }
                 }
 
-                if (removedRows.Count > 0)
+                await _unitOfWork.SaveChangesAsync();
+
+                // New groups take the Line × Ca of their rows, so everyone carries line data.
+                foreach (var (code, newGroup) in newGroupsByCode)
                 {
-                    var removedCodes = removedRows.Select(x => x.EmployeeCode).ToList();
-                    foreach (var employee in await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && removedCodes.Contains(x.Code)))
-                    {
-                        employee.ProductionLineId = null;
-                        employee.TeamId = null;
-                        employee.ShiftTeamId = null;
-                        employee.CongDoan = null;
-                        employee.TaskName = null;
-                    }
-                    result.RemovedFromLineCount = removedRows.Count;
+                    var pairs = validRows.Where(r => string.Equals(r.GroupCode, code, StringComparison.OrdinalIgnoreCase) && r.ResolvedProductionLineId != null)
+                        .Select(r => (LineId: r.ResolvedProductionLineId!.Value, ShiftId: r.ResolvedShiftTeamId!.Value, Kind: r.StaffKind)).Distinct().ToList();
+                    foreach (var (lineId, shiftId, _) in pairs)
+                        newGroup.GroupLines.Add(new GroupLine { ProductionLineId = lineId, ShiftTeamId = shiftId });
+                    if (pairs.Count > 0) newGroup.LineKind = pairs[0].Kind;
+                    await GroupLineDefaults.EnsureLinesAsync(_unitOfWork, newGroup);
+                    await _unitOfWork.SaveChangesAsync();
                 }
+                var defaultedCodes = validRows.Where(r => r.ResolvedProductionLineId == null).Select(r => r.EmployeeCode!).ToList();
+                foreach (var employee in await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && defaultedCodes.Contains(x.Code)))
+                    await GroupLineDefaults.ApplyAsync(_unitOfWork, employee);
+
+                var resignedCodes = removedRows.Select(x => x.EmployeeCode).ToList();
+                var resignedAt = TimeHelper.GetCurrentUtcTime();
+                foreach (var employee in await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && x.ResignedAt == null && resignedCodes.Contains(x.Code)))
+                    employee.ResignedAt = resignedAt;
+                result.ResignedCount = removedRows.Count;
 
                 await _unitOfWork.SaveChangesAsync();
                 await _unitOfWork.CommitTransactionAsync();
@@ -191,6 +170,7 @@ namespace Attendance.Application.Services
             employee.ProductionLineId = row.ResolvedProductionLineId;
             employee.TeamId = row.ResolvedTeamId;
             employee.ShiftTeamId = row.ResolvedShiftTeamId;
+            employee.StaffKind = row.StaffKind;
             employee.CongDoan = row.CongDoan;
             employee.TaskName = row.TaskName;
         }
@@ -204,24 +184,42 @@ namespace Attendance.Application.Services
 
         private sealed class GroupResolution
         {
+            public string Code { get; set; } = null!;
             public int? ExistingId { get; set; }
             public int? ExistingDepartmentId { get; set; }
             public string Name { get; set; } = null!;
             public string DepartmentCode { get; set; } = null!;
             public bool HasConflict { get; set; }
+            public int? ExistingWorkshopId { get; set; }
+            // Workshop a new group is created in: the workshop of its first row.
+            public int? NewWorkshopId { get; set; }
+            public List<(int LineId, int ShiftTeamId)> Lines { get; set; } = new();
+            public string? LineKind { get; set; }
         }
 
-        // File GROUP A/B map to ProductionTeam.Code 1/2; other values match the code directly.
-        internal static readonly Dictionary<string, string> TeamCodeTranslation =
-            new(StringComparer.OrdinalIgnoreCase) { ["A"] = "1", ["B"] = "2" };
+        private sealed record ExistingGroup(int Id, string GroupCode, string GroupNameVn, int DepartmentId, int WorkshopId, string DepartmentCode,
+            string? LineKind, List<(int LineId, int ShiftTeamId)> Lines);
+
+        private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
         private async Task<(List<EmployeeImportRowDto> Rows, Dictionary<string, DepartmentResolution> Departments, Dictionary<string, GroupResolution> Groups, List<EmployeeImportRemovedRowDto> RemovedRows)>
-            ValidateAndResolveRowsAsync(List<EmployeeImportRowDto> rawRows, string userName, bool isAdmin)
+            ValidateAndResolveRowsAsync(List<EmployeeImportRowDto> rawRows, EmployeeImportMode mode, string userName, bool isAdmin)
         {
+            // Department coordinators only: a group coordinator cannot vouch for a whole department's roster.
+            var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
+            if (managedDepartmentIds is { Count: 0 })
+                throw new DomainException("Chỉ Admin và Người phụ trách Bộ phận được import nhân sự.");
+            bool InCallerScope(int? departmentId) => isAdmin || (departmentId.HasValue && managedDepartmentIds!.Contains(departmentId.Value));
+
             var existingDepartments = await _unitOfWork.Departments.SelectAsync(
                 x => !x.IsDeleted, x => new { x.Id, x.DepartmentCode, x.DepartmentNameVn });
-            var existingGroups = await _unitOfWork.Groups.SelectAsync(
-                x => !x.IsDeleted, x => new { x.Id, x.GroupCode, x.GroupNameVn, x.DepartmentId, DepartmentCode = x.Department.DepartmentCode });
+            var departmentNameByCode = existingDepartments.ToDictionary(x => x.DepartmentCode, x => x.DepartmentNameVn, StringComparer.OrdinalIgnoreCase);
+            var existingGroups = (await _unitOfWork.Groups.SelectAsync(
+                x => !x.IsDeleted, x => new { x.Id, x.GroupCode, x.GroupNameVn, x.DepartmentId, x.WorkshopId, DepartmentCode = x.Department.DepartmentCode,
+                    x.LineKind, Lines = x.GroupLines.Select(l => new { l.ProductionLineId, l.ShiftTeamId }).ToList() }))
+                .Select(x => new ExistingGroup(x.Id, x.GroupCode, x.GroupNameVn, x.DepartmentId, x.WorkshopId, x.DepartmentCode, x.LineKind,
+                    x.Lines.Select(l => (l.ProductionLineId, l.ShiftTeamId)).ToList()))
+                .ToList();
             var codesInFile = rawRows.Where(r => !string.IsNullOrWhiteSpace(r.EmployeeCode))
                 .Select(r => r.EmployeeCode!.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var existingEmployees = (await _unitOfWork.Employees.SelectAsync(
@@ -230,25 +228,27 @@ namespace Attendance.Application.Services
                 {
                     x.Code,
                     x.GroupId,
+                    x.StaffKind,
+                    x.ProductionLineId,
+                    x.ShiftTeamId,
                     DepartmentId = x.DepartmentId ?? (x.Group != null ? (int?)x.Group.DepartmentId : null),
+                    WorkshopId = x.Group != null ? (int?)x.Group.WorkshopId : null,
                     TerminalLevel = x.JobTitle != null ? x.JobTitle.TerminalLevel : (int)JobTitleTerminalLevel.None
                 }))
                 .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
 
-            // Non-admins (coordinators) may only touch employees and groups inside the units they manage.
-            var managedDepartmentIds = isAdmin ? null : await _departmentAccessGuard.GetManagedDepartmentIdsAsync(userName);
-            var managedGroupIds = isAdmin ? null : (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
-                x => x.Employee.UserName == userName && !x.IsDeleted)).Select(x => x.GroupId).ToHashSet();
-            bool InCallerScope(int? departmentId, int? groupId) => isAdmin
-                || (departmentId.HasValue && managedDepartmentIds!.Contains(departmentId.Value))
-                || (groupId.HasValue && managedGroupIds!.Contains(groupId.Value));
-
-            var linesByCode = (await _unitOfWork.ProductionLines.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.LineCode }))
-                .ToDictionary(x => x.LineCode.Trim(), x => x.Id, StringComparer.OrdinalIgnoreCase);
-            var teamsByCode = (await _unitOfWork.ProductionTeams.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.Code }))
-                .ToDictionary(x => x.Code.Trim(), x => x.Id, StringComparer.OrdinalIgnoreCase);
-            var shiftTeamsByCode = (await _unitOfWork.ProductionShiftTeams.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.Code }))
-                .ToDictionary(x => x.Code.Trim(), x => x.Id, StringComparer.OrdinalIgnoreCase);
+            var lines = await _unitOfWork.ProductionLines.SelectAsync(x => !x.IsDeleted,
+                x => new { x.Id, x.WorkshopId, x.LineCode, x.TeamId, x.HasDirectStaff, x.HasIndirectStaff });
+            var shiftTeams = await _unitOfWork.ProductionShiftTeams.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.Code });
+            var workshops = await _unitOfWork.Workshops.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.WorkshopCode });
+            var linesByKey = lines.ToDictionary(x => (x.WorkshopId, x.LineCode.Trim().ToUpperInvariant()));
+            var lineWorkshopsByCode = lines.ToLookup(x => x.LineCode.Trim().ToUpperInvariant(), x => x.WorkshopId);
+            var shiftTeamsByCode = shiftTeams.ToDictionary(x => x.Code.Trim(), x => x.Id, StringComparer.OrdinalIgnoreCase);
+            var lineCodeById = lines.ToDictionary(x => x.Id, x => x.LineCode.Trim());
+            var shiftTeamCodeById = shiftTeams.ToDictionary(x => x.Id, x => x.Code.Trim());
+            var workshopCodeById = workshops.ToDictionary(x => x.Id, x => x.WorkshopCode);
+            var workshopIdByCode = workshops.ToDictionary(x => x.WorkshopCode.Trim(), x => x.Id, StringComparer.OrdinalIgnoreCase);
+            var defaultWorkshopId = workshops.Select(x => x.Id).DefaultIfEmpty().Min();
 
             var duplicatedEmployeeCodesInFile = FindDuplicates(rawRows, r => r.EmployeeCode);
 
@@ -256,83 +256,79 @@ namespace Attendance.Application.Services
             // or a Group code already under another Department).
             var departmentPlans = new Dictionary<string, DepartmentResolution>(StringComparer.OrdinalIgnoreCase);
             var groupPlans = new Dictionary<string, GroupResolution>(StringComparer.OrdinalIgnoreCase);
+            GroupResolution PlanFor(ExistingGroup g)
+            {
+                if (!groupPlans.TryGetValue(g.GroupCode, out var plan))
+                    groupPlans[g.GroupCode] = plan = new GroupResolution
+                    {
+                        Code = g.GroupCode, ExistingId = g.Id, ExistingDepartmentId = g.DepartmentId, Name = g.GroupNameVn, DepartmentCode = g.DepartmentCode,
+                        ExistingWorkshopId = g.WorkshopId, Lines = g.Lines, LineKind = g.LineKind
+                    };
+                return plan;
+            }
 
             foreach (var row in rawRows)
             {
-                var deptCode = row.DepartmentCode?.Trim();
-                var deptName = row.DepartmentNameVn?.Trim();
-                if (!string.IsNullOrWhiteSpace(deptCode) && !string.IsNullOrWhiteSpace(deptName))
+                var deptCode = Clean(row.DepartmentCode);
+                var deptName = Clean(row.DepartmentNameVn);
+                if (deptCode != null && !departmentPlans.ContainsKey(deptCode))
                 {
-                    if (!departmentPlans.TryGetValue(deptCode, out var deptPlan))
-                    {
-                        var existing = existingDepartments.FirstOrDefault(d => string.Equals(d.DepartmentCode, deptCode, StringComparison.OrdinalIgnoreCase));
-                        departmentPlans[deptCode] = new DepartmentResolution
-                        {
-                            ExistingId = existing?.Id,
-                            Name = existing?.DepartmentNameVn ?? deptName
-                        };
-                    }
-                    else if (deptPlan.ExistingId == null && !string.Equals(deptPlan.Name, deptName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        deptPlan.HasConflict = true;
-                    }
+                    if (departmentNameByCode.TryGetValue(deptCode, out var existingName))
+                        departmentPlans[deptCode] = new DepartmentResolution { ExistingId = existingDepartments.First(d => string.Equals(d.DepartmentCode, deptCode, StringComparison.OrdinalIgnoreCase)).Id, Name = existingName };
+                    else if (deptName != null)
+                        departmentPlans[deptCode] = new DepartmentResolution { Name = deptName };
+                }
+                else if (deptCode != null && deptName != null && departmentPlans[deptCode] is { ExistingId: null } newDept
+                         && !string.Equals(newDept.Name, deptName, StringComparison.OrdinalIgnoreCase))
+                {
+                    newDept.HasConflict = true;
                 }
 
-                var groupCode = row.GroupCode?.Trim();
-                var groupName = row.GroupNameVn?.Trim();
-                if (!string.IsNullOrWhiteSpace(groupCode) && !string.IsNullOrWhiteSpace(groupName) && !string.IsNullOrWhiteSpace(deptCode))
+                var groupCode = Clean(row.GroupCode);
+                var groupName = Clean(row.GroupNameVn);
+                if (groupCode == null) continue;
+                if (!groupPlans.TryGetValue(groupCode, out var groupPlan))
                 {
-                    if (!groupPlans.TryGetValue(groupCode, out var groupPlan))
-                    {
-                        var existing = existingGroups.FirstOrDefault(g => string.Equals(g.GroupCode, groupCode, StringComparison.OrdinalIgnoreCase));
-                        groupPlans[groupCode] = new GroupResolution
-                        {
-                            ExistingId = existing?.Id,
-                            ExistingDepartmentId = existing?.DepartmentId,
-                            Name = existing?.GroupNameVn ?? groupName,
-                            DepartmentCode = existing?.DepartmentCode ?? deptCode,
-                            HasConflict = existing != null && !string.Equals(existing.DepartmentCode, deptCode, StringComparison.OrdinalIgnoreCase)
-                        };
-                    }
-                    else
-                    {
-                        if (groupPlan.ExistingId == null && !string.Equals(groupPlan.Name, groupName, StringComparison.OrdinalIgnoreCase))
-                            groupPlan.HasConflict = true;
-                        if (!string.Equals(groupPlan.DepartmentCode, deptCode, StringComparison.OrdinalIgnoreCase))
-                            groupPlan.HasConflict = true;
-                    }
+                    var existing = existingGroups.FirstOrDefault(g => string.Equals(g.GroupCode, groupCode, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null)
+                        groupPlan = PlanFor(existing);
+                    else if (groupName != null && deptCode != null)
+                        groupPlans[groupCode] = groupPlan = new GroupResolution { Code = groupCode, Name = groupName, DepartmentCode = deptCode };
+                    else continue;
+                    if (existing != null && deptCode != null && !string.Equals(existing.DepartmentCode, deptCode, StringComparison.OrdinalIgnoreCase))
+                        groupPlan.HasConflict = true;
+                }
+                else
+                {
+                    if (groupPlan.ExistingId == null && groupName != null && !string.Equals(groupPlan.Name, groupName, StringComparison.OrdinalIgnoreCase))
+                        groupPlan.HasConflict = true;
+                    if (deptCode != null && !string.Equals(groupPlan.DepartmentCode, deptCode, StringComparison.OrdinalIgnoreCase))
+                        groupPlan.HasConflict = true;
                 }
             }
 
             // Phase 2: validate each employee row, referencing the Department/Group plans built above.
             var result = new List<EmployeeImportRowDto>();
+            var newGroupKinds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var row in rawRows)
             {
                 var errors = new List<string>();
-                var employeeCode = row.EmployeeCode?.Trim();
-                var fullName = row.FullName?.Trim();
-                var deptCode = row.DepartmentCode?.Trim();
-                var deptName = row.DepartmentNameVn?.Trim();
-                var groupCode = row.GroupCode?.Trim();
-                var groupName = row.GroupNameVn?.Trim();
-                var existingEmployee = string.IsNullOrWhiteSpace(employeeCode) ? null : existingEmployees.GetValueOrDefault(employeeCode);
+                var employeeCode = Clean(row.EmployeeCode);
+                var fullName = Clean(row.FullName);
+                var deptCode = Clean(row.DepartmentCode);
+                var groupCode = Clean(row.GroupCode);
+                var workshopCode = Clean(row.WorkshopCode);
+                var existingEmployee = employeeCode == null ? null : existingEmployees.GetValueOrDefault(employeeCode);
 
-                var isNewEmployee = false;
-                if (string.IsNullOrWhiteSpace(employeeCode))
-                {
+                if (employeeCode == null)
                     errors.Add("Thiếu mã nhân viên.");
-                }
-                else
-                {
-                    // Duplicates within the file are errors; codes already in the DB are updated on Confirm.
-                    if (duplicatedEmployeeCodesInFile.Contains(employeeCode))
-                        errors.Add($"Mã nhân viên '{employeeCode}' bị lặp lại nhiều dòng trong file.");
-                    isNewEmployee = existingEmployee == null;
-                }
+                // Duplicates within the file are errors; codes already in the DB are updated on Confirm.
+                else if (duplicatedEmployeeCodesInFile.Contains(employeeCode))
+                    errors.Add($"Mã nhân viên '{employeeCode}' bị lặp lại nhiều dòng trong file.");
 
                 string? resolvedFirstName = null;
                 string? resolvedLastName = null;
-                if (string.IsNullOrWhiteSpace(fullName))
+                if (fullName == null)
                 {
                     errors.Add("Thiếu họ tên.");
                 }
@@ -344,77 +340,175 @@ namespace Attendance.Application.Services
                     resolvedLastName = parts.Length > 1 ? string.Join(' ', parts[..^1]) : string.Empty;
                 }
 
-                var isNewDepartment = false;
-                if (string.IsNullOrWhiteSpace(deptCode) || string.IsNullOrWhiteSpace(deptName))
+                DepartmentResolution? fileDepartment = null;
+                if (deptCode != null)
                 {
-                    errors.Add("Thiếu mã hoặc tên phòng ban.");
-                }
-                else if (departmentPlans.TryGetValue(deptCode, out var deptPlan))
-                {
-                    if (deptPlan.HasConflict)
+                    fileDepartment = departmentPlans.GetValueOrDefault(deptCode);
+                    if (fileDepartment == null)
+                        errors.Add($"Phòng ban '{deptCode}' chưa có trong hệ thống — ghi thêm Tên phòng để tạo mới.");
+                    else if (fileDepartment.HasConflict)
                         errors.Add($"Phòng ban mã '{deptCode}' có tên không nhất quán giữa các dòng trong file.");
-                    isNewDepartment = deptPlan.ExistingId == null;
                 }
-
-                var isNewGroup = false;
-                if (string.IsNullOrWhiteSpace(groupCode) || string.IsNullOrWhiteSpace(groupName))
+                GroupResolution? fileGroup = null;
+                if (groupCode != null)
                 {
-                    errors.Add("Thiếu mã hoặc tên nhóm.");
-                }
-                else if (groupPlans.TryGetValue(groupCode, out var groupPlan))
-                {
-                    if (groupPlan.HasConflict)
+                    fileGroup = groupPlans.GetValueOrDefault(groupCode);
+                    if (fileGroup == null)
+                        errors.Add($"Nhóm '{groupCode}' chưa có trong hệ thống — ghi thêm Tên nhóm, Mã và Tên phòng để tạo mới.");
+                    else if (fileGroup.HasConflict)
                         errors.Add($"Nhóm mã '{groupCode}' có tên hoặc phòng ban không nhất quán giữa các dòng trong file, hoặc đã thuộc 1 phòng ban khác trong hệ thống.");
-                    isNewGroup = groupPlan.ExistingId == null;
-                    if (!isNewGroup && !InCallerScope(groupPlan.ExistingDepartmentId, groupPlan.ExistingId))
-                        errors.Add($"Nhóm '{groupCode}' không thuộc phạm vi bạn phụ trách.");
                 }
 
+                var lineCode = Clean(row.LineCode);
+                var teamCode = Clean(row.TeamCode);
+                var shiftTeamCode = Clean(row.ShiftTeamCode);
+                var congDoan = Clean(row.CongDoan);
+                var taskName = Clean(row.TaskName);
+                var fileKind = StaffKinds.Normalize(row.StaffKind);
+
+                // Line codes repeat across workshops: the Xưởng column, else the file group's, else the only workshop
+                // having the line, else the employee's current one.
+                int? rowWorkshopId = null;
+                if (workshopCode != null)
+                {
+                    if (workshopIdByCode.TryGetValue(workshopCode, out var fileWorkshopId)) rowWorkshopId = fileWorkshopId;
+                    else errors.Add($"Xưởng '{workshopCode}' không có trong danh mục.");
+                }
+                else if (fileGroup?.ExistingWorkshopId != null)
+                    rowWorkshopId = fileGroup.ExistingWorkshopId;
+                else if (lineCode != null)
+                {
+                    var lineWorkshops = lineWorkshopsByCode[lineCode.ToUpperInvariant()].Distinct().ToList();
+                    if (lineWorkshops.Count == 1) rowWorkshopId = lineWorkshops[0];
+                    else if (existingEmployee?.WorkshopId is int currentWorkshopId && lineWorkshops.Contains(currentWorkshopId)) rowWorkshopId = currentWorkshopId;
+                    else if (lineWorkshops.Count > 1) errors.Add($"Line '{lineCode}' có ở nhiều Xưởng — ghi cột Xưởng.");
+                }
+                var workshopId = rowWorkshopId ?? existingEmployee?.WorkshopId ?? defaultWorkshopId;
+
+                int? lineId = null, teamId = null, shiftTeamId = null;
+                string? staffKind = null;
+                var lineColumnsUsed = lineCode != null || teamCode != null || shiftTeamCode != null || congDoan != null || taskName != null || fileKind != null;
+                if (lineCode != null && shiftTeamCode != null)
+                {
+                    if (shiftTeamsByCode.TryGetValue(shiftTeamCode, out var foundShiftTeam)) shiftTeamId = foundShiftTeam;
+                    else errors.Add($"Nhóm ca '{shiftTeamCode}' không có trong danh mục.");
+                    if (!linesByKey.TryGetValue((workshopId, lineCode.ToUpperInvariant()), out var line))
+                        errors.Add($"Line '{lineCode}' không có trong danh mục của xưởng {workshopCodeById.GetValueOrDefault(workshopId)}.");
+                    else
+                    {
+                        // Team is the area a line sits in, so it follows the catalog; the file's Team column is informational.
+                        lineId = line.Id;
+                        teamId = line.TeamId;
+                        var allowed = StaffKinds.AllowedOn(line.HasDirectStaff, line.HasIndirectStaff);
+                        if (fileKind != null && fileKind != StaffKinds.Direct && fileKind != StaffKinds.Indirect)
+                            errors.Add($"Cột TT/GT chỉ nhận TT hoặc GT (đang là '{row.StaffKind}').");
+                        else if (fileKind != null && !allowed.Contains(fileKind))
+                            errors.Add($"Line '{lineCode}' không có nhân sự {fileKind}.");
+                        else
+                        {
+                            staffKind = fileKind
+                                ?? (allowed.Count == 1 ? allowed[0] : null)
+                                ?? (fileGroup is { Lines.Count: > 0, LineKind: { } groupKind } && allowed.Contains(groupKind) ? groupKind : null)
+                                ?? (existingEmployee?.StaffKind is { } currentKind && allowed.Contains(currentKind) ? currentKind : null);
+                            if (staffKind == null) errors.Add($"Line '{lineCode}' có cả TT và GT — ghi cột TT/GT.");
+                        }
+                    }
+                }
+                else if (lineColumnsUsed)
+                {
+                    errors.Add("Dữ liệu dưới chuyền phải có đủ Line và Nhóm ca.");
+                }
+
+                // Group = Line × Ca × TT/GT inside a department; the HR group code only decides when Add mode names it
+                // or the row has no line data.
+                GroupResolution? target = null;
+                var hasPair = lineId.HasValue && shiftTeamId.HasValue && staffKind != null;
+                var pair = hasPair ? (lineId!.Value, shiftTeamId!.Value) : default;
+                var pairLabel = hasPair ? $"Line {lineCodeById[pair.Item1]} · Ca {shiftTeamCodeById[pair.Item2]} {staffKind}" : "";
+                if (groupCode != null && fileGroup is null or { HasConflict: true })
+                {
+                    // Already reported above.
+                }
+                else if (mode == EmployeeImportMode.Add && fileGroup != null)
+                {
+                    target = fileGroup;
+                    if (hasPair && fileGroup.ExistingId != null && (fileGroup.LineKind != staffKind || !fileGroup.Lines.Contains(pair)))
+                        errors.Add($"{pairLabel} không thuộc Nhóm '{fileGroup.Code}' — thêm ở màn Nhóm, hoặc bỏ Mã nhóm để tự xác định Nhóm.");
+                }
+                else if (hasPair)
+                {
+                    // A line may serve several departments (PRO and QA KENSA share lines), so the department narrows the match.
+                    var departmentFilterSet = fileDepartment != null || fileGroup?.ExistingDepartmentId != null;
+                    var departmentFilter = fileDepartment != null ? fileDepartment.ExistingId : fileGroup?.ExistingDepartmentId;
+                    var candidates = existingGroups.Where(g => g.WorkshopId == workshopId && g.LineKind == staffKind && g.Lines.Contains(pair)
+                        && (!departmentFilterSet || g.DepartmentId == departmentFilter)).ToList();
+                    if (candidates.Count > 1 && existingEmployee?.DepartmentId is int currentDepartmentId && candidates.Any(g => g.DepartmentId == currentDepartmentId))
+                        candidates = candidates.Where(g => g.DepartmentId == currentDepartmentId).ToList();
+                    var pick = candidates.Count == 1 ? candidates[0] : candidates.FirstOrDefault(g => g.Id == fileGroup?.ExistingId);
+                    if (pick != null)
+                        target = PlanFor(pick);
+                    else if (candidates.Count > 1)
+                        errors.Add($"Có nhiều Nhóm gắn {pairLabel}: {string.Join(", ", candidates.Select(x => $"{x.GroupCode} ({x.DepartmentCode})"))} — ghi Mã phòng hoặc Mã nhóm.");
+                    else if (fileGroup is { ExistingId: null })
+                        target = fileGroup;
+                    else
+                        errors.Add($"Chưa có Nhóm nào gắn {pairLabel}{(fileDepartment != null ? $" ở phòng {deptCode}" : "")} — thêm Line × Ca cho Nhóm ở màn Nhóm.");
+                }
+                else if (fileGroup != null)
+                    target = fileGroup;
+                else if (!lineColumnsUsed && existingEmployee?.GroupId is int currentGroupId && existingGroups.FirstOrDefault(g => g.Id == currentGroupId) is { } currentGroup)
+                    target = PlanFor(currentGroup);
+                else if (!lineColumnsUsed)
+                    errors.Add("Thiếu Mã nhóm hoặc Line + Nhóm ca.");
+
+                var isNewGroup = target is { ExistingId: null };
+                var isNewDepartment = isNewGroup && departmentPlans.GetValueOrDefault(target!.DepartmentCode)?.ExistingId == null;
+                if (isNewGroup)
+                {
+                    // A new group takes the Line × Ca of its rows on Confirm, so its rows must agree on workshop and TT/GT.
+                    target!.NewWorkshopId ??= workshopId;
+                    if (target.NewWorkshopId != workshopId)
+                        errors.Add($"Nhóm mới '{target.Code}' có dòng ở nhiều Xưởng.");
+                    if (hasPair)
+                    {
+                        if (newGroupKinds.TryGetValue(target.Code, out var newKind) && newKind != staffKind)
+                            errors.Add($"Nhóm mới '{target.Code}' có cả {newKind} và {staffKind} — tách Nhóm hoặc sửa cột TT/GT.");
+                        else newGroupKinds[target.Code] = staffKind!;
+                    }
+                }
+                // Blank line columns keep the person's pair only when the group still covers it; otherwise one pair must be obvious.
+                else if (target != null && !lineColumnsUsed && target.Lines.Count > 1
+                         && !(existingEmployee is { ProductionLineId: int currentLineId, ShiftTeamId: int currentShiftId } && target.Lines.Contains((currentLineId, currentShiftId))))
+                    errors.Add($"Nhóm '{target.Code}' gắn nhiều Line × Ca — ghi Line và Nhóm ca cho người này.");
+
+                if (target != null && !isNewGroup && !InCallerScope(target.ExistingDepartmentId))
+                    errors.Add($"Nhóm '{target.Code}' không thuộc phạm vi bạn phụ trách.");
                 if (!isAdmin && isNewDepartment)
-                    errors.Add($"Chỉ Admin được tạo Bộ phận mới '{deptCode}'.");
+                    errors.Add($"Chỉ Admin được tạo Bộ phận mới '{target!.DepartmentCode}'.");
                 if (!isAdmin && isNewGroup)
-                    errors.Add($"Chỉ Admin được tạo Nhóm mới '{groupCode}'.");
-                if (existingEmployee != null && !InCallerScope(existingEmployee.DepartmentId, existingEmployee.GroupId))
+                    errors.Add($"Chỉ Admin được tạo Nhóm mới '{target!.Code}'.");
+                if (existingEmployee != null && !InCallerScope(existingEmployee.DepartmentId))
                     errors.Add($"Nhân viên '{employeeCode}' đang thuộc đơn vị ngoài phạm vi bạn phụ trách.");
                 // Import would put a manager into a Group, breaking the job-title organisation rules.
                 if (existingEmployee != null && existingEmployee.TerminalLevel != (int)JobTitleTerminalLevel.None)
                     errors.Add("Nhân viên giữ chức vụ Trưởng phòng trở lên — sửa ở màn Nhân viên, không qua import.");
 
-                var lineCode = row.LineCode?.Trim();
-                var teamCode = row.TeamCode?.Trim();
-                var shiftTeamCode = row.ShiftTeamCode?.Trim();
-                var congDoan = string.IsNullOrWhiteSpace(row.CongDoan) ? null : row.CongDoan.Trim();
-                var taskName = string.IsNullOrWhiteSpace(row.TaskName) ? null : row.TaskName.Trim();
-                int? lineId = null, teamId = null, shiftTeamId = null;
-                var hasAllCodes = !string.IsNullOrWhiteSpace(lineCode) && !string.IsNullOrWhiteSpace(teamCode) && !string.IsNullOrWhiteSpace(shiftTeamCode);
-                if (hasAllCodes)
-                {
-                    var translatedTeamCode = TeamCodeTranslation.GetValueOrDefault(teamCode!, teamCode!);
-                    if (linesByCode.TryGetValue(lineCode!, out var foundLine)) lineId = foundLine;
-                    else errors.Add($"Line '{lineCode}' không có trong danh mục.");
-                    if (teamsByCode.TryGetValue(translatedTeamCode, out var foundTeam)) teamId = foundTeam;
-                    else errors.Add($"Team '{teamCode}' không có trong danh mục.");
-                    if (shiftTeamsByCode.TryGetValue(shiftTeamCode!, out var foundShiftTeam)) shiftTeamId = foundShiftTeam;
-                    else errors.Add($"Nhóm ca '{shiftTeamCode}' không có trong danh mục.");
-                }
-                else if (!string.IsNullOrWhiteSpace(lineCode) || !string.IsNullOrWhiteSpace(teamCode) || !string.IsNullOrWhiteSpace(shiftTeamCode)
-                         || congDoan != null || taskName != null)
-                {
-                    errors.Add("Dữ liệu dưới chuyền phải có đủ Line, Team và Nhóm ca.");
-                }
-
+                var resolvedDepartmentCode = target?.DepartmentCode ?? deptCode;
                 result.Add(new EmployeeImportRowDto
                 {
                     RowNumber = row.RowNumber,
                     EmployeeCode = employeeCode,
                     FullName = fullName,
-                    DepartmentCode = deptCode,
-                    DepartmentNameVn = deptName,
-                    GroupCode = groupCode,
-                    GroupNameVn = groupName,
+                    DepartmentCode = resolvedDepartmentCode,
+                    DepartmentNameVn = resolvedDepartmentCode == null ? null
+                        : departmentPlans.GetValueOrDefault(resolvedDepartmentCode)?.Name ?? departmentNameByCode.GetValueOrDefault(resolvedDepartmentCode),
+                    GroupCode = target?.Code ?? groupCode,
+                    GroupNameVn = target?.Name ?? Clean(row.GroupNameVn),
+                    WorkshopCode = workshopCodeById.GetValueOrDefault(target?.ExistingWorkshopId ?? workshopId),
                     LineCode = lineCode,
                     TeamCode = teamCode,
                     ShiftTeamCode = shiftTeamCode,
+                    StaffKind = staffKind ?? fileKind,
                     CongDoan = congDoan,
                     TaskName = taskName,
                     ResolvedProductionLineId = lineId,
@@ -424,23 +518,29 @@ namespace Attendance.Application.Services
                     ResolvedLastName = resolvedLastName,
                     IsNewDepartment = isNewDepartment,
                     IsNewGroup = isNewGroup,
-                    IsNewEmployee = isNewEmployee,
+                    IsNewEmployee = employeeCode != null && existingEmployee == null,
                     IsValid = errors.Count == 0,
                     Errors = errors
                 });
             }
 
-            // Only departments the file covers, so importing one department never touches another; invalid rows still count as present.
-            var departmentIdsInFile = departmentPlans.Values.Where(x => x.ExistingId.HasValue).Select(x => x.ExistingId!.Value).ToList();
-            var absentFromFile = await _unitOfWork.Employees.SelectAsync(
-                x => !x.IsDeleted && x.ProductionLineId != null && x.Group != null
-                     && departmentIdsInFile.Contains(x.Group.DepartmentId) && !codesInFile.Contains(x.Code),
-                x => new { x.Code, FullName = x.LastName + " " + x.FirstName, x.GroupId, x.Group!.DepartmentId, LineCode = x.ProductionLine!.LineCode });
-            var removedRows = absentFromFile
-                .Where(x => InCallerScope(x.DepartmentId, x.GroupId))
-                .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-                .Select(x => new EmployeeImportRemovedRowDto { EmployeeCode = x.Code, FullName = x.FullName, LineCode = x.LineCode })
-                .ToList();
+            // Only Overwrite treats the file as the full roster, and only of departments with at least one valid row.
+            var removedRows = new List<EmployeeImportRemovedRowDto>();
+            if (mode == EmployeeImportMode.Overwrite)
+            {
+                var coveredDepartmentIds = result.Where(r => r.IsValid && !r.IsNewGroup)
+                    .Select(r => groupPlans[r.GroupCode!].ExistingDepartmentId!.Value).Distinct().ToList();
+                var absentFromFile = await _unitOfWork.Employees.SelectAsync(
+                    x => !x.IsDeleted && x.ResignedAt == null && x.Group != null && coveredDepartmentIds.Contains(x.Group.DepartmentId)
+                         && !codesInFile.Contains(x.Code) && (x.JobTitle == null || x.JobTitle.TerminalLevel == (int)JobTitleTerminalLevel.None),
+                    x => new { x.Code, FullName = x.LastName + " " + x.FirstName, x.Group!.DepartmentId, x.Group.GroupNameVn,
+                        LineCode = x.ProductionLine != null ? x.ProductionLine.LineCode : null });
+                removedRows = absentFromFile
+                    .Where(x => InCallerScope(x.DepartmentId))
+                    .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => new EmployeeImportRemovedRowDto { EmployeeCode = x.Code, FullName = x.FullName, GroupNameVn = x.GroupNameVn, LineCode = x.LineCode })
+                    .ToList();
+            }
 
             return (result, departmentPlans, groupPlans, removedRows);
         }
@@ -458,7 +558,7 @@ namespace Attendance.Application.Services
         }
 
         // A=ignored, B=MNV, C=HO Ten, D/E=Department code/name, F/G=Group code/name, H=Line, I=Team, J=shift team,
-        // K=CongDoan, L=TaskName. A file without the production columns must not pass: blanks would clear the roster.
+        // K=CongDoan, L=TaskName, M=TT/GT, N=Xưởng.
         private const string HeaderMarkerCellB = "MNV";
 
         private static List<EmployeeImportRowDto> ParseXlsx(Stream stream)
@@ -504,8 +604,10 @@ namespace Attendance.Application.Services
                 var shiftTeamCode = worksheet.Cell(xlRow.RowNumber(), 10).GetString().Trim();
                 var congDoan = worksheet.Cell(xlRow.RowNumber(), 11).GetString().Trim();
                 var taskName = worksheet.Cell(xlRow.RowNumber(), 12).GetString().Trim();
+                var staffKind = worksheet.Cell(xlRow.RowNumber(), 13).GetString().Trim();
+                var workshopCode = worksheet.Cell(xlRow.RowNumber(), 14).GetString().Trim();
 
-                string[] allCells = [employeeCode, fullName, departmentCode, departmentName, groupCode, groupName, lineCode, teamCode, shiftTeamCode, congDoan, taskName];
+                string[] allCells = [employeeCode, fullName, departmentCode, departmentName, groupCode, groupName, lineCode, teamCode, shiftTeamCode, congDoan, taskName, staffKind, workshopCode];
                 if (allCells.All(string.IsNullOrWhiteSpace)) continue;
 
                 rows.Add(new EmployeeImportRowDto
@@ -521,7 +623,9 @@ namespace Attendance.Application.Services
                     TeamCode = string.IsNullOrWhiteSpace(teamCode) ? null : teamCode,
                     ShiftTeamCode = string.IsNullOrWhiteSpace(shiftTeamCode) ? null : shiftTeamCode,
                     CongDoan = string.IsNullOrWhiteSpace(congDoan) ? null : congDoan,
-                    TaskName = string.IsNullOrWhiteSpace(taskName) ? null : taskName
+                    TaskName = string.IsNullOrWhiteSpace(taskName) ? null : taskName,
+                    StaffKind = string.IsNullOrWhiteSpace(staffKind) ? null : staffKind,
+                    WorkshopCode = string.IsNullOrWhiteSpace(workshopCode) ? null : workshopCode
                 });
             }
 
@@ -960,10 +1064,12 @@ namespace Attendance.Application.Services
 
         private static readonly string[] EmployeeNotes =
         {
-            "Mỗi dòng 1 nhân viên. Mã NV đã có → cập nhật họ tên, Nhóm và thông tin dưới chuyền; chưa có → tạo mới.",
-            "Nhân viên văn phòng để trống 5 cột cuối. Người dưới chuyền phải có đủ Line, Team, Nhóm ca; Team A/B tương ứng mã 1/2.",
-            "Người dưới chuyền không có trong file, thuộc phòng có trong file: bị gỡ thông tin dưới chuyền (không xoá nhân viên).",
-            "Bộ phận/Nhóm chưa có trong hệ thống sẽ được tạo mới (chỉ Admin). Người phụ trách chỉ import được vào đơn vị mình phụ trách.",
+            "Mỗi dòng 1 nhân viên. Mã NV đã có → cập nhật; chưa có → tạo mới. Chọn chế độ trên màn import.",
+            "Ghi đè: file là danh sách đầy đủ của Phòng ban. Có Line + Nhóm ca thì Nhóm tự xác định theo Line × Ca × TT/GT (Mã phòng, Mã nhóm có thể để trống). Người của Phòng ban có trong file nhưng không có dòng nào → đánh dấu Nghỉ việc.",
+            "Thêm: chỉ cập nhật người có trong file. Có Mã nhóm → vào đúng Nhóm đó (Line × Ca ghi trong file phải thuộc Nhóm); không có → tự xác định theo Line × Ca × TT/GT.",
+            "Line và Nhóm ca để trống → giữ Line × Ca hiện tại nếu Nhóm vẫn gắn, không thì lấy theo Nhóm. Team tự lấy theo Line. Xưởng để trống → theo Nhóm, rồi theo Xưởng duy nhất có Line đó, rồi Xưởng hiện tại.",
+            "TT/GT: Line chỉ có một loại thì tự điền; Line có cả hai thì theo cột TT/GT, trống thì theo Loại của Nhóm trong file, rồi theo dữ liệu đang có.",
+            "Bộ phận/Nhóm chưa có trong hệ thống sẽ được tạo mới (chỉ Admin). Chỉ Admin và Người phụ trách Bộ phận được import, Người phụ trách chỉ trong Bộ phận mình.",
             "Nhân viên giữ chức vụ Trưởng phòng trở lên không import được — sửa ở màn Nhân viên.",
             "Tài khoản đăng nhập, email nhận thông báo, Chức vụ, chữ ký: dùng import Liên kết tài khoản.",
         };
@@ -972,15 +1078,17 @@ namespace Attendance.Application.Services
         {
             new("MNV", 16, true, "@"),
             new("HO Ten", 28, true),
-            new("Mã phòng", 14, true, "@"),
-            new("Tên phòng", 26, true),
-            new("Mã nhóm", 14, true, "@"),
-            new("Tên nhóm", 26, true),
+            new("Mã phòng", 14, false, "@"),
+            new("Tên phòng", 26, false),
+            new("Mã nhóm", 14, false, "@"),
+            new("Tên nhóm", 26, false),
             new("Line", 12, false, "@"),
             new("Team", 10, false, "@"),
             new("Nhóm ca", 10, false, "@"),
             new("Công đoạn", 12, false),
             new("Công việc", 22, false),
+            new("TT/GT", 8, false, "@", new[] { new ImportTemplateOption(StaffKinds.Direct, "Trực tiếp"), new ImportTemplateOption(StaffKinds.Indirect, "Gián tiếp") }),
+            new("Xưởng", 8, false, "@"),
         };
 
         private async Task<ImportTemplateColumn[]> EmployeeColumnsWithOptionsAsync()
@@ -992,6 +1100,8 @@ namespace Attendance.Application.Services
             var columns = EmployeeColumns.ToArray();
             columns[2] = columns[2] with { Options = departments.OrderBy(x => x.Value).ToList(), AllowOtherValues = true };
             columns[4] = columns[4] with { Options = groups.OrderBy(x => x.Value).ToList(), AllowOtherValues = true };
+            columns[12] = columns[12] with { Options = (await _unitOfWork.Workshops.SelectAsync(x => !x.IsDeleted,
+                x => new ImportTemplateOption(x.WorkshopCode, x.WorkshopNameVn))).OrderBy(x => x.Value).ToList() };
             return columns;
         }
 
@@ -1042,7 +1152,7 @@ namespace Attendance.Application.Services
 
         public async Task<(byte[] Content, string FileName)> GenerateTemplateAsync() => ImportTemplateBuilder.Build(
             "Nhan vien", "MẪU IMPORT NHÂN SỰ", EmployeeNotes, await EmployeeColumnsWithOptionsAsync(),
-            new[] { new object?[] { "NV001", "Nguyễn Văn A", "PRO", "Chế tạo", "PRO-A", "Nhóm A", "A1", "A", "G", "ATO", "Lắp ráp", "1" } },
+            new[] { new object?[] { "NV001", "Nguyễn Văn A", "PRO", "Chế tạo", "", "", "A1", "1", "G", "ATO", "Lắp ráp", "TT", "DA" } },
             "Mau_Import_NhanVien.xlsx");
 
         public (byte[] Content, string FileName) GenerateOtHourLimitTemplate() => ImportTemplateBuilder.Build(
@@ -1063,7 +1173,7 @@ namespace Attendance.Application.Services
             var rows = (await _employeeService.GetForExportAsync(userName, isAdmin, filter))
                 .Where(x => x.GroupCode != null && x.TerminalLevel == (int)JobTitleTerminalLevel.None)
                 .Select(x => new object?[] { x.Code, x.FullName, x.DepartmentCode, x.DepartmentNameVn, x.GroupCode, x.GroupNameVn,
-                    x.LineCode, x.TeamCode, x.ShiftTeamCode, x.CongDoan, x.TaskName })
+                    x.LineCode, x.TeamCode, x.ShiftTeamCode, x.CongDoan, x.TaskName, x.StaffKind, x.WorkshopCode })
                 .ToList();
             return ImportTemplateBuilder.Build("Nhan vien", "IMPORT NHÂN SỰ", EmployeeNotes, await EmployeeColumnsWithOptionsAsync(), rows,
                 $"NhanVien_{ExportStamp()}.xlsx", rowsAreSamples: false);

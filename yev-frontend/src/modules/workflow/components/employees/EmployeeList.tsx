@@ -12,6 +12,7 @@ import EmployeeOrgUnitsDialog from "./EmployeeOrgUnitsDialog";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { TableSkeletonRows } from "@/components/common/TableSkeletonRows";
+import { Pagination } from "@/components/ui/Pagination";
 import { Badge } from "@/components/ui/Badge";
 import { type SelectOption } from "@/components/ui/SearchableSelect";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -37,8 +38,6 @@ export default function EmployeeList() {
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -71,8 +70,6 @@ export default function EmployeeList() {
             setEmployees(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
         (message) => toast.error(message)
@@ -139,12 +136,9 @@ export default function EmployeeList() {
     };
 
     return (
-        <div className="space-y-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
-                </div>
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h1 className="text-lg font-semibold text-[#191c1e]">{t("title")}</h1>
 
                 <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -166,14 +160,14 @@ export default function EmployeeList() {
             </div>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
+                <div className="border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
                     <div className="flex gap-2">
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
@@ -185,9 +179,6 @@ export default function EmployeeList() {
                             <Search className="h-4 w-4" />
                         </button>
                     </div>
-                    <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
-                    </div>
                 </div>
 
                 {error && (
@@ -198,12 +189,12 @@ export default function EmployeeList() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">{t("colEmployeeCode")}</th>
-                                <th className="px-6 py-3">{t("colFullName")}</th>
-                                <th className="px-6 py-3">{t("colOrgUnit")}</th>
-                                <th className="px-6 py-3">{t("colPosition")}</th>
-                                <th className="px-6 py-3">{t("colIsActive")}</th>
-                                <th className="px-6 py-3 text-right">{tCommon("actions")}</th>
+                                <th className="px-4 py-3">{t("colEmployeeCode")}</th>
+                                <th className="px-4 py-3">{t("colFullName")}</th>
+                                <th className="hidden px-4 py-3 md:table-cell">{t("colOrgUnit")}</th>
+                                <th className="hidden px-4 py-3 lg:table-cell">{t("colPosition")}</th>
+                                <th className="px-4 py-3">{t("colIsActive")}</th>
+                                <th className="px-4 py-3 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -217,9 +208,14 @@ export default function EmployeeList() {
                             )}
                             {!isLoading && employees.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
-                                    <td className="px-6 py-4 text-sm text-[#191c1e]">{item.fullName}</td>
-                                    <td className="px-6 py-4 text-sm text-[#191c1e]">
+                                    <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-[#191c1e]">{item.employeeCode}</td>
+                                    <td className="px-4 py-3 text-sm text-[#191c1e]">
+                                        <span className="whitespace-nowrap">{item.fullName}</span>
+                                        {item.primaryOrgUnitNameVn && (
+                                            <span className="block text-xs text-[#5e3f3a] md:hidden">{item.primaryOrgUnitNameVn}</span>
+                                        )}
+                                    </td>
+                                    <td className="hidden px-4 py-3 text-sm text-[#191c1e] md:table-cell">
                                         {item.primaryOrgUnitNameVn ? (
                                             <>
                                                 {item.primaryOrgUnitNameVn}
@@ -229,20 +225,21 @@ export default function EmployeeList() {
                                             <span className="text-[#8a8f94]">{t("noAssignment")}</span>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.position || "—"}</td>
-                                    <td className="px-6 py-4 text-sm">
+                                    <td className="hidden px-4 py-3 text-sm text-[#5e3f3a] lg:table-cell">{item.position || "—"}</td>
+                                    <td className="px-4 py-3 text-sm">
                                         <Badge variant={item.isActive ? "success" : "neutral"} withDot>
                                             {item.isActive ? t("statusActive") : t("statusInactive")}
                                         </Badge>
                                     </td>
-                                    <td className="px-6 py-4 text-right text-sm">
+                                    <td className="px-4 py-3 text-right text-sm">
                                         <div className="inline-flex items-center gap-1.5">
                                             <button
                                                 onClick={() => setOrgUnitsFor(item)}
-                                                className="inline-flex cursor-pointer items-center gap-1 font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                className="inline-flex cursor-pointer items-center gap-1 whitespace-nowrap font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
                                                 title={t("orgUnitsTitle")}
+                                                aria-label={t("orgUnitsTitle")}
                                             >
-                                                <Building2 className="h-3.5 w-3.5" /> {t("orgUnitsButton")}
+                                                <Building2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{t("orgUnitsButton")}</span>
                                             </button>
                                             {canManage && (
                                                 <>
@@ -272,25 +269,14 @@ export default function EmployeeList() {
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        {tCommon("prevPage")}
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        {tCommon("nextPage")}
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
+                    compactSummary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: employees.length, total: totalCount })}
+                />
             </section>
 
             <EmployeeForm

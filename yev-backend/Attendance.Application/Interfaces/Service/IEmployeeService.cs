@@ -49,6 +49,8 @@ namespace Attendance.Application.Interfaces.Service
         Task<EmployeeDto> CreateAsync(string callerUserName, bool isAdmin, CreateEmployeeDto request);
         Task UpdateAsync(string callerUserName, bool isAdmin, UpdateEmployeeDto request);
         Task DeleteAsync(string callerUserName, bool isAdmin, int id);
+        Task<int> DeleteManyAsync(string callerUserName, bool isAdmin, List<int> ids);
+        Task<int> RestoreResignedAsync(string callerUserName, bool isAdmin, List<int> ids);
 
         // Called whenever coordinators change so permissions apply immediately; no-op until the employee has a UserName.
         Task SyncAutoGrantedPermissionsForEmployeeAsync(int employeeId);

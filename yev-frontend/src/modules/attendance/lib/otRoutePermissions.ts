@@ -8,7 +8,6 @@ export const OT_CATEGORIES_PERMISSIONS = [
     "Attendance.JobTitle.Create",
     "Attendance.DepartmentApprovalStep.Update",
     "Attendance.GroupApprovalStep.Update",
-    "Attendance.ProductionApprovalStep.Update",
     "Attendance.Employee.Create",
     "Attendance.Employee.Update",
     "Attendance.Employee.Delete",
@@ -22,10 +21,9 @@ export const OT_CATEGORIES_PERMISSIONS = [
 
 // Prefix match without locale; first match wins.
 export const OT_ROUTE_PERMISSIONS: { prefix: string; permissions: string[] }[] = [
-    // Create and CreateProduction are separate: Line Leaders with only CreateProduction must still reach this page.
     // Manager-and-above is enforced by the API (OtOverview/access); Approve is only the cheap UI gate.
     { prefix: "/ot/overview", permissions: ["Attendance.OTForm.Approve"] },
-    { prefix: "/ot/create", permissions: ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"] },
+    { prefix: "/ot/create", permissions: ["Attendance.OTForm.Create"] },
     { prefix: "/ot/ai-chat", permissions: ["Attendance.AiChat.Use"] },
     { prefix: "/ot/list", permissions: ["Attendance.OTForm.View"] },
     { prefix: "/ot/forms", permissions: ["Attendance.OTForm.View"] },

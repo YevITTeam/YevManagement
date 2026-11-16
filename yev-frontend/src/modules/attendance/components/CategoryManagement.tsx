@@ -70,7 +70,6 @@ export default function CategoryManagement() {
             visible: hasAnyPermission(user, [
                 "Attendance.DepartmentApprovalStep.Update",
                 "Attendance.GroupApprovalStep.Update",
-                "Attendance.ProductionApprovalStep.Update",
             ]),
         },
         {

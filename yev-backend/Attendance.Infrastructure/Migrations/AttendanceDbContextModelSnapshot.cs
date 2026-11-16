@@ -356,8 +356,15 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<int?>("ProductionLineId")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("ResignedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int?>("ShiftTeamId")
                         .HasColumnType("int");
+
+                    b.Property<string>("StaffKind")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("TaskName")
                         .HasMaxLength(255)
@@ -538,6 +545,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<bool>("AllowEatLater")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("CreatorMustSign")
+                        .HasColumnType("bit");
+
                     b.Property<int>("DepartmentId")
                         .HasColumnType("int");
 
@@ -556,6 +566,13 @@ namespace Attendance.Infrastructure.Migrations
                         .HasColumnType("nvarchar(255)");
 
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LineKind")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<bool>("StepwiseEdit")
                         .HasColumnType("bit");
 
                     b.Property<int>("WorkshopId")
@@ -640,6 +657,33 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("GroupApprovalStepCoordinators");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.GroupApprovalStepMember", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("GroupApprovalStepId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ReceivesMail")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "EmployeeId" }, "IX_GroupApprovalStepMembers_EmployeeId");
+
+                    b.HasIndex(new[] { "GroupApprovalStepId", "EmployeeId" }, "IX_GroupApprovalStepMembers_GroupApprovalStepId_EmployeeId")
+                        .IsUnique();
+
+                    b.ToTable("GroupApprovalStepMembers");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.GroupBorrowedApprover", b =>
                 {
                     b.Property<int>("Id")
@@ -662,6 +706,35 @@ namespace Attendance.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("GroupBorrowedApprovers");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.GroupLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("GroupId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductionLineId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ShiftTeamId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShiftTeamId");
+
+                    b.HasIndex(new[] { "GroupId", "ProductionLineId", "ShiftTeamId" }, "IX_GroupLines_GroupId_ProductionLineId_ShiftTeamId")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "ProductionLineId" }, "IX_GroupLines_ProductionLineId");
+
+                    b.ToTable("GroupLines");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.JobTitle", b =>
@@ -1067,6 +1140,9 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<int>("OtFormApprovalStepId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("ReceivesMail")
+                        .HasColumnType("bit");
+
                     b.Property<string>("UserName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1247,6 +1323,14 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Property<string>("CongDoanSnapshot")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal?>("CustomMonthlyOtHourLimitSnapshot")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<decimal?>("CustomYearlyOtHourLimitSnapshot")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<bool>("DidEat")
                         .HasColumnType("bit");
@@ -1510,41 +1594,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.ToTable("ProcessParts");
                 });
 
-            modelBuilder.Entity("Attendance.Domain.Entities.ProductionApprovalStep", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DepartmentId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsResponsible")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("JobTitleId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("RequiresSignature")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("StepOrder")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex(new[] { "DepartmentId" }, "IX_ProductionApprovalSteps_DepartmentId");
-
-                    b.HasIndex(new[] { "JobTitleId" }, "IX_ProductionApprovalSteps_JobTitleId");
-
-                    b.ToTable("ProductionApprovalSteps");
-                });
-
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionLine", b =>
                 {
                     b.Property<int>("Id")
@@ -1553,9 +1602,19 @@ namespace Attendance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("CdMae")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("CongDoan")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("HasDirectStaff")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("HasIndirectStaff")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -1565,12 +1624,23 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<int>("TeamId")
+                    b.Property<string>("SortCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("TeamId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WorkshopId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
                     b.HasIndex("TeamId");
+
+                    b.HasIndex(new[] { "WorkshopId", "LineCode" }, "IX_ProductionLines_WorkshopId_LineCode")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("ProductionLines");
                 });
@@ -1620,7 +1690,14 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<int>("WorkshopId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex(new[] { "WorkshopId", "Code" }, "IX_ProductionTeams_WorkshopId_Code")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("ProductionTeams");
                 });
@@ -2007,6 +2084,27 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("Group");
                 });
 
+            modelBuilder.Entity("Attendance.Domain.Entities.GroupApprovalStepMember", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Employee", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_GroupApprovalStepMembers_Employees_EmployeeId");
+
+                    b.HasOne("Attendance.Domain.Entities.GroupApprovalStep", "GroupApprovalStep")
+                        .WithMany("Members")
+                        .HasForeignKey("GroupApprovalStepId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_GroupApprovalStepMembers_GroupApprovalSteps_GroupApprovalStepId");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("GroupApprovalStep");
+                });
+
             modelBuilder.Entity("Attendance.Domain.Entities.GroupBorrowedApprover", b =>
                 {
                     b.HasOne("Attendance.Domain.Entities.Employee", "Employee")
@@ -2026,6 +2124,36 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("Employee");
 
                     b.Navigation("Group");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.GroupLine", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Group", "Group")
+                        .WithMany("GroupLines")
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_GroupLines_Groups_GroupId");
+
+                    b.HasOne("Attendance.Domain.Entities.ProductionLine", "ProductionLine")
+                        .WithMany()
+                        .HasForeignKey("ProductionLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_GroupLines_ProductionLines_ProductionLineId");
+
+                    b.HasOne("Attendance.Domain.Entities.ProductionShiftTeam", "ShiftTeam")
+                        .WithMany()
+                        .HasForeignKey("ShiftTeamId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_GroupLines_ProductionShiftTeams_ShiftTeamId");
+
+                    b.Navigation("Group");
+
+                    b.Navigation("ProductionLine");
+
+                    b.Navigation("ShiftTeam");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.JobTitlePermission", b =>
@@ -2258,37 +2386,36 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("OtForm");
                 });
 
-            modelBuilder.Entity("Attendance.Domain.Entities.ProductionApprovalStep", b =>
-                {
-                    b.HasOne("Attendance.Domain.Entities.Department", "Department")
-                        .WithMany("ProductionApprovalSteps")
-                        .HasForeignKey("DepartmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_ProductionApprovalSteps_Departments_DepartmentId");
-
-                    b.HasOne("Attendance.Domain.Entities.JobTitle", "JobTitle")
-                        .WithMany("ProductionApprovalSteps")
-                        .HasForeignKey("JobTitleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_ProductionApprovalSteps_JobTitles_JobTitleId");
-
-                    b.Navigation("Department");
-
-                    b.Navigation("JobTitle");
-                });
-
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionLine", b =>
                 {
                     b.HasOne("Attendance.Domain.Entities.ProductionTeam", "Team")
                         .WithMany("ProductionLines")
                         .HasForeignKey("TeamId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("FK_ProductionLines_ProductionTeams_TeamId");
 
+                    b.HasOne("Attendance.Domain.Entities.Workshop", "Workshop")
+                        .WithMany()
+                        .HasForeignKey("WorkshopId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionLines_Workshops_WorkshopId");
+
                     b.Navigation("Team");
+
+                    b.Navigation("Workshop");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionTeam", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Workshop", "Workshop")
+                        .WithMany()
+                        .HasForeignKey("WorkshopId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionTeams_Workshops_WorkshopId");
+
+                    b.Navigation("Workshop");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Department", b =>
@@ -2300,8 +2427,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("Groups");
 
                     b.Navigation("OtForms");
-
-                    b.Navigation("ProductionApprovalSteps");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.Employee", b =>
@@ -2321,7 +2446,14 @@ namespace Attendance.Infrastructure.Migrations
 
                     b.Navigation("GroupApprovalSteps");
 
+                    b.Navigation("GroupLines");
+
                     b.Navigation("OtForms");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.GroupApprovalStep", b =>
+                {
+                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.JobTitle", b =>
@@ -2333,8 +2465,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.Navigation("GroupApprovalSteps");
 
                     b.Navigation("JobTitlePermissions");
-
-                    b.Navigation("ProductionApprovalSteps");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.OtCase", b =>

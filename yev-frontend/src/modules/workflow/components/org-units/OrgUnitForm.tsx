@@ -124,7 +124,7 @@ export default function OrgUnitForm({
                             disabled={loading}
                             autoFocus
                             required
-                            className={fieldClassName}
+                            className={`${fieldClassName} max-w-40`}
                         />
                     </label>
 
@@ -200,7 +200,7 @@ export default function OrgUnitForm({
                             value={values.sortOrder}
                             onChange={(event) => setValues((current) => ({ ...current, sortOrder: Number(event.target.value) }))}
                             disabled={loading}
-                            className={fieldClassName}
+                            className={`${fieldClassName} max-w-24`}
                         />
                     </label>
 

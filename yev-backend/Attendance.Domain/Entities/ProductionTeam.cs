@@ -2,16 +2,20 @@ using System.Collections.Generic;
 
 namespace Attendance.Domain.Entities;
 
-// "Khu/Team" column of Thong_Tin_Line_Team.xlsx; meaning of the admin/support values is unconfirmed.
+// Team/area of a workshop; the same code in two workshops is two different teams.
 public partial class ProductionTeam
 {
     public int Id { get; set; }
+
+    public int WorkshopId { get; set; }
 
     public string Code { get; set; } = null!;
 
     public string? NameVn { get; set; }
 
     public bool IsDeleted { get; set; }
+
+    public virtual Workshop Workshop { get; set; } = null!;
 
     public virtual ICollection<ProductionLine> ProductionLines { get; set; } = new List<ProductionLine>();
 

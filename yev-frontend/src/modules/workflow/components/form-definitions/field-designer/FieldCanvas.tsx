@@ -95,7 +95,7 @@ export default function FieldCanvas({ fields, onChange }: FieldCanvasProps) {
 
     return (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="flex gap-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
                 <FieldPalette />
 
                 <div className="min-w-0 flex-1">

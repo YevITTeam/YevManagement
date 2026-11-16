@@ -52,6 +52,9 @@ export interface OtFormEmployeeDto {
     // Read live (not snapshotted like monthToDate/yearToDate); null = global default.
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
+    // As it stood when the person was put on the form; noted beside the red mark on screen and on paper.
+    customMonthlyOtHourLimitSnapshot: number | null;
+    customYearlyOtHourLimitSnapshot: number | null;
     // 0=no ticket, 1=secondary, 2=main (see lib/mealTicket.ts).
     mealTicketType: number;
     // BE already deducted the meal break when applicable; always use this for display/totals, never recompute from start/end.
@@ -82,28 +85,9 @@ export interface MyCreateScopeItemDto {
     departmentNameVn: string;
 }
 
-// Team/Line/shift combos where the caller is Line Leader, used to prefill and lock the dropdowns.
-// Empty = Admin (unrestricted) or not a Line Leader, dropdowns stay free.
-export interface MyProductionCreateScopeItemDto {
-    // Caller's own department, identical across items.
-    departmentId: number;
-    departmentNameVn: string;
-    productionLineId: number;
-    lineCode: string;
-    lineNameVn: string | null;
-    teamId: number;
-    teamCode: string;
-    teamNameVn: string | null;
-    shiftTeamId: number;
-    shiftTeamCode: string;
-    shiftTeamNameVn: string | null;
-}
-
-// Signature is taken by BE from UserSignature/me. Group forms need groupId (isProductionForm=false); production-line
-// forms send groupId=null, isProductionForm=true. secondaryPassword is re-verified by BE.
+// Signature is taken by BE from UserSignature/me; secondaryPassword is re-verified by BE.
 export interface CreateOtFormDto {
     groupId: number | null;
-    isProductionForm: boolean;
     departmentId: number;
     reasonId: number;
     otCaseId: number;
@@ -295,6 +279,8 @@ export interface OtFormDto {
     creatorSignatureImage: string | null;
     status: number;
     isEditable: boolean;
+    // Accounts allowed to edit now: the creator, or on stepwise groups the last approved level.
+    editorUserNames: string[];
     // OtFormResubmitKind: 1 = rejected, creator fixes and restarts the chain; 2 = Manager-signed, re-sign up to the Manager.
     resubmitKind: number | null;
     // Accounts allowed to re-submit; Admin may also re-sign (kind 2).
@@ -302,6 +288,9 @@ export interface OtFormDto {
     resubmitDeadline: string | null;
     // Chain inference warning (null when complete), shown as a banner.
     approvalChainWarning: string | null;
+    // Company limits, sent along for the e-mail page that has no token to read the setting.
+    monthlyOtHourLimit: number;
+    yearlyOtHourLimit: number;
     paperScan: OtFormPaperScanDto | null;
     // The current step needs a paper copy because nobody holds it; only the creator may send one.
     canUploadPaperScan: boolean;

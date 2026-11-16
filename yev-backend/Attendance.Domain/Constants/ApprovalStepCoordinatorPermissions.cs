@@ -4,6 +4,9 @@ namespace Attendance.Domain.Constants;
 // same SyncAutoGrantedPermissionsAsync call as job-title grants, otherwise one call wipes the other.
 public static class ApprovalStepCoordinatorPermissions
 {
+    // Coordinators keep the Update codes only to reach the screen; every tree write checks for Admin.
+    public const string TreeEditAdminOnlyMessage = "Chỉ Admin được chỉnh Cây duyệt.";
+
     // Granted to any coordinator: the approval-tree screen loads every tab, so view rights are shared; only Update is per role.
     public static readonly string[] BaseViewCodes =
     {
@@ -13,14 +16,11 @@ public static class ApprovalStepCoordinatorPermissions
         "Attendance.Employee.View",
         "Attendance.DepartmentApprovalStep.View",
         "Attendance.GroupApprovalStep.View",
-        "Attendance.ProductionApprovalStep.View",
     };
 
     public const string DepartmentUpdateCode = "Attendance.DepartmentApprovalStep.Update";
 
     public const string GroupUpdateCode = "Attendance.GroupApprovalStep.Update";
-
-    public const string ProductionUpdateCode = "Attendance.ProductionApprovalStep.Update";
 
     // Granted to department and group coordinators, scoped to what they coordinate (EnsureCanManageDeptOrGroupScopeAsync).
     public const string EmployeeUpdateOtLimitCode = "Attendance.Employee.UpdateOtLimit";

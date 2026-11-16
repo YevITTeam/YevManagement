@@ -1,6 +1,6 @@
 "use client";
 
-import { User, X } from "lucide-react";
+import { TriangleAlert, X } from "lucide-react";
 
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 
@@ -8,6 +8,7 @@ export interface StepHoldersLabels {
     holdersLabel: string;
     loadingEmployees: string;
     noHolders: string;
+    noHoldersHint: string;
     removeHolderHint: string;
     addHolderPlaceholder: string;
 }
@@ -20,6 +21,55 @@ interface HolderItem {
     badge?: string | null;
     // Managed elsewhere, so this list only shows them.
     locked?: boolean;
+}
+
+export const peopleListClassName = "pl-1.5 @2xl:pl-0";
+export const personMessageClassName = "flex min-h-8 items-center gap-1.5 text-xs italic text-[#8a8f94]";
+// The panel opens at least 240px wide, so the trigger can stay a short text link.
+export const addPersonRowClassName = "w-24";
+export const addPersonTriggerClassName =
+    "h-6 w-full rounded-md bg-transparent px-1.5 pr-6 text-xs! text-[#8a8f94] outline-none transition hover:bg-[#f2f4f6] hover:text-[#191c1e] focus:text-[#191c1e]";
+export const personButtonClassName = "flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full transition";
+
+export function PersonRow({
+    name,
+    code,
+    badge,
+    onRemove,
+    removeLabel,
+    removeDisabled,
+    children,
+}: {
+    name: string;
+    code: string;
+    badge?: string | null;
+    onRemove?: () => void;
+    removeLabel: string;
+    removeDisabled?: boolean;
+    children?: React.ReactNode;
+}) {
+    return (
+        <li className="flex min-h-8 items-center gap-2 text-xs text-[#191c1e]">
+            <span className="min-w-16 shrink-0 whitespace-nowrap text-[11px] tabular-nums text-[#8a8f94]">{code}</span>
+            <span className="min-w-0">{name}</span>
+            {badge && <span className="whitespace-nowrap rounded bg-[#fff4f2] px-1.5 py-px text-[11px] text-[#930006]">{badge}</span>}
+            <span className="inline-flex shrink-0 items-center">
+                {children}
+                {onRemove && (
+                    <button
+                        type="button"
+                        onClick={onRemove}
+                        disabled={removeDisabled}
+                        title={removeLabel}
+                        aria-label={removeLabel}
+                        className={`${personButtonClassName} text-[#8a8f94] hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40`}
+                    >
+                        <X size={12} />
+                    </button>
+                )}
+            </span>
+        </li>
+    );
 }
 
 export default function StepHolders({
@@ -45,63 +95,40 @@ export default function StepHolders({
     labels: StepHoldersLabels;
     readOnly?: boolean;
 }) {
-    return (
-        <div className="relative ml-[1.35rem] pb-1 pl-5" title={labels.holdersLabel}>
-            {isLoadingEmployees ? (
-                <div className="py-1 text-xs text-[#8a8f94]">{labels.loadingEmployees}</div>
-            ) : (
-                <ul>
-                    {holders.length === 0 && (
-                        <TreeLeaf>
-                            <span className="text-xs italic text-[#8a8f94]">{labels.noHolders}</span>
-                        </TreeLeaf>
-                    )}
-                    {holders.map((holder) => (
-                        <TreeLeaf key={holder.id}>
-                            <span className="inline-flex items-center gap-1.5 text-xs text-[#191c1e]">
-                                <User size={12} className="text-[#8a8f94]" />
-                                {holder.lastName} {holder.firstName}
-                                <span className="rounded bg-[#f2f4f6] px-1.5 py-px text-[11px] text-[#5e3f3a]">{holder.code}</span>
-                                {holder.badge && <span className="rounded bg-[#fff4f2] px-1.5 py-px text-[11px] text-[#930006]">{holder.badge}</span>}
-                                {!readOnly && !holder.locked && <button
-                                    type="button"
-                                    onClick={() => onRemoveHolder(holder)}
-                                    disabled={removingHolderId === holder.id}
-                                    title={labels.removeHolderHint}
-                                    aria-label={labels.removeHolderHint}
-                                    className="cursor-pointer rounded-full p-0.5 text-[#8a8f94] transition hover:bg-[#fff4f2] hover:text-[#930006] disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                    <X size={11} />
-                                </button>}
-                            </span>
-                        </TreeLeaf>
-                    ))}
-                    {!readOnly && <TreeLeaf>
-                        <div className="w-44">
-                            <SearchableSelect
-                                options={addOptions}
-                                value={addingValue}
-                                onChange={onAddChange}
-                                onQueryChange={onAddQueryChange}
-                                placeholder={labels.addHolderPlaceholder}
-                                disabled={removingHolderId !== null}
-                                triggerClassName="h-6 rounded-md border border-dashed border-[#e0e3e5] bg-white px-2 pr-6 text-[11px]! text-[#8a8f94] outline-none transition hover:border-[#e3000f] focus:border-[#e3000f]"
-                            />
-                        </div>
-                    </TreeLeaf>}
-                </ul>
-            )}
-        </div>
-    );
-}
+    if (isLoadingEmployees) return <div className={personMessageClassName}>{labels.loadingEmployees}</div>;
 
-// One leaf of the holder tree: vertical guide + horizontal elbow (guide stops at the elbow on the last leaf).
-function TreeLeaf({ children }: { children: React.ReactNode }) {
     return (
-        <li className="group/leaf relative flex min-h-6 items-center pl-4">
-            <span className="absolute -left-2.5 bottom-0 top-0 w-px bg-[#d5d9dd] group-last/leaf:bottom-auto group-last/leaf:h-1/2" aria-hidden />
-            <span className="absolute -left-2.5 top-1/2 h-px w-3 bg-[#d5d9dd]" aria-hidden />
-            {children}
-        </li>
+        <ul className={peopleListClassName} title={labels.holdersLabel}>
+            {holders.length === 0 && (
+                <li className={personMessageClassName} title={labels.noHoldersHint}>
+                    <TriangleAlert className="h-3.5 w-3.5 not-italic text-[#9a5b00]" aria-label={labels.noHoldersHint} />
+                    {labels.noHolders}
+                </li>
+            )}
+            {holders.map((holder) => (
+                <PersonRow
+                    key={holder.id}
+                    name={`${holder.lastName} ${holder.firstName}`}
+                    code={holder.code}
+                    badge={holder.badge}
+                    onRemove={readOnly || holder.locked ? undefined : () => onRemoveHolder(holder)}
+                    removeLabel={labels.removeHolderHint}
+                    removeDisabled={removingHolderId === holder.id}
+                />
+            ))}
+            {!readOnly && (
+                <li className={addPersonRowClassName}>
+                    <SearchableSelect
+                        options={addOptions}
+                        value={addingValue}
+                        onChange={onAddChange}
+                        onQueryChange={onAddQueryChange}
+                        placeholder={labels.addHolderPlaceholder}
+                        disabled={removingHolderId !== null}
+                        triggerClassName={addPersonTriggerClassName}
+                    />
+                </li>
+            )}
+        </ul>
     );
 }

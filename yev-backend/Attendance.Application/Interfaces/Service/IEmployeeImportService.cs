@@ -6,7 +6,7 @@ namespace Attendance.Application.Interfaces.Service
 {
     public interface IEmployeeImportService
     {
-        Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream, string userName, bool isAdmin);
+        Task<EmployeeImportPreviewResultDto> PreviewAsync(Stream excelFileStream, EmployeeImportMode mode, string userName, bool isAdmin);
 
         Task<EmployeeImportConfirmResultDto> ConfirmAsync(ConfirmEmployeeImportDto request, string userName, bool isAdmin);
 

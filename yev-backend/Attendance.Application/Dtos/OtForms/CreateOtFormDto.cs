@@ -7,7 +7,6 @@ namespace Attendance.Application.Dtos.OtForms
         // Required for group forms; must be empty for production-line forms (IsProductionForm = true).
         public int? GroupId { get; set; }
 
-        public bool IsProductionForm { get; set; }
 
         [Required(ErrorMessage = "Bộ phận không được để trống")]
         public int DepartmentId { get; set; }

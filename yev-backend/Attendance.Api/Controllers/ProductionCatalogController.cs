@@ -19,9 +19,9 @@ namespace Attendance.Api.Controllers
         [RequirePermission(ManagePermission)]
         [HttpGet("{kind}/grid-list")]
         public async Task<ActionResult<ApiResponse<PagedResponse<ProductionCatalogItemDto>>>> GetPaged(
-            ProductionCatalogKind kind, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 10, [FromQuery] string? keyword = null, [FromQuery] int? teamId = null)
+            ProductionCatalogKind kind, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 10, [FromQuery] string? keyword = null, [FromQuery] int? teamId = null, [FromQuery] int? workshopId = null)
         {
-            return Success(await _service.GetPagedAsync(kind, pageIndex, pageSize, keyword, teamId));
+            return Success(await _service.GetPagedAsync(kind, pageIndex, pageSize, keyword, teamId, workshopId));
         }
 
         [RequirePermission(ManagePermission)]

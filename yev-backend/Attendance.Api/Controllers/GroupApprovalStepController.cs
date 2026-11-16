@@ -51,12 +51,11 @@ namespace Attendance.Api.Controllers
         }
 
         [RequirePermission("Attendance.GroupApprovalStep.Update")]
-        [HttpPut("by-group/{groupId}/borrowed-approvers")]
-        public async Task<ActionResult<ApiResponse<GroupBorrowedApproversDto>>> ReplaceBorrowedApprovers(
-            int groupId, [FromBody] ReplaceGroupBorrowedApproversDto request)
+        [HttpPost("apply-member")]
+        public async Task<ActionResult<ApiResponse<ApplyGroupLevelMemberResultDto>>> ApplyMember([FromBody] ApplyGroupLevelMemberDto request)
         {
-            var result = await _groupApprovalStepService.ReplaceBorrowedApproversAsync(CurrentUserName, User.IsInRole(AdminRole), groupId, request);
-            return Success(result, "Cập nhật danh sách thành công.");
+            var result = await _groupApprovalStepService.ApplyMemberAsync(CurrentUserName, User.IsInRole(AdminRole), request);
+            return Success(result);
         }
     }
 }

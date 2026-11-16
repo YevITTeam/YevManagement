@@ -19,7 +19,7 @@ function PaletteItem({ dataType }: { dataType: number }) {
             type="button"
             {...listeners}
             {...attributes}
-            className={`flex w-full cursor-grab items-center gap-2.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2.5 text-left text-sm text-[#191c1e] transition hover:border-[#e3000f] hover:bg-[#fff4f2] active:cursor-grabbing ${
+            className={`flex w-full min-w-0 cursor-grab items-center gap-2.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-left text-sm text-[#191c1e] transition hover:border-[#e3000f] hover:bg-[#fff4f2] active:cursor-grabbing ${
                 isDragging ? "opacity-40" : ""
             }`}
         >
@@ -33,9 +33,10 @@ export default function FieldPalette() {
     const t = useTranslations("Workflow.FormDefinition");
 
     return (
-        <div className="w-56 shrink-0 space-y-3">
+        // Sticky on desktop so the palette stays in reach while dropping into a long canvas.
+        <div className="space-y-3 lg:sticky lg:top-4 lg:w-56 lg:shrink-0 lg:self-start">
             <p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("paletteTitle")}</p>
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-1">
                 {PALETTE_ORDER.map((dataType) => (
                     <PaletteItem key={dataType} dataType={dataType} />
                 ))}

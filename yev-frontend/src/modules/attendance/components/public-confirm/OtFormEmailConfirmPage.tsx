@@ -10,7 +10,7 @@ import type { OtFormApprovalStepDto, OtFormDto, OtFormEmployeeDto } from "@/modu
 import { otFormStatusClasses } from "@/modules/attendance/types/enums";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
-import { DEFAULT_ATTENDANCE_SETTING } from "@/modules/attendance/hooks/useAttendanceSetting";
+import { formOverLimit } from "@/modules/attendance/lib/otFormPrintTemplate";
 import {
     bilingualText,
     bilingualYesNo,
@@ -520,9 +520,9 @@ export default function OtFormEmailConfirmPage() {
                                         </tr>
                                     );
                                 }
-                                // No JWT, so GET /AttendanceSetting is unavailable; uses the shared defaults (only affects warning colors).
-                                const isMonthOverLimit = employee.monthToDate > DEFAULT_ATTENDANCE_SETTING.monthlyOtHourLimit;
-                                const isYearOverLimit = employee.yearToDate > DEFAULT_ATTENDANCE_SETTING.yearlyOtHourLimit;
+                                const over = formOverLimit(employee, form);
+                                const isMonthOverLimit = over.month.over;
+                                const isYearOverLimit = over.year.over;
                                 const isOverLimit = isMonthOverLimit || isYearOverLimit;
                                 const hours = employee.actualHours;
                                 return (
@@ -548,9 +548,19 @@ export default function OtFormEmailConfirmPage() {
                                         </td>
                                         <td className={`px-3 py-2.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                             {employee.monthToDate}h
+                                            {over.month.ownLimit !== null && (
+                                                <div className="text-[11px] font-normal text-[#8a8f94]" title={t("customLimitHint")}>
+                                                    {t(over.month.withinOwn ? "customLimitWithin" : "customLimitExceeded", { hours: over.month.ownLimit })}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className={`px-3 py-2.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                             {employee.yearToDate}h
+                                            {over.year.ownLimit !== null && (
+                                                <div className="text-[11px] font-normal text-[#8a8f94]" title={t("customLimitHint")}>
+                                                    {t(over.year.withinOwn ? "customLimitWithin" : "customLimitExceeded", { hours: over.year.ownLimit })}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-3 py-2.5 text-center text-sm">
                                             <MealTicketTypeBadge type={employee.mealTicketType} t={t} />

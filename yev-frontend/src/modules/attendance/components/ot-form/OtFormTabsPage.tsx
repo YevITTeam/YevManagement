@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 
 import OtFormListPage from "./OtFormListPage";
 import { useAuth } from "@/modules/auth/context/AuthContext";
-import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 import { usePendingApprovalsCount } from "@/modules/attendance/hooks/usePendingApprovalsCount";
 import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 
@@ -22,8 +22,7 @@ export default function OtFormTabsPage() {
         { key: "all-forms", label: t("tabAllForms") },
     ];
     const { user } = useAuth();
-    // Create and CreateProduction are separate: Line Leaders with only CreateProduction still need "my forms".
-    const canCreate = hasAnyPermission(user, ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"]);
+    const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canApprove = hasPermission(user, "Attendance.OTForm.Approve");
     const canViewAll = hasPermission(user, "Attendance.OTForm.ViewAll");
     // Shares the hook with the sidebar badge.

@@ -13,5 +13,7 @@ public partial class OtFormApprovalStepCandidate
 
     public string FullName { get; set; } = null!;
 
+    public bool ReceivesMail { get; set; } = true;
+
     public virtual OtFormApprovalStep OtFormApprovalStep { get; set; } = null!;
 }

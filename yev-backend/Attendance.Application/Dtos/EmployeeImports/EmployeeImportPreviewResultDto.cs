@@ -11,7 +11,7 @@ namespace Attendance.Application.Dtos.EmployeeImports
         public int NewDepartmentCount { get; set; }
         public int NewGroupCount { get; set; }
 
-        // People whose production fields Confirm would clear: absent from the file, in a department the file covers.
+        // Overwrite only: people Confirm marks resigned (absent from the file, in a department with a valid row).
         public List<EmployeeImportRemovedRowDto> RemovedRows { get; set; } = new();
     }
 }

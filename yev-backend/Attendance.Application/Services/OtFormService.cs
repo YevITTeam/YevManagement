@@ -40,10 +40,11 @@ namespace Attendance.Application.Services
             CreatedByUserName = x.CreatedByUserName,
             CreatedByFullName = x.CreatedByFullName,
             Status = x.Status,
-            // Production forms are editable per step while InApproval; office forms keep the stricter rule.
+            // Production forms and stepwise groups are editable per step while InApproval; other office forms lock once a Manager signs.
             IsEditable = x.Status == (int)OtFormStatus.InApproval &&
-                (x.IsProductionForm || !x.ApprovalSteps.Any(s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Approved
-                    && s.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None)),
+                (x.IsProductionForm || (x.Group != null && x.Group.StepwiseEdit)
+                    || !x.ApprovalSteps.Any(s => !s.IsDeleted && s.Status == (int)OtFormApprovalStepStatus.Approved
+                        && s.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None)),
             ApprovalSummary = x.OtFormApprovalHistories
                 .Where(h => !h.OtFormApprovalStep.IsDeleted)
                 .OrderBy(h => h.ActionAt)
@@ -423,9 +424,14 @@ namespace Attendance.Application.Services
                 });
 
             // See ToListItemDto.IsEditable.
-            var isEditable = otForm!.Status == (int)OtFormStatus.InApproval &&
-                (otForm.IsProductionForm || orderedSteps.All(s =>
+            var stepwiseEdit = otForm!.Group?.StepwiseEdit == true;
+            var isEditable = otForm.Status == (int)OtFormStatus.InApproval &&
+                (otForm.IsProductionForm || stepwiseEdit || orderedSteps.All(s =>
                     s.Status != (int)OtFormApprovalStepStatus.Approved || s.TerminalLevelSnapshot == (int)JobTitleTerminalLevel.None));
+            var editorStep = !isEditable ? null : EditorStep(otForm, stepwiseEdit, orderedSteps);
+            var editorUserNames = !isEditable ? new List<string>()
+                : editorStep == null ? new List<string> { otForm.CreatedByUserName }
+                : editorStep.Candidates.Select(c => c.UserName).ToList();
 
             var mealSettings = await _attendanceSettingService.GetAsync();
             var resubmit = isEditable ? null : await ResolveResubmitAsync(otForm, orderedSteps);
@@ -461,11 +467,14 @@ namespace Attendance.Application.Services
                 CreatorSignatureImage = otForm.CreatorSignatureImage,
                 Status = otForm.Status,
                 IsEditable = isEditable,
+                EditorUserNames = editorUserNames,
                 ResubmitKind = (int?)resubmit?.Kind,
                 ResubmitUserNames = resubmit?.UserNames.ToList() ?? new List<string>(),
                 ResubmitDeadline = resubmit?.Deadline,
                 ApprovalChainWarning = otForm.ApprovalChainWarning,
                 PaperScan = paperScan,
+                MonthlyOtHourLimit = mealSettings.MonthlyOtHourLimit,
+                YearlyOtHourLimit = mealSettings.YearlyOtHourLimit,
                 CanUploadPaperScan = otForm.Status == (int)OtFormStatus.InApproval
                     && IsPaperScanStep(orderedSteps.FirstOrDefault(s => s.Status == (int)OtFormApprovalStepStatus.Pending)),
                 Employees = employees.Select(x => new OtFormEmployeeDto
@@ -481,6 +490,8 @@ namespace Attendance.Application.Services
                     YearToDate = accumulation[x.EmployeeId].Year + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                     CustomMonthlyOtHourLimit = x.Employee.CustomMonthlyOtHourLimit,
                     CustomYearlyOtHourLimit = x.Employee.CustomYearlyOtHourLimit,
+                    CustomMonthlyOtHourLimitSnapshot = x.CustomMonthlyOtHourLimitSnapshot,
+                    CustomYearlyOtHourLimitSnapshot = x.CustomYearlyOtHourLimitSnapshot,
                     MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                     ActualHours = CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                     DidEat = x.DidEat,
@@ -580,7 +591,7 @@ namespace Attendance.Application.Services
         {
             if (request.Forms.Count == 0)
                 throw new DomainException("Chưa chọn Nhóm nào.");
-            if (request.Forms.Any(x => x.IsProductionForm || !x.GroupId.HasValue))
+            if (request.Forms.Any(x => !x.GroupId.HasValue))
                 throw new DomainException("Tạo nhiều đơn chỉ áp dụng cho đơn theo Nhóm.");
             if (request.Forms.Select(x => x.GroupId).Distinct().Count() != request.Forms.Count)
                 throw new DomainException("Mỗi Nhóm chỉ được một đơn.");
@@ -628,9 +639,6 @@ namespace Attendance.Application.Services
 
             // Verified before any other work, same as approve/reject.
             await _secondaryPasswordService.VerifyAsync(createdByUserName, request.SecondaryPassword);
-
-            if (request.IsProductionForm)
-                return await CreateProductionFormAsync(createdByUserName, createdByFullName, isAdmin, request);
 
             if (!request.GroupId.HasValue)
                 throw new DomainException("Đơn theo Nhóm phải chọn Nhóm.");
@@ -702,121 +710,6 @@ namespace Attendance.Application.Services
             return await FinalizeCreateAsync(newOtForm, request, chainResult, rosterByEmployeeId, forceMeal: !group.AllowEatLater);
         }
 
-        // Who may create production forms is decided by the Attendance.OTForm.CreateProduction permission;
-        // non-Admins still need a linked Employee to resolve the chain.
-        // A production form has no group of its own: its workshop is the one all participants belong to.
-        private async Task<int> ResolveProductionWorkshopIdAsync(List<int> employeeIds)
-        {
-            var workshopIds = (await _unitOfWork.Employees.SelectAsync(
-                predicate: x => employeeIds.Contains(x.Id) && x.Group != null,
-                selector: x => x.Group!.WorkshopId))
-                .Distinct()
-                .ToList();
-            if (workshopIds.Count == 0)
-                throw new DomainException("Không xác định được Xưởng của các nhân viên trong đơn.");
-            if (workshopIds.Count > 1)
-                throw new DomainException("Đơn theo chuyền chỉ được gồm nhân viên cùng một Xưởng.");
-            return workshopIds[0];
-        }
-
-        private async Task<OtFormDto> CreateProductionFormAsync(
-            string createdByUserName, string? createdByFullName, bool isAdmin, CreateOtFormDto request)
-        {
-            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == request.DepartmentId && !x.IsDeleted);
-            department.OrThrowNotFound("Bộ phận", request.DepartmentId);
-
-            var reason = await _unitOfWork.Reasons.FirstOrDefaultAsync(x => x.Id == request.ReasonId && !x.IsDeleted);
-            reason.OrThrowNotFound("Lý do", request.ReasonId);
-
-            var otCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Id == request.OtCaseId && !x.IsDeleted);
-            otCase.OrThrowNotFound("Trường hợp OT", request.OtCaseId);
-
-            var employeeIds = request.Employees.Select(x => x.EmployeeId).ToList();
-
-            Employee? creatorEmployee = null;
-            if (!isAdmin)
-            {
-                creatorEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(
-                    x => x.UserName == createdByUserName && !x.IsDeleted, x => x.JobTitle!);
-                if (creatorEmployee == null)
-                    throw new DomainException("Tài khoản chưa liên kết với nhân viên nào. Liên hệ Admin nếu tài khoản chưa liên kết đúng nhân viên.");
-            }
-
-            // Defensive check for legacy/manual data; import already rejects rows without a shift team.
-            var productionEmployeesForCheck = await _unitOfWork.Employees.FindAsync(
-                x => employeeIds.Contains(x.Id) && x.ProductionLineId != null && !x.IsDeleted);
-            var notOnRoster = employeeIds.Except(productionEmployeesForCheck.Select(x => x.Id)).ToList();
-            if (notOnRoster.Count > 0)
-            {
-                var codes = await _unitOfWork.Employees.SelectAsync(x => notOnRoster.Contains(x.Id), x => x.Code);
-                throw new DomainException($"Nhân viên không có trong danh sách nhân sự dưới chuyền: {string.Join(", ", codes)}.");
-            }
-            var missingShiftTeam = productionEmployeesForCheck.Where(x => x.ShiftTeamId == null).Select(x => x.Code).ToList();
-            if (missingShiftTeam.Count > 0)
-                throw new DomainException($"Nhân viên chưa có Nhóm ca, cần cập nhật trước khi tạo đơn: {string.Join(", ", missingShiftTeam)}.");
-
-            // Non-Admins may only include lines they lead, and every line on the form must match (not just one of them).
-            if (!isAdmin)
-            {
-                var orderLineIds = productionEmployeesForCheck
-                    .Where(x => x.ProductionLineId.HasValue)
-                    .Select(x => x.ProductionLineId!.Value)
-                    .Distinct()
-                    .ToList();
-                var leaderLineIds = (await _unitOfWork.Employees.FindAsync(
-                    x => x.Id == creatorEmployee!.Id && x.JobTitle!.IsLineScoped && !x.IsDeleted && x.ProductionLineId.HasValue))
-                    .Select(x => x.ProductionLineId!.Value)
-                    .ToHashSet();
-                if (orderLineIds.Count == 0 || !orderLineIds.All(leaderLineIds.Contains))
-                    throw new DomainException("Bạn chỉ được tạo đơn cho nhân viên thuộc (những) Line mà mình là Line Leader.");
-            }
-
-            var validatedEmployees = await ValidateEmployeesAsync(null, request.StartTime, request.EndTime, request.Employees);
-
-            await EnsureOtCaseMatchesRulesAsync(request, forceMeal: true, otCase!);
-
-            var employeeTimes = request.Employees.ToDictionary(
-                x => x.EmployeeId, x => (x.StartTime ?? request.StartTime, x.EndTime));
-            await EnsureNoOverlappingOtFormsAsync(
-                validatedEmployees, request.Date, request.StartTime, employeeTimes, excludeFormId: null);
-
-            var workshopId = await ResolveProductionWorkshopIdAsync(employeeIds);
-
-            var chainResult = await _jobTitleApprovalChainService.ResolveChainForProductionCreationAsync(
-                creatorEmployee?.Id, request.DepartmentId, workshopId, employeeIds, request.OtCaseId);
-
-            var creatorSignatureImage = await ResolveCreatorSelfSignAsync(createdByUserName, chainResult);
-
-            var newOtForm = new OtForm
-            {
-                GroupId = null,
-                IsProductionForm = true,
-                DepartmentId = request.DepartmentId,
-                WorkshopId = workshopId,
-                ReasonId = request.ReasonId,
-                OtCaseId = request.OtCaseId,
-                StartTime = request.StartTime,
-                EndTime = request.EndTime,
-                SubReason = request.SubReason,
-                TotalHour = Math.Round((decimal)(request.EndTime - request.StartTime).TotalHours, 2),
-                Date = request.Date,
-                NumberOfEmployee = request.Employees.Count,
-                CreatedByUserName = createdByUserName,
-                CreatedByFullName = createdByFullName,
-                CreatedAt = TimeHelper.GetCurrentUtcTime(),
-                CreatorSignatureImage = creatorSignatureImage,
-                Status = (chainResult.Steps.Count == 0 && chainResult.IsComplete)
-                    ? (int)OtFormStatus.Completed
-                    : (int)OtFormStatus.InApproval,
-                ApprovalChainWarning = chainResult.Warning,
-                IsDeleted = false
-            };
-
-            var productionEmployeesByEmployeeId = await LoadRosterAsync(employeeIds);
-
-            return await FinalizeCreateAsync(newOtForm, request, chainResult, productionEmployeesByEmployeeId, forceMeal: true);
-        }
-
         // Production fields can change with every import, so their create-time state is snapshotted on OtFormEmployee, office forms included.
         private async Task<Dictionary<int, Employee>> LoadRosterAsync(List<int> employeeIds) =>
             (await _unitOfWork.Employees.FindWithIncludesAsync(
@@ -832,8 +725,22 @@ namespace Attendance.Application.Services
 
             var creatorSignature = await _unitOfWork.UserSignatures.FirstOrDefaultAsync(x => x.UserName == createdByUserName);
             if (creatorSignature == null)
-                throw new DomainException("Bạn đang ở cấp cao nhất trong chuỗi duyệt trung gian — đơn cần chữ ký của chính bạn ở ô \"Người đề nghị\". Vui lòng đăng ký chữ ký (PUT /api/UserSignature/me) trước khi tạo đơn.");
+                throw new DomainException("Đơn này cần chữ ký của chính bạn ở ô \"Người đề nghị\". Vui lòng đăng ký chữ ký trước khi tạo đơn.");
             return creatorSignature.SignatureImage;
+        }
+
+        private async Task SnapshotOtHourLimitsAsync(List<OtFormEmployee> rows)
+        {
+            if (rows.Count == 0) return;
+            var ids = rows.Select(x => x.EmployeeId).ToList();
+            var limits = (await _unitOfWork.Employees.SelectAsync(
+                    x => ids.Contains(x.Id), x => new { x.Id, x.CustomMonthlyOtHourLimit, x.CustomYearlyOtHourLimit }))
+                .ToDictionary(x => x.Id);
+            foreach (var row in rows)
+            {
+                row.CustomMonthlyOtHourLimitSnapshot = limits.GetValueOrDefault(row.EmployeeId)?.CustomMonthlyOtHourLimit;
+                row.CustomYearlyOtHourLimitSnapshot = limits.GetValueOrDefault(row.EmployeeId)?.CustomYearlyOtHourLimit;
+            }
         }
 
         // Meal is mandatory on production forms and on groups that disallow eating later; otherwise DidEat=true still means eating during the shift (deducted).
@@ -879,6 +786,7 @@ namespace Attendance.Application.Services
                 createdRows.Add(createdRow);
                 await _unitOfWork.OtFormEmployees.AddAsync(createdRow);
             }
+            await SnapshotOtHourLimitsAsync(createdRows);
 
             // ProcessPart is always created because the meal flag is mandatory; other items stay optional.
             await _unitOfWork.ProcessParts.AddAsync(new ProcessPart
@@ -921,7 +829,8 @@ namespace Attendance.Application.Services
                         OtFormApprovalStep = newStep,
                         EmployeeId = candidate.EmployeeId,
                         UserName = candidate.UserName,
-                        FullName = candidate.FullName
+                        FullName = candidate.FullName,
+                        ReceivesMail = candidate.ReceivesMail
                     });
                 }
             }
@@ -944,24 +853,28 @@ namespace Attendance.Application.Services
             return await GetByIdAsync(newOtForm.Id);
         }
 
-        // Returns the employee when they belong to the group or were lent to it (GroupBorrowedApprover), null for Admin
-        // (treated as lowest level in chain resolution).
+        // Returns the employee when they may create for the group, null for Admin (treated as lowest level in chain resolution).
         private async Task<Employee?> EnsureCanCreateOrEditForScopeAsync(string userName, bool isAdmin, int groupId)
         {
             var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(
                 x => x.UserName == userName && !x.IsDeleted, x => x.JobTitle!);
 
-            var allowed = callerEmployee != null && (callerEmployee.GroupId == groupId
-                || (await _unitOfWork.GroupBorrowedApprovers.SelectAsync(
-                    x => x.GroupId == groupId && x.EmployeeId == callerEmployee.Id, x => x.Id)).Count > 0);
+            var allowed = callerEmployee != null && await CanCreateForGroupAsync(callerEmployee, groupId);
 
             if (!allowed && !isAdmin)
-                throw new DomainException("Bạn chỉ được tạo/sửa đơn cho Nhóm của mình hoặc Nhóm được cấp thêm. Liên hệ Admin nếu tài khoản chưa liên kết đúng nhân viên/nhóm.");
+                throw new DomainException("Bạn không thuộc Nhóm này và không có tên trong Cây duyệt của Nhóm. Liên hệ Admin nếu cần được thêm.");
 
             return allowed ? callerEmployee : null;
         }
 
-        // The caller's own group plus groups they were lent to.
+        private async Task<bool> CanCreateForGroupAsync(Employee caller, int groupId)
+        {
+            if (caller.GroupId == groupId) return true;
+
+            return (await _unitOfWork.GroupApprovalStepMembers.SelectAsync(
+                x => x.EmployeeId == caller.Id && x.GroupApprovalStep.GroupId == groupId && !x.GroupApprovalStep.IsDeleted, x => x.Id)).Count > 0;
+        }
+
         public async Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin)
         {
             if (isAdmin) return new List<MyCreateScopeItemDto>();
@@ -969,8 +882,11 @@ namespace Attendance.Application.Services
             var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == userName && !x.IsDeleted);
             if (callerEmployee == null) return new List<MyCreateScopeItemDto>();
 
-            var grantedGroupIds = await _unitOfWork.GroupBorrowedApprovers.SelectAsync(x => x.EmployeeId == callerEmployee.Id, x => x.GroupId);
-            var groupIds = grantedGroupIds.Append(callerEmployee.GroupId ?? 0).ToList();
+            var groupIds = (await _unitOfWork.GroupApprovalStepMembers.SelectAsync(
+                    x => x.EmployeeId == callerEmployee.Id && !x.GroupApprovalStep.IsDeleted, x => x.GroupApprovalStep.GroupId))
+                .ToList();
+            if (callerEmployee.GroupId is int ownGroupId)
+                groupIds.Add(ownGroupId);
 
             var scopes = await _unitOfWork.Groups.SelectAsync(
                 x => groupIds.Contains(x.Id) && !x.IsDeleted,
@@ -983,44 +899,6 @@ namespace Attendance.Application.Services
                 });
             // Own group first so a single-scope user keeps today's prefilled, locked form.
             return scopes.OrderBy(x => x.GroupId == callerEmployee.GroupId ? 0 : 1).ThenBy(x => x.GroupNameVn).ToList();
-        }
-
-        // Lets FE prefill and lock the Team/Line/Shift-team dropdowns; empty for Admin and non-leaders.
-        // Only rows with all three FKs resolved count.
-        public async Task<List<MyProductionCreateScopeItemDto>> GetMyProductionCreateScopesAsync(string userName, bool isAdmin)
-        {
-            if (isAdmin) return new List<MyProductionCreateScopeItemDto>();
-
-            var callerEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(
-                x => x.UserName == userName && !x.IsDeleted, x => x.Group!);
-            if (callerEmployee == null) return new List<MyProductionCreateScopeItemDto>();
-
-            // Line Leaders are usually assigned via Group, so fall back to Group.DepartmentId.
-            var departmentId = callerEmployee.DepartmentId ?? callerEmployee.Group?.DepartmentId;
-            if (departmentId == null) return new List<MyProductionCreateScopeItemDto>();
-
-            var department = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Id == departmentId.Value && !x.IsDeleted);
-            if (department == null) return new List<MyProductionCreateScopeItemDto>();
-
-            var leaderRows = await _unitOfWork.Employees.SelectAsync(
-                x => x.Id == callerEmployee.Id && x.JobTitle!.IsLineScoped && !x.IsDeleted
-                    && x.ProductionLineId != null && x.TeamId != null && x.ShiftTeamId != null,
-                x => new MyProductionCreateScopeItemDto
-                {
-                    DepartmentId = department.Id,
-                    DepartmentNameVn = department.DepartmentNameVn,
-                    ProductionLineId = x.ProductionLineId!.Value,
-                    LineCode = x.ProductionLine!.LineCode,
-                    LineNameVn = null,
-                    TeamId = x.TeamId!.Value,
-                    TeamCode = x.Team!.Code,
-                    TeamNameVn = x.Team!.NameVn,
-                    ShiftTeamId = x.ShiftTeamId!.Value,
-                    ShiftTeamCode = x.ShiftTeam!.Code,
-                    ShiftTeamNameVn = x.ShiftTeam!.NameVn
-                });
-
-            return leaderRows.ToList();
         }
 
         public async Task<OtFormDto> UpdateAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request)
@@ -1045,8 +923,9 @@ namespace Attendance.Application.Services
         private async Task<OtFormDto> UpdateCoreAsync(int id, string currentUserName, string? currentFullName, bool isAdmin, UpdateOtFormDto request)
         {
             var otForm = await _unitOfWork.OtForms.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted,
-                x => x.OtFormEmployees);
+                x => x.OtFormEmployees, x => x.Group!);
             otForm.OrThrowNotFound("Đơn tăng ca", id);
+            var stepwiseEdit = otForm!.Group?.StepwiseEdit == true;
 
             var steps = (await _unitOfWork.OtFormApprovalSteps.FindWithIncludesAsync(
                 x => x.OtFormId == id && !x.IsDeleted, x => x.Candidates)).ToList();
@@ -1056,7 +935,7 @@ namespace Attendance.Application.Services
 
             var isManagerSigned = steps.Any(x => x.Status == (int)OtFormApprovalStepStatus.Approved
                 && x.TerminalLevelSnapshot != (int)JobTitleTerminalLevel.None);
-            var resubmit = isOfficeForm && (otForm.Status != (int)OtFormStatus.InApproval || isManagerSigned)
+            var resubmit = isOfficeForm && (otForm.Status != (int)OtFormStatus.InApproval || (isManagerSigned && !stepwiseEdit))
                 ? await ResolveResubmitAsync(otForm, steps)
                 : null;
             if (resubmit == null && otForm.Status != (int)OtFormStatus.InApproval)
@@ -1074,7 +953,8 @@ namespace Attendance.Application.Services
             byte[]? resignSignature = null;
 
             // Production forms: whoever holds the current pending step may edit (no Admin bypass), earlier
-            // signatures stay. Office forms: only the creator, until a Manager-level step has approved.
+            // signatures stay. Office forms: only the creator, until a Manager-level step has approved, unless the group edits stepwise.
+            var editorStep = resubmit == null ? EditorStep(otForm, stepwiseEdit, steps) : null;
             if (otForm.IsProductionForm)
             {
                 if (request.Header != null)
@@ -1083,6 +963,13 @@ namespace Attendance.Application.Services
                     throw new DomainException("Đơn không còn bước duyệt nào đang chờ xử lý (dữ liệu không nhất quán, liên hệ Admin).");
                 if (!MatchStepActor(currentStep, currentUserName, await GetActiveDelegatorsAsync(currentUserName)).IsActor)
                     throw new DomainException($"Bạn không phải người được chỉ định xử lý bước hiện tại (Chức vụ '{currentStep.JobTitleNameSnapshot}') của đơn này, không thể sửa.");
+            }
+            else if (editorStep != null)
+            {
+                if (!MatchStepActor(editorStep, currentUserName, await GetActiveDelegatorsAsync(currentUserName)).IsActor)
+                    throw new DomainException($"Đơn đã qua cấp '{editorStep.JobTitleNameSnapshot}', chỉ người ở cấp đó sửa được cho tới khi cấp kế tiếp duyệt.");
+                // Any later chain rebuild still starts from the creator.
+                creatorEmployee = await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.UserName == otForm.CreatedByUserName && !x.IsDeleted);
             }
             else if (resubmit?.Kind == OtFormResubmitKind.Resign)
             {
@@ -1167,6 +1054,7 @@ namespace Attendance.Application.Services
             if (toAddIds.Count > 0)
             {
                 var addedEmployees = await _unitOfWork.Employees.FindAsync(x => toAddIds.Contains(x.Id) && !x.IsDeleted);
+                EnsureNotResigned(addedEmployees);
                 if (addedEmployees.Count != toAddIds.Count)
                 {
                     var missing = toAddIds.Except(addedEmployees.Select(x => x.Id));
@@ -1344,6 +1232,8 @@ namespace Attendance.Application.Services
                 await LogEditAsync(otForm.Id, currentUserName, currentFullName, OtFormEditActionType.EmployeeAdded,
                     employeeId, employee.Code, null, null, $"{startTimeByEmployeeId[employeeId]:HH:mm}–{addRequest.EndTime:HH:mm}");
             }
+
+            await SnapshotOtHourLimitsAsync(addedOrReactivatedRows);
 
             foreach (var item in request.Employees.Where(x => toKeepIds.Contains(x.EmployeeId)))
             {
@@ -1539,7 +1429,7 @@ namespace Attendance.Application.Services
                     foreach (var candidate in step.Candidates)
                         await _unitOfWork.OtFormApprovalStepCandidates.AddAsync(new OtFormApprovalStepCandidate
                         {
-                            OtFormApprovalStep = row, EmployeeId = candidate.EmployeeId, UserName = candidate.UserName, FullName = candidate.FullName
+                            OtFormApprovalStep = row, EmployeeId = candidate.EmployeeId, UserName = candidate.UserName, FullName = candidate.FullName, ReceivesMail = candidate.ReceivesMail
                         });
                     pendingCount++;
                     continue;
@@ -1562,7 +1452,7 @@ namespace Attendance.Application.Services
                 foreach (var candidate in step.Candidates)
                     await _unitOfWork.OtFormApprovalStepCandidates.AddAsync(new OtFormApprovalStepCandidate
                     {
-                        OtFormApprovalStep = newStep, EmployeeId = candidate.EmployeeId, UserName = candidate.UserName, FullName = candidate.FullName
+                        OtFormApprovalStep = newStep, EmployeeId = candidate.EmployeeId, UserName = candidate.UserName, FullName = candidate.FullName, ReceivesMail = candidate.ReceivesMail
                     });
                 pendingCount++;
             }
@@ -1751,6 +1641,11 @@ namespace Attendance.Application.Services
 
         // A direct candidacy wins over delegation; otherwise the covered candidate (delegator) is returned.
         // Case-insensitive: Windows login yields "YEV\x" while imported accounts are often stored as "yev\x".
+        // Stepwise office forms: once a level approves, editing passes to that level until the next one approves; null = the creator edits.
+        private static OtFormApprovalStep? EditorStep(OtForm otForm, bool stepwiseEdit, IEnumerable<OtFormApprovalStep> steps) =>
+            otForm.IsProductionForm || !stepwiseEdit ? null
+                : steps.Where(x => x.Status == (int)OtFormApprovalStepStatus.Approved).MaxBy(x => x.StepOrder);
+
         private static (bool IsActor, string? DelegatorUserName, string? DelegatorFullName) MatchStepActor(
             OtFormApprovalStep step, string userName, Dictionary<string, string> delegators)
         {
@@ -2076,6 +1971,13 @@ namespace Attendance.Application.Services
             return emailToken;
         }
 
+        private static void EnsureNotResigned(IEnumerable<Employee> employees)
+        {
+            var resigned = employees.Where(x => x.ResignedAt != null).Select(x => x.Code).ToList();
+            if (resigned.Count > 0)
+                throw new DomainException($"Nhân viên đã đánh dấu Nghỉ việc, không thêm vào đơn được: {string.Join(", ", resigned)}.");
+        }
+
         private async Task<List<Employee>> ValidateEmployeesAsync(
             int? groupId, TimeOnly formStartTime, TimeOnly formEndTime, List<CreateOtFormEmployeeItemDto> items)
         {
@@ -2083,6 +1985,7 @@ namespace Attendance.Application.Services
             var employees = await _unitOfWork.Employees.FindAsync(x => employeeIds.Contains(x.Id) && !x.IsDeleted);
             if (employees.Count != employeeIds.Distinct().Count())
                 throw new DomainException("Có nhân viên không tồn tại hoặc đã bị xóa trong danh sách.");
+            EnsureNotResigned(employees);
 
             // No fixed group on production forms; their scope is inferred per step.
             if (groupId.HasValue)
@@ -2815,6 +2718,8 @@ namespace Attendance.Application.Services
                             YearToDate = accumulationByFormId[f.Id][x.EmployeeId].Year + CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                             CustomMonthlyOtHourLimit = x.Employee.CustomMonthlyOtHourLimit,
                             CustomYearlyOtHourLimit = x.Employee.CustomYearlyOtHourLimit,
+                            CustomMonthlyOtHourLimitSnapshot = x.CustomMonthlyOtHourLimitSnapshot,
+                            CustomYearlyOtHourLimitSnapshot = x.CustomYearlyOtHourLimitSnapshot,
                             MealTicketType = (int)CalculateMealTicketType(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                             ActualHours = CalculateOtHours(x.StartTime, x.EndTime, x.DidEat, mealSettings),
                             DidEat = x.DidEat,

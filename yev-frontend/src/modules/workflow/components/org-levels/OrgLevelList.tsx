@@ -99,14 +99,11 @@ export default function OrgLevelList({ embedded = false }: { embedded?: boolean 
     };
 
     return (
-        <div className="space-y-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    {!embedded && <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>}
-                    <p className={`text-[15px] text-[#5e3f3a] ${embedded ? "" : "mt-1"}`}>{t("description")}</p>
-                </div>
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                {!embedded && <h1 className="text-lg font-semibold text-[#191c1e]">{t("title")}</h1>}
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="ml-auto flex flex-wrap items-center gap-2">
                     <button
                         onClick={() => fetchOrgLevels()}
                         disabled={isLoading}
@@ -134,10 +131,10 @@ export default function OrgLevelList({ embedded = false }: { embedded?: boolean 
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">{t("colLevelNumber")}</th>
-                                <th className="px-6 py-3">{t("colNameVn")}</th>
-                                <th className="px-6 py-3">{t("colNameJp")}</th>
-                                {canManage && <th className="px-6 py-3 text-right">{tCommon("actions")}</th>}
+                                <th className="whitespace-nowrap px-4 py-3" title={t("levelNumberHint")}>{t("colLevelNumber")}</th>
+                                <th className="px-4 py-3">{t("colNameVn")}</th>
+                                <th className="hidden px-4 py-3 md:table-cell">{t("colNameJp")}</th>
+                                {canManage && <th className="px-4 py-3 text-right">{tCommon("actions")}</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -151,15 +148,15 @@ export default function OrgLevelList({ embedded = false }: { embedded?: boolean 
                             )}
                             {!isLoading && orgLevels.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.levelNumber}</td>
-                                    <td className="px-6 py-4 text-sm text-[#191c1e]">{item.nameVn}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.nameJp || "—"}</td>
+                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{item.levelNumber}</td>
+                                    <td className="px-4 py-3 text-sm text-[#191c1e]">{item.nameVn}</td>
+                                    <td className="hidden px-4 py-3 text-sm text-[#5e3f3a] md:table-cell">{item.nameJp || "—"}</td>
                                     {canManage && (
-                                        <td className="px-6 py-4 text-right text-sm">
+                                        <td className="px-4 py-3 text-right text-sm">
                                             <div className="inline-flex items-center gap-1.5">
                                                 <button
                                                     onClick={() => setSuggestionsFor(item)}
-                                                    className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                    className="cursor-pointer whitespace-nowrap font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
                                                 >
                                                     {t("jobTitleSuggestionsButton")}
                                                 </button>

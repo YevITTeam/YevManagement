@@ -125,7 +125,15 @@ namespace Attendance.Application.Services
                         DepartmentId = x.DepartmentId,
                         DepartmentNameVn = x.Department.DepartmentNameVn,
                         WorkshopId = x.WorkshopId,
-                        WorkshopNameVn = x.Workshop.WorkshopNameVn
+                        WorkshopNameVn = x.Workshop.WorkshopNameVn,
+                        LineKind = x.LineKind,
+                        Lines = x.GroupLines.Select(l => new GroupLineDto
+                        {
+                            ProductionLineId = l.ProductionLineId,
+                            ShiftTeamId = l.ShiftTeamId,
+                            LineCode = l.ProductionLine.LineCode,
+                            ShiftTeamCode = l.ShiftTeam.Code
+                        }).ToList()
                     }))
                     .ToList();
 
@@ -166,6 +174,8 @@ namespace Attendance.Application.Services
                 query = query.Where(x => x.ShiftTeamId == filter.ShiftTeamId);
             if (!string.IsNullOrWhiteSpace(filter.CongDoan))
                 query = query.Where(x => x.CongDoan == filter.CongDoan);
+            if (filter.Resigned.HasValue)
+                query = query.Where(x => (x.ResignedAt != null) == filter.Resigned.Value);
 
             if (!string.IsNullOrWhiteSpace(keyword))
                 query = query.Where(x =>
@@ -205,6 +215,8 @@ namespace Attendance.Application.Services
                     ShiftTeamCode = x.ShiftTeam != null ? x.ShiftTeam.Code : null,
                     CongDoan = x.CongDoan,
                     TaskName = x.TaskName,
+                    StaffKind = x.StaffKind,
+                    ResignedAt = x.ResignedAt,
                     FirstName = x.FirstName,
                     LastName = x.LastName,
                     UserName = x.UserName,
@@ -250,6 +262,7 @@ namespace Attendance.Application.Services
                     DepartmentNameVn = x.Group != null ? x.Group.Department.DepartmentNameVn : x.Department != null ? x.Department.DepartmentNameVn : null,
                     GroupCode = x.Group != null ? x.Group.GroupCode : null,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    WorkshopCode = x.Group != null ? x.Group.Workshop.WorkshopCode : null,
                     JobTitleCode = x.JobTitle != null ? x.JobTitle.Code : null,
                     TerminalLevel = x.JobTitle != null ? x.JobTitle.TerminalLevel : (int)JobTitleTerminalLevel.None,
                     CustomMonthlyOtHourLimit = x.CustomMonthlyOtHourLimit,
@@ -260,7 +273,8 @@ namespace Attendance.Application.Services
                     TeamCode = x.Team != null ? x.Team.Code : null,
                     ShiftTeamCode = x.ShiftTeam != null ? x.ShiftTeam.Code : null,
                     CongDoan = x.CongDoan,
-                    TaskName = x.TaskName
+                    TaskName = x.TaskName,
+                    StaffKind = x.StaffKind
                 });
         }
 
@@ -270,7 +284,8 @@ namespace Attendance.Application.Services
         {
             var (todayYear, todayMonth) = GetTodayYearMonth();
             var items = await _unitOfWork.Employees.SelectAsync(
-                predicate: x => !x.IsDeleted && x.GroupId == groupId,
+                // Feeds the OT form and approval-tree pickers, where resigned people must not be chosen.
+                predicate: x => !x.IsDeleted && x.ResignedAt == null && x.GroupId == groupId,
                 selector: x => new EmployeeDto
                 {
                     Id = x.Id,
@@ -682,6 +697,10 @@ namespace Attendance.Application.Services
 
             if (caller.GroupId.HasValue && targetEmployee.GroupId == caller.GroupId) return;
 
+            if (targetEmployee.GroupId.HasValue && (await _unitOfWork.GroupApprovalStepMembers.SelectAsync(
+                    x => x.EmployeeId == caller.Id && x.GroupApprovalStep.GroupId == targetEmployee.GroupId && !x.GroupApprovalStep.IsDeleted, x => x.Id)).Count > 0)
+                return;
+
             throw new DomainException("Bạn chỉ được xem lũy kế của nhân viên thuộc Nhóm mình quản lý.");
         }
 
@@ -803,7 +822,10 @@ namespace Attendance.Application.Services
                 IsDeleted = false
             };
 
+            await SetLineDataAsync(newEmployee, request.ProductionLineId, request.ShiftTeamId, request.CongDoan, request.TaskName);
             await _unitOfWork.Employees.AddAsync(newEmployee);
+            await _unitOfWork.SaveChangesAsync();
+            await GroupLineDefaults.ApplyAsync(_unitOfWork, newEmployee);
             await _unitOfWork.SaveChangesAsync();
             await ReplaceApprovalScopesAsync(newEmployee.Id, scopes);
 
@@ -848,8 +870,11 @@ namespace Attendance.Application.Services
             employee.GroupId = groupId;
             employee.DepartmentId = departmentId;
             employee.JobTitleId = request.JobTitleId;
+            await SetLineDataAsync(employee, request.ProductionLineId, request.ShiftTeamId, request.CongDoan, request.TaskName);
 
             _unitOfWork.Employees.Update(employee);
+            await _unitOfWork.SaveChangesAsync();
+            await GroupLineDefaults.ApplyAsync(_unitOfWork, employee);
             await _unitOfWork.SaveChangesAsync();
             await ReplaceApprovalScopesAsync(employee.Id, scopes);
 
@@ -859,6 +884,19 @@ namespace Attendance.Application.Services
                 await _userDirectoryService.SyncAutoGrantedPermissionsAsync(oldUserName, Array.Empty<string>());
             }
             await SyncAutoGrantedPermissionsCoreAsync(employee);
+        }
+
+        // The pair must be one the employee's group covers; GroupLineDefaults then fills team, TT/GT and a blank Công đoạn.
+        private async Task SetLineDataAsync(Employee employee, int? lineId, int? shiftTeamId, string? congDoan, string? taskName)
+        {
+            if (employee.GroupId == null || lineId == null || shiftTeamId == null) return;
+            var covered = (await _unitOfWork.Groups.SelectAsync(x => x.Id == employee.GroupId,
+                x => x.GroupLines.Any(l => l.ProductionLineId == lineId && l.ShiftTeamId == shiftTeamId))).SingleOrDefault();
+            if (!covered) throw new DomainException("Line × Nhóm ca đã chọn không thuộc Nhóm của nhân viên.");
+            employee.ProductionLineId = lineId;
+            employee.ShiftTeamId = shiftTeamId;
+            employee.CongDoan = string.IsNullOrWhiteSpace(congDoan) ? null : congDoan.Trim();
+            employee.TaskName = string.IsNullOrWhiteSpace(taskName) ? null : taskName.Trim();
         }
 
         // Touches only the two limit fields; scoped like other coordinator edits.
@@ -896,6 +934,26 @@ namespace Attendance.Application.Services
             await _userDirectoryService.SyncAutoGrantedPermissionsAsync(employee.UserName, Array.Empty<string>());
         }
 
+        public async Task<int> DeleteManyAsync(string callerUserName, bool isAdmin, List<int> ids)
+        {
+            foreach (var id in ids.Distinct())
+                await DeleteAsync(callerUserName, isAdmin, id);
+            return ids.Distinct().Count();
+        }
+
+        public async Task<int> RestoreResignedAsync(string callerUserName, bool isAdmin, List<int> ids)
+        {
+            var employees = await _unitOfWork.Employees.FindWithIncludesAsync(x => ids.Contains(x.Id) && !x.IsDeleted && x.ResignedAt != null, x => x.Group!);
+            foreach (var employee in employees)
+            {
+                await EnsureCanManageDeptOrGroupScopeAsync(callerUserName, isAdmin, employee,
+                    "Bạn chỉ được sửa nhân viên thuộc Bộ phận/Nhóm mình phụ trách.");
+                employee.ResignedAt = null;
+            }
+            await _unitOfWork.SaveChangesAsync();
+            return employees.Count;
+        }
+
         // Both sources (job title + coordinator) must go in one call: the sync replaces the user's whole
         // auto-granted set, so separate calls would wipe each other. No-op without a UserName.
         private async Task SyncAutoGrantedPermissionsCoreAsync(Employee employee)
@@ -928,7 +986,6 @@ namespace Attendance.Application.Services
             if (isDeptCoordinator)
             {
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.DepartmentUpdateCode);
-                coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionUpdateCode);
                 // Department coordinators only, not group coordinators.
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeViewCode);
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.ProductionEmployeeUpdateCode);
@@ -938,7 +995,12 @@ namespace Attendance.Application.Services
             if (isGroupCoordinator)
                 coordinatorCodes.Add(ApprovalStepCoordinatorPermissions.GroupUpdateCode);
 
-            var desiredCodes = jobTitleCodes.Union(coordinatorCodes).Distinct().ToList();
+            var isApprover = (await _unitOfWork.GroupApprovalStepMembers.SelectAsync(
+                x => x.EmployeeId == employee.Id && !x.GroupApprovalStep.IsDeleted, x => x.Id)).Count > 0;
+            var levelCodes = (isApprover ? GroupLevelPermissions.ApproverCodes : Array.Empty<string>())
+                .Concat(isApprover ? GroupLevelPermissions.FormCreatorCodes : Array.Empty<string>());
+
+            var desiredCodes = jobTitleCodes.Union(coordinatorCodes).Union(levelCodes).Distinct().ToList();
             await _userDirectoryService.SyncAutoGrantedPermissionsAsync(employee.UserName, desiredCodes);
         }
 
@@ -955,7 +1017,12 @@ namespace Attendance.Application.Services
                 .Select(x => x.EmployeeId);
             var groupCoordinatorEmployeeIds = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(x => !x.IsDeleted))
                 .Select(x => x.EmployeeId);
-            var employeeIds = deptCoordinatorEmployeeIds.Union(groupCoordinatorEmployeeIds).ToList();
+            // Data migrations can fill trees and job-title grants but cannot write Identity, so their people are resynced here too.
+            var treeMemberEmployeeIds = await _unitOfWork.GroupApprovalStepMembers.SelectAsync(x => !x.GroupApprovalStep.IsDeleted, x => x.EmployeeId);
+            var grantedJobTitleIds = (await _unitOfWork.JobTitlePermissions.SelectAsync(x => !x.IsDeleted, x => x.JobTitleId)).Distinct().ToList();
+            var jobTitleHolderIds = await _unitOfWork.Employees.SelectAsync(
+                x => !x.IsDeleted && x.UserName != null && x.JobTitleId != null && grantedJobTitleIds.Contains(x.JobTitleId.Value), x => x.Id);
+            var employeeIds = deptCoordinatorEmployeeIds.Union(groupCoordinatorEmployeeIds).Union(treeMemberEmployeeIds).Union(jobTitleHolderIds).ToList();
 
             foreach (var employeeId in employeeIds)
                 await SyncAutoGrantedPermissionsForEmployeeAsync(employeeId);
@@ -976,13 +1043,7 @@ namespace Attendance.Application.Services
             if (!belongsToDepartment)
                 throw new DomainException("Nhân viên này không thuộc Bộ phận đang thao tác.");
 
-            if (!isAdmin)
-            {
-                var isCoordinator = (await _unitOfWork.DepartmentApprovalStepCoordinators.FindAsync(
-                    x => x.DepartmentId == departmentId && x.Employee.UserName == userName && !x.IsDeleted)).Count > 0;
-                if (!isCoordinator)
-                    throw new DomainException("Bạn không được phân công phụ trách Bộ phận này.");
-            }
+            if (!isAdmin) throw new DomainException(ApprovalStepCoordinatorPermissions.TreeEditAdminOnlyMessage);
 
             JobTitle? jobTitle = null;
             if (jobTitleId.HasValue)
@@ -991,10 +1052,6 @@ namespace Attendance.Application.Services
                 jobTitle.OrThrowNotFound("Chức vụ", jobTitleId.Value);
             }
             var terminalLevel = (JobTitleTerminalLevel)(jobTitle?.TerminalLevel ?? (int)JobTitleTerminalLevel.None);
-
-            // Company-wide titles exceed a single department, so only Admin may assign them.
-            if (!isAdmin && (terminalLevel == JobTitleTerminalLevel.WorkshopManager || terminalLevel == JobTitleTerminalLevel.GeneralDirector))
-                throw new DomainException("Chỉ Admin mới được gán Chức vụ Trưởng Xưởng/Giám đốc.");
 
             int? nextGroupId = employee.GroupId;
             int? nextDepartmentId = employee.DepartmentId;
@@ -1045,13 +1102,7 @@ namespace Attendance.Application.Services
             if (employee!.GroupId != groupId)
                 throw new DomainException("Nhân viên này không thuộc Nhóm đang thao tác.");
 
-            if (!isAdmin)
-            {
-                var isCoordinator = (await _unitOfWork.GroupApprovalStepCoordinators.FindAsync(
-                    x => x.GroupId == groupId && x.Employee.UserName == userName && !x.IsDeleted)).Count > 0;
-                if (!isCoordinator)
-                    throw new DomainException("Bạn không được phân công phụ trách Nhóm này.");
-            }
+            if (!isAdmin) throw new DomainException(ApprovalStepCoordinatorPermissions.TreeEditAdminOnlyMessage);
 
             if (jobTitleId.HasValue)
             {

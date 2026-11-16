@@ -12,7 +12,6 @@ public static class JobTitlePermissionWhitelist
         "Attendance.OTForm.RemoveEmployee",
         "Attendance.OTForm.AddEmployee",
         "Attendance.OTForm.Delegate",
-        "Attendance.OTForm.CreateProduction",
         "Attendance.UserSignature.View",
         "Attendance.UserSignature.Update",
         "Attendance.SecondaryPassword.Update",

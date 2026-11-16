@@ -19,6 +19,10 @@ namespace Attendance.Application.Dtos.OtForms
         public decimal? CustomMonthlyOtHourLimit { get; set; }
         public decimal? CustomYearlyOtHourLimit { get; set; }
 
+        // As it stood when the person was put on the form; the detail, e-mail page and print note this beside the red mark.
+        public decimal? CustomMonthlyOtHourLimitSnapshot { get; set; }
+        public decimal? CustomYearlyOtHourLimitSnapshot { get; set; }
+
         // MealTicketType (0=None/1=Secondary/2=Main), computed from the current AttendanceSetting.
         public int MealTicketType { get; set; }
 

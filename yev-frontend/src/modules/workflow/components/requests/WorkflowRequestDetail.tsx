@@ -131,6 +131,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
 
     const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
     const [deletingAttachmentId, setDeletingAttachmentId] = useState<number | null>(null);
+    const [attachmentToDelete, setAttachmentToDelete] = useState<WorkflowAttachmentDto | null>(null);
     const [previewAttachment, setPreviewAttachment] = useState<WorkflowAttachmentDto | null>(null);
 
     const { isLoading, error, refetch } = useFetchEffect(
@@ -237,7 +238,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
 
     if (isLoading) {
         return (
-            <div className="space-y-3 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
+            <div className="space-y-3 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-5">
                 <Skeleton className="h-7 w-56" />
                 <Skeleton className="h-4 w-40" />
                 <Skeleton className="mt-4 h-32 w-full" />
@@ -261,6 +262,8 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
         (request.status === RequestStatus.Draft || myEmployee?.id === request.createdByEmployeeId);
     // UI-only gate for showing the edit/resubmit buttons — BE (UpdateDraftAsync/ResubmitAsync) enforces it for real.
     const canEditAndResubmit = !isNew && request.status === RequestStatus.SentBack && myEmployee?.id === request.createdByEmployeeId;
+    // Drafts have no route yet; a side column would only squeeze the form.
+    const hasSideColumn = request.steps.length > 0;
 
     const onBehalfOptions: SelectOption[] = (() => {
         if (!myEmployee || !currentStep) return [];
@@ -460,6 +463,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
         try {
             await WorkflowRequestApi.deleteAttachment(attachmentId);
             toast.success(t("deleteAttachmentSuccess"));
+            setAttachmentToDelete(null);
             await refetch();
         } catch (err) {
             console.error(err);
@@ -490,12 +494,12 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
     return (
         <>
         <div className="space-y-6 print:hidden">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+                <div className="min-w-0">
                     <Link href="/workflow/requests" className="flex items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] hover:text-[#191c1e]">
                         <ArrowLeft className="h-3.5 w-3.5" /> {t("backToList")}
                     </Link>
-                    <div className="mt-2 flex items-center gap-3">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                         <h1 className="text-2xl font-semibold text-[#191c1e]">{request.requestCode ?? t("draftLabel")}</h1>
                         <Badge variant={statusMeta?.variant ?? "neutral"} withDot>
                             {statusMeta ? t(statusMeta.labelKey) : request.status}
@@ -508,7 +512,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                     {request.status !== RequestStatus.Draft && request.formSchemaJson && (
                         <button
                             onClick={() => setPrintOpen(true)}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
                             <Printer className="h-3.5 w-3.5" /> {t("printButton")}
                         </button>
@@ -516,7 +520,7 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                     {canCancel && (
                         <button
                             onClick={() => setCancelConfirmOpen(true)}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e9bcb6] bg-white px-3 py-1.5 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
+                            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e9bcb6] bg-white px-3 py-1.5 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
                         >
                             <Ban className="h-3.5 w-3.5" /> {t("cancelButton")}
                         </button>
@@ -530,272 +534,287 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                 </div>
             )}
 
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("dataSectionTitle")}</h2>
-                {(request.status === RequestStatus.Draft || (request.status === RequestStatus.SentBack && canEditAndResubmit)) && formSchema?.layoutHtml ? (
-                    <DocumentFormRenderer
-                        layoutHtml={formSchema.layoutHtml}
-                        fields={formSchema.fields}
-                        conditions={formSchema.conditions}
-                        value={draftData}
-                        onChange={setDraftData}
-                        employeeOptions={employeeOptions}
-                        orgUnitOptions={orgUnitOptions}
-                    />
-                ) : (request.status === RequestStatus.Draft || (request.status === RequestStatus.SentBack && canEditAndResubmit)) && formSchema ? (
-                    <DynamicFormRenderer
-                        fields={formSchema.fields}
-                        conditions={formSchema.conditions}
-                        value={draftData}
-                        onChange={setDraftData}
-                        employeeOptions={employeeOptions}
-                        orgUnitOptions={orgUnitOptions}
-                    />
-                ) : request.formSchemaJson ? (
-                    <WorkflowRequestDataView schema={request.formSchemaJson} data={request.dataJson ?? {}} />
-                ) : (
-                    <p className="text-sm text-[#8a8f94]">{t("noSchema")}</p>
-                )}
-            </section>
-
-            {!isNew && (
-                <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
-                    <div className="mb-4 flex items-center justify-between">
-                        <h2 className="text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("attachmentsSectionTitle")}</h2>
-                        {canManageAttachments && (
-                            <label
-                                className={`flex items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] ${
-                                    isUploadingAttachment ? "cursor-not-allowed opacity-50" : "cursor-pointer"
-                                }`}
-                            >
-                                <Paperclip className="h-3.5 w-3.5" />
-                                {isUploadingAttachment ? tCommon("processing") : t("addAttachmentButton")}
-                                <input type="file" className="hidden" onChange={handleUploadAttachment} disabled={isUploadingAttachment} />
-                            </label>
-                        )}
-                    </div>
-                    {request.attachments.length === 0 ? (
-                        <EmptyState icon={Paperclip} title={t("noAttachments")} />
-                    ) : (
-                        <ul className="space-y-2">
-                            {request.attachments.map((a) => (
-                                <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#e0e3e5] px-3 py-2">
-                                    <div className="min-w-0">
-                                        <p className="truncate text-sm font-medium text-[#191c1e]">{a.originalFileName}</p>
-                                        <p className="text-xs text-[#8a8f94]">
-                                            {formatFileSize(a.fileSizeBytes)} · {a.uploadedByEmployeeName} · {new Date(a.uploadedAt).toLocaleString("vi-VN")}
-                                        </p>
-                                    </div>
-                                    <div className="flex shrink-0 items-center gap-1.5">
-                                        <button
-                                            onClick={() => setPreviewAttachment(a)}
-                                            className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                                        >
-                                            <Eye className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDownloadAttachment(a.id, a.originalFileName)}
-                                            className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                                        >
-                                            <Download className="h-3.5 w-3.5" />
-                                        </button>
-                                        {canManageAttachments && (
-                                            <button
-                                                onClick={() => handleDeleteAttachment(a.id)}
-                                                disabled={deletingAttachmentId === a.id}
-                                                className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e9bcb6] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2] disabled:opacity-50"
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </section>
-            )}
-
-            {request.status === RequestStatus.Draft && (
-                <div className="sticky bottom-0 z-20 flex justify-end gap-2 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
-                    <button
-                        onClick={handleSaveDraft}
-                        disabled={isSavingDraft || isSubmitting}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                    >
-                        <Save className="h-3.5 w-3.5" /> {isSavingDraft ? tCommon("processing") : t("saveDraftButton")}
-                    </button>
-                    <button
-                        onClick={handleSubmit}
-                        disabled={isSavingDraft || isSubmitting}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:opacity-50"
-                    >
-                        <Send className="h-3.5 w-3.5" /> {isSubmitting ? tCommon("processing") : t("submitButton")}
-                    </button>
-                </div>
-            )}
-
-            {canEditAndResubmit && (
-                <div className="sticky bottom-0 z-20 flex justify-end gap-2 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
-                    <button
-                        onClick={handleSaveDraft}
-                        disabled={isSavingDraft || isResubmitting}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                    >
-                        <Save className="h-3.5 w-3.5" /> {isSavingDraft ? tCommon("processing") : t("saveEditButton")}
-                    </button>
-                    <button
-                        onClick={handleResubmit}
-                        disabled={isSavingDraft || isResubmitting}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:opacity-50"
-                    >
-                        <Send className="h-3.5 w-3.5" /> {isResubmitting ? tCommon("processing") : t("resubmitButton")}
-                    </button>
-                </div>
-            )}
-
-            {request.steps.length > 0 && (
-                <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
-                    <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("stepsSectionTitle")}</h2>
-                    <div className="space-y-3">
-                        {request.steps
-                            .slice()
-                            .sort((a, b) => a.stepOrder - b.stepOrder)
-                            .map((step) => {
-                                const meta = STEP_STATUS_META[step.status];
-                                return (
-                                    <div key={step.id} className={`rounded-lg border p-3 ${step.status === StepStatus.Current ? "border-[#e3000f] bg-[#fff4f2]" : "border-[#e0e3e5]"}`}>
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <p className="text-sm font-semibold text-[#191c1e]">
-                                                {t("stepOrderLabel", { order: step.stepOrder })} — {step.stepNameSnapshot}
-                                                {step.isAdHoc && <span className="ml-1.5 text-xs font-normal text-[#8a8f94]">({t("adHocLabel")})</span>}
-                                            </p>
-                                            <Badge variant={meta?.variant ?? "neutral"}>{meta ? t(meta.labelKey) : step.status}</Badge>
-                                        </div>
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                            {step.participants.map((p) => (
-                                                <span
-                                                    key={p.id}
-                                                    className={`rounded-full border px-2.5 py-1 text-xs ${
-                                                        p.actedAt ? "border-[#c9e5d0] bg-[#e6f4ea] text-[#1e7a34]" : "border-[#e0e3e5] bg-white text-[#5e3f3a]"
-                                                    }`}
-                                                >
-                                                    {p.employeeFullName}
-                                                    {p.resolvedFromJobTitle && ` (${p.resolvedFromJobTitle})`}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                    </div>
-                </section>
-            )}
-
-            {canAct && currentStep && (
-                <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
-                    <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("actionSectionTitle")}</h2>
-
-                    {onBehalfOptions.length > 0 && (
-                        <label className="mb-3 block max-w-sm">
-                            <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("onBehalfOfLabel")}</span>
-                            <SearchableSelect
-                                options={onBehalfOptions}
-                                value={onBehalfOfEmployeeId}
-                                onChange={setOnBehalfOfEmployeeId}
-                                placeholder={t("onBehalfOfPlaceholder")}
+            {/* Wide screens keep the approval trail and actions beside the form, so approvers don't scroll past it. */}
+            <div className={`grid grid-cols-1 items-start gap-6 ${hasSideColumn ? "xl:grid-cols-[minmax(0,1fr)_22rem]" : ""}`}>
+                <div className="min-w-0 space-y-6">
+                    <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-5">
+                        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("dataSectionTitle")}</h2>
+                        {(request.status === RequestStatus.Draft || (request.status === RequestStatus.SentBack && canEditAndResubmit)) && formSchema?.layoutHtml ? (
+                            <DocumentFormRenderer
+                                layoutHtml={formSchema.layoutHtml}
+                                fields={formSchema.fields}
+                                conditions={formSchema.conditions}
+                                value={draftData}
+                                onChange={setDraftData}
+                                employeeOptions={employeeOptions}
+                                orgUnitOptions={orgUnitOptions}
                             />
-                        </label>
+                        ) : (request.status === RequestStatus.Draft || (request.status === RequestStatus.SentBack && canEditAndResubmit)) && formSchema ? (
+                            <DynamicFormRenderer
+                                fields={formSchema.fields}
+                                conditions={formSchema.conditions}
+                                value={draftData}
+                                onChange={setDraftData}
+                                employeeOptions={employeeOptions}
+                                orgUnitOptions={orgUnitOptions}
+                            />
+                        ) : request.formSchemaJson ? (
+                            <WorkflowRequestDataView schema={request.formSchemaJson} data={request.dataJson ?? {}} />
+                        ) : (
+                            <p className="text-sm text-[#8a8f94]">{t("noSchema")}</p>
+                        )}
+                    </section>
+
+                    {!isNew && (
+                        <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-5">
+                            <div className="mb-4 flex items-center justify-between gap-3">
+                                <h2 className="text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("attachmentsSectionTitle")}</h2>
+                                {canManageAttachments && (
+                                    <label
+                                        className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] ${
+                                            isUploadingAttachment ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                                        }`}
+                                    >
+                                        <Paperclip className="h-3.5 w-3.5" />
+                                        {isUploadingAttachment ? tCommon("processing") : t("addAttachmentButton")}
+                                        <input type="file" className="hidden" onChange={handleUploadAttachment} disabled={isUploadingAttachment} />
+                                    </label>
+                                )}
+                            </div>
+                            {request.attachments.length === 0 ? (
+                                <EmptyState icon={Paperclip} title={t("noAttachments")} />
+                            ) : (
+                                <ul className="space-y-2">
+                                    {request.attachments.map((a) => (
+                                        <li key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-[#e0e3e5] px-3 py-2">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-medium text-[#191c1e]">{a.originalFileName}</p>
+                                                <p className="text-xs text-[#8a8f94]">
+                                                    {formatFileSize(a.fileSizeBytes)} · {a.uploadedByEmployeeName} · {new Date(a.uploadedAt).toLocaleString("vi-VN")}
+                                                </p>
+                                            </div>
+                                            <div className="flex shrink-0 items-center gap-1.5">
+                                                <button
+                                                    onClick={() => setPreviewAttachment(a)}
+                                                    title={t("previewButton")}
+                                                    aria-label={t("previewButton")}
+                                                    className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                                >
+                                                    <Eye className="h-3.5 w-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDownloadAttachment(a.id, a.originalFileName)}
+                                                    title={t("downloadButton")}
+                                                    aria-label={t("downloadButton")}
+                                                    className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                                >
+                                                    <Download className="h-3.5 w-3.5" />
+                                                </button>
+                                                {canManageAttachments && (
+                                                    <button
+                                                        onClick={() => setAttachmentToDelete(a)}
+                                                        disabled={deletingAttachmentId === a.id}
+                                                        title={tCommon("delete")}
+                                                        aria-label={tCommon("delete")}
+                                                        className="flex cursor-pointer items-center gap-1 rounded-lg border border-[#e9bcb6] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2] disabled:opacity-50"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </section>
                     )}
 
-                    <label className="mb-3 block">
-                        <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("commentLabel")}</span>
-                        <textarea
-                            value={comment}
-                            onChange={(e) => setComment(e.target.value)}
-                            rows={2}
-                            className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
-                    </label>
-
-                    {currentStep.requireSignatureSnapshot && (
-                        <div className="mb-3 max-w-sm">
-                            <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("signatureLabel")}</span>
-                            {isSignatureLoading ? (
-                                <Skeleton className="h-20 w-full" />
-                            ) : (
-                                // Mounted only after the signature fetch settles, so its lazy initial state
-                                // (SignatureUpload.tsx) never captures a stale null before the real value arrives.
-                                <SignatureUpload onChange={setSignatureBase64} initialBase64={savedSignatureBase64} />
-                            )}
+                    {request.status === RequestStatus.Draft && (
+                        <div className="sticky bottom-0 z-20 flex justify-end gap-2 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
+                            <button
+                                onClick={handleSaveDraft}
+                                disabled={isSavingDraft || isSubmitting}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                            >
+                                <Save className="h-3.5 w-3.5" /> {isSavingDraft ? tCommon("processing") : t("saveDraftButton")}
+                            </button>
+                            <button
+                                onClick={handleSubmit}
+                                disabled={isSavingDraft || isSubmitting}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:opacity-50"
+                            >
+                                <Send className="h-3.5 w-3.5" /> {isSubmitting ? tCommon("processing") : t("submitButton")}
+                            </button>
                         </div>
                     )}
 
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            onClick={handleApprove}
-                            disabled={isActionInFlight}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#1e7a34] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#166028] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <CheckCircle2 className="h-3.5 w-3.5" /> {isApproving ? tCommon("processing") : t("approveButton")}
-                        </button>
-                        <button
-                            onClick={() => setRejectConfirmOpen(true)}
-                            disabled={isActionInFlight}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <XCircle className="h-3.5 w-3.5" /> {t("rejectButton")}
-                        </button>
-                        {currentStep.allowSendBackSnapshot && (
+                    {canEditAndResubmit && (
+                        <div className="sticky bottom-0 z-20 flex justify-end gap-2 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
                             <button
-                                onClick={() => {
-                                    setSendBackTarget(0);
-                                    setSendBackOpen(true);
-                                }}
-                                disabled={isActionInFlight}
-                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={handleSaveDraft}
+                                disabled={isSavingDraft || isResubmitting}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                             >
-                                <RotateCcw className="h-3.5 w-3.5" /> {t("sendBackButton")}
+                                <Save className="h-3.5 w-3.5" /> {isSavingDraft ? tCommon("processing") : t("saveEditButton")}
                             </button>
-                        )}
-                        {currentStep.allowAddApproverSnapshot && (
                             <button
-                                onClick={() => {
-                                    setAddApproverInsertAfter(request.currentStepOrder);
-                                    setAddApproverOpen(true);
-                                }}
-                                disabled={isActionInFlight}
-                                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={handleResubmit}
+                                disabled={isSavingDraft || isResubmitting}
+                                className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:opacity-50"
                             >
-                                <UserPlus className="h-3.5 w-3.5" /> {t("addApproverButton")}
+                                <Send className="h-3.5 w-3.5" /> {isResubmitting ? tCommon("processing") : t("resubmitButton")}
                             </button>
-                        )}
-                    </div>
-                </section>
-            )}
+                        </div>
+                    )}
+                </div>
 
-            <section className="rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("historySectionTitle")}</h2>
-                {request.histories.length === 0 ? (
-                    <EmptyState icon={History} title={t("noHistory")} />
-                ) : (
-                    <div className="space-y-3">
-                        {request.histories
-                            .slice()
-                            .sort((a, b) => new Date(b.actionAt).getTime() - new Date(a.actionAt).getTime())
-                            .map((h) => (
-                                <div key={h.id} className="border-l-2 border-[#e0e3e5] pl-3">
-                                    <p className="text-sm text-[#191c1e]">
-                                        <span className="font-semibold">{h.actorNameSnapshot}</span> {t(ACTION_LABEL_KEY[h.action] ?? "actionComment")}
-                                        {h.onBehalfOfEmployeeName && <span className="text-[#8a8f94]"> ({t("onBehalfOfHistorySuffix", { name: h.onBehalfOfEmployeeName })})</span>}
-                                    </p>
-                                    {h.comment && <p className="text-sm text-[#5e3f3a]">&quot;{h.comment}&quot;</p>}
-                                    <p className="text-xs text-[#8a8f94]">{new Date(h.actionAt).toLocaleString("vi-VN")}</p>
+                <div className="min-w-0 space-y-6">
+                    {request.steps.length > 0 && (
+                        <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-5">
+                            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("stepsSectionTitle")}</h2>
+                            <div className="space-y-3">
+                                {request.steps
+                                    .slice()
+                                    .sort((a, b) => a.stepOrder - b.stepOrder)
+                                    .map((step) => {
+                                        const meta = STEP_STATUS_META[step.status];
+                                        return (
+                                            <div key={step.id} className={`rounded-lg border p-3 ${step.status === StepStatus.Current ? "border-[#e3000f] bg-[#fff4f2]" : "border-[#e0e3e5]"}`}>
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <p className="text-sm font-semibold text-[#191c1e]">
+                                                        {t("stepOrderLabel", { order: step.stepOrder })} — {step.stepNameSnapshot}
+                                                        {step.isAdHoc && <span className="ml-1.5 text-xs font-normal text-[#8a8f94]">({t("adHocLabel")})</span>}
+                                                    </p>
+                                                    <Badge variant={meta?.variant ?? "neutral"}>{meta ? t(meta.labelKey) : step.status}</Badge>
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                    {step.participants.map((p) => (
+                                                        <span
+                                                            key={p.id}
+                                                            className={`rounded-full border px-2.5 py-1 text-xs ${
+                                                                p.actedAt ? "border-[#c9e5d0] bg-[#e6f4ea] text-[#1e7a34]" : "border-[#e0e3e5] bg-white text-[#5e3f3a]"
+                                                            }`}
+                                                        >
+                                                            {p.employeeFullName}
+                                                            {p.resolvedFromJobTitle && ` (${p.resolvedFromJobTitle})`}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                            </div>
+                        </section>
+                    )}
+
+                    {canAct && currentStep && (
+                        <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-5">
+                            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("actionSectionTitle")}</h2>
+
+                            {onBehalfOptions.length > 0 && (
+                                <label className="mb-3 block max-w-sm">
+                                    <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("onBehalfOfLabel")}</span>
+                                    <SearchableSelect
+                                        options={onBehalfOptions}
+                                        value={onBehalfOfEmployeeId}
+                                        onChange={setOnBehalfOfEmployeeId}
+                                        placeholder={t("onBehalfOfPlaceholder")}
+                                    />
+                                </label>
+                            )}
+
+                            <label className="mb-3 block">
+                                <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("commentLabel")}</span>
+                                <textarea
+                                    value={comment}
+                                    onChange={(e) => setComment(e.target.value)}
+                                    rows={2}
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                />
+                            </label>
+
+                            {currentStep.requireSignatureSnapshot && (
+                                <div className="mb-3 max-w-sm">
+                                    <span className="mb-1 block text-[11px] font-semibold uppercase text-[#8a8f94]">{t("signatureLabel")}</span>
+                                    {isSignatureLoading ? (
+                                        <Skeleton className="h-20 w-full" />
+                                    ) : (
+                                        // Mounted only after the signature fetch settles, so its lazy initial state
+                                        // (SignatureUpload.tsx) never captures a stale null before the real value arrives.
+                                        <SignatureUpload onChange={setSignatureBase64} initialBase64={savedSignatureBase64} />
+                                    )}
                                 </div>
-                            ))}
-                    </div>
-                )}
-            </section>
+                            )}
+
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    onClick={handleApprove}
+                                    disabled={isActionInFlight}
+                                    className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#1e7a34] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#166028] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> {isApproving ? tCommon("processing") : t("approveButton")}
+                                </button>
+                                <button
+                                    onClick={() => setRejectConfirmOpen(true)}
+                                    disabled={isActionInFlight}
+                                    className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    <XCircle className="h-3.5 w-3.5" /> {t("rejectButton")}
+                                </button>
+                                {currentStep.allowSendBackSnapshot && (
+                                    <button
+                                        onClick={() => {
+                                            setSendBackTarget(0);
+                                            setSendBackOpen(true);
+                                        }}
+                                        disabled={isActionInFlight}
+                                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <RotateCcw className="h-3.5 w-3.5" /> {t("sendBackButton")}
+                                    </button>
+                                )}
+                                {currentStep.allowAddApproverSnapshot && (
+                                    <button
+                                        onClick={() => {
+                                            setAddApproverInsertAfter(request.currentStepOrder);
+                                            setAddApproverOpen(true);
+                                        }}
+                                        disabled={isActionInFlight}
+                                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <UserPlus className="h-3.5 w-3.5" /> {t("addApproverButton")}
+                                    </button>
+                                )}
+                            </div>
+                        </section>
+                    )}
+
+                    {!isNew && (
+                        <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-5">
+                            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#5e3f3a]">{t("historySectionTitle")}</h2>
+                            {request.histories.length === 0 ? (
+                                <EmptyState icon={History} title={t("noHistory")} />
+                            ) : (
+                                <div className="space-y-3">
+                                    {request.histories
+                                        .slice()
+                                        .sort((a, b) => new Date(b.actionAt).getTime() - new Date(a.actionAt).getTime())
+                                        .map((h) => (
+                                            <div key={h.id} className="border-l-2 border-[#e0e3e5] pl-3">
+                                                <p className="text-sm text-[#191c1e]">
+                                                    <span className="font-semibold">{h.actorNameSnapshot}</span> {t(ACTION_LABEL_KEY[h.action] ?? "actionComment")}
+                                                    {h.onBehalfOfEmployeeName && <span className="text-[#8a8f94]"> ({t("onBehalfOfHistorySuffix", { name: h.onBehalfOfEmployeeName })})</span>}
+                                                </p>
+                                                {h.comment && <p className="text-sm text-[#5e3f3a]">&quot;{h.comment}&quot;</p>}
+                                                <p className="text-xs text-[#8a8f94]">{new Date(h.actionAt).toLocaleString("vi-VN")}</p>
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </section>
+                    )}
+                </div>
+            </div>
 
             <ConfirmDialog
                 isOpen={cancelConfirmOpen}
@@ -807,6 +826,21 @@ export default function WorkflowRequestDetail({ id, formDefinitionId }: Workflow
                 onApprove={handleCancel}
                 onDenied={() => {
                     if (!isCancelling) setCancelConfirmOpen(false);
+                }}
+            />
+
+            <ConfirmDialog
+                isOpen={attachmentToDelete !== null}
+                title={tCommon("delete")}
+                message={attachmentToDelete?.originalFileName}
+                approveLabel={tCommon("confirmDeleteApprove")}
+                deniedLabel={tCommon("confirmDeleteDenied")}
+                loading={deletingAttachmentId !== null}
+                onApprove={async () => {
+                    if (attachmentToDelete) await handleDeleteAttachment(attachmentToDelete.id);
+                }}
+                onDenied={() => {
+                    if (deletingAttachmentId === null) setAttachmentToDelete(null);
                 }}
             />
 

@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, ArrowLeft } from "lucide-react";
+import { FileText, ArrowLeft, Inbox } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/navigation";
 import { WorkflowRequestApi } from "@/modules/workflow/api/workflow-request.api";
 import type { AvailableFormDto } from "@/modules/workflow/types/workflow-request.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // getAvailableForms() (published + caller's FormAccesses), not grid-list, which needs FormDesign.View.
 // Only navigates with ?formDefinitionId=; the draft is created on first save/submit to avoid junk requests.
@@ -37,26 +39,26 @@ export default function NewWorkflowRequestPicker() {
                 <h1 className="mt-2 text-2xl font-semibold text-[#191c1e]">{t("pickFormTitle")}</h1>
             </div>
 
-            {isLoading && <div className="py-10 text-center text-sm text-[#5e3f3a]">{t("loading")}</div>}
             {error && <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
 
             {!isLoading && !error && forms.length === 0 && (
-                <div className="rounded-lg border border-dashed border-[#e0e3e5] px-4 py-10 text-center text-sm text-[#8a8f94]">
-                    {t("noAvailableForms")}
+                <div className="rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                    <EmptyState icon={Inbox} title={t("noAvailableForms")} />
                 </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {isLoading && [0, 1, 2].map((index) => <Skeleton key={index} className="h-[4.5rem] rounded-xl" />)}
                 {forms.map((form) => (
                     <button
                         key={form.id}
                         onClick={() => handlePick(form)}
-                        className="flex cursor-pointer flex-col items-start gap-2 rounded-xl border border-[#e0e3e5] bg-white p-4 text-left shadow-sm transition hover:border-[#e3000f] hover:shadow-md"
+                        className="flex cursor-pointer items-center gap-3 rounded-xl border border-[#e0e3e5] bg-white p-4 text-left shadow-sm transition hover:border-[#e3000f] hover:shadow-md"
                     >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#fff4f2] text-[#e3000f]">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#fff4f2] text-[#e3000f]">
                             <FileText className="h-5 w-5" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                             <p className="text-sm font-semibold text-[#191c1e]">{form.nameVn}</p>
                             {form.formCategoryNameVn && <p className="text-xs text-[#8a8f94]">{form.formCategoryNameVn}</p>}
                         </div>

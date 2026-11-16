@@ -5,9 +5,9 @@ using Shared.Infrastructure.Repositories;
 
 namespace Attendance.Infrastructure.Repositories
 {
-    public class ProductionApprovalStepRepository : GenericRepository<ProductionApprovalStep, AttendanceDbContext>, IProductionApprovalStepRepository
+    public class GroupApprovalStepMemberRepository : GenericRepository<GroupApprovalStepMember, AttendanceDbContext>, IGroupApprovalStepMemberRepository
     {
-        public ProductionApprovalStepRepository(AttendanceDbContext dbContext) : base(dbContext)
+        public GroupApprovalStepMemberRepository(AttendanceDbContext dbContext) : base(dbContext)
         {
         }
     }

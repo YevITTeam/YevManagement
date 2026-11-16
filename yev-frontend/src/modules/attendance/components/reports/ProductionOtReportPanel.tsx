@@ -9,7 +9,8 @@ import autoTable from "jspdf-autotable";
 
 import { ROBOTO_REGULAR_BASE64, ROBOTO_BOLD_BASE64 } from "@/modules/pc-management/lib/pdf-fonts";
 import { buildProductionTicketZip } from "@/modules/attendance/lib/productionTicketBatchPdf";
-import { ProductionOtReportApi } from "@/modules/attendance/api/production-ot-report.api";
+import { ProductionOtReportApi, type ReportFilter } from "@/modules/attendance/api/production-ot-report.api";
+import type { BlobDownloadResult } from "@/lib/client";
 import { GeneralAffairsReportApi } from "@/modules/attendance/api/general-affairs-report.api";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
@@ -280,31 +281,25 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
     ref
 ) {
     const t = useTranslations("Attendance.ProductionOtReport");
-    const [scope, setScope] = useState<"office" | "production">("office");
     const [period, setPeriod] = useState<"day" | "month">("day");
     const [month, setMonth] = useState(() => todayIso().slice(0, 7));
-    const [isExportingOffice, setIsExportingOffice] = useState(false);
     const [date, setDate] = useState(todayIso());
     const [departmentId, setDepartmentId] = useState<number | "">("");
     const [departments, setDepartments] = useState<DepartmentDto[]>([]);
     const [workshopId, setWorkshopId] = useState<number | "">("");
     const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
-    const [productivityGroups, setProductivityGroups] = useState<ProductionOptionDto[]>([]);
+    const [groups, setGroups] = useState<ProductionOptionDto[]>([]);
     const [groupIds, setGroupIds] = useState<number[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isExportingExcel, setIsExportingExcel] = useState(false);
-    const [isExportingTimes, setIsExportingTimes] = useState(false);
-    const [isExportingQry, setIsExportingQry] = useState(false);
-    const [isExportingSum, setIsExportingSum] = useState(false);
-    const [isExportingTickets, setIsExportingTickets] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [ticketExportProgress, setTicketExportProgress] = useState<{ done: number; total: number } | null>(null);
+    const [isExportingTickets, setIsExportingTickets] = useState(false);
     const [report, setReport] = useState<ProductionTicketReportDto | null>(null);
 
     useEffect(() => {
         onLoadingChange?.(isLoading);
     }, [isLoading, onLoadingChange]);
 
-    // Production-line forms can belong to any department, not only manufacturing; list loads once on mount.
     useFetchEffect(
         () => DepartmentApi.getAllDepartments(),
         [],
@@ -318,20 +313,29 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         t("loadDepartmentsError")
     );
     useFetchEffect(
-        () => ProductionOtReportApi.getOfficeProductivityGroups(workshopId === "" ? undefined : workshopId, departmentId === "" ? undefined : departmentId),
+        () => ProductionOtReportApi.getGroups(workshopId === "" ? undefined : workshopId, departmentId === "" ? undefined : departmentId),
         [workshopId, departmentId],
         (result) => {
-            setProductivityGroups(result);
+            setGroups(result);
             setGroupIds((prev) => prev.filter((id) => result.some((g) => g.id === id)));
         },
         t("loadDepartmentsError")
     );
 
+    const isDay = period === "day";
+    const filter: ReportFilter = {
+        fromDate: isDay ? date : `${month}-01`,
+        toDate: isDay ? date : lastDayOfMonth(month),
+        workshopId: workshopId === "" ? undefined : workshopId,
+        departmentId: departmentId === "" ? undefined : departmentId,
+        groupIds,
+    };
+    const hasPeriod = Boolean(isDay ? date : month);
+
     const handleSearch = async () => {
         setIsLoading(true);
         try {
-            const result = await ProductionOtReportApi.getTicketReport(date, departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId);
-            setReport(result);
+            setReport(await ProductionOtReportApi.getTicketReport(filter));
         } catch (err) {
             toast.error(getApiErrorMessage(err, t("loadReportError")));
         } finally {
@@ -341,7 +345,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
 
     useImperativeHandle(ref, () => ({
         refresh: () => {
-            if (scope === "production" && report) handleSearch();
+            if (report && isDay) handleSearch();
         },
         openCreate: () => {},
     }));
@@ -352,92 +356,32 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
             return;
         }
         try {
-            const doc = buildTicketReportPdf(report);
-            doc.save(`BaoCaoPhieuTangCa_${date.replace(/-/g, "")}.pdf`);
+            buildTicketReportPdf(report).save(`BaoCaoPhieuTangCa_${date.replace(/-/g, "")}.pdf`);
         } catch (err) {
             console.error("Export PDF failed:", err);
             toast.error(t("exportPdfFailedError"));
         }
     };
 
-    const handleExportExcel = async () => {
-        setIsExportingExcel(true);
-        try {
-            const { blob, fileName } = await ProductionOtReportApi.exportHoursReportExcel(
-                date,
-                departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId
-            );
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = fileName ?? `TongGioTangCa_${date.replace(/-/g, "")}.xlsx`;
-            link.click();
-            URL.revokeObjectURL(url);
-        } catch (err) {
-            toast.error(getApiErrorMessage(err, t("exportHoursError")));
-        } finally {
-            setIsExportingExcel(false);
-        }
+    const download = (blob: Blob, fileName: string) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
     };
 
-    const handleExportTimes = async () => {
-        setIsExportingTimes(true);
+    // Every Excel export takes the same filter; the fallback name only applies when the server sends none.
+    const exportExcel = async (exporter: (f: ReportFilter) => Promise<BlobDownloadResult>, fallbackName: string, errorKey: string) => {
+        setIsExporting(true);
         try {
-            const { blob, fileName } = await ProductionOtReportApi.exportTimesReportExcel(
-                date,
-                departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId
-            );
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = fileName ?? `SoLuotTangCa_${date.replace(/-/g, "")}.xlsx`;
-            link.click();
-            URL.revokeObjectURL(url);
+            const { blob, fileName } = await exporter(filter);
+            download(blob, fileName ?? `${fallbackName}_${filter.fromDate}.xlsx`);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, t("exportTimesError")));
+            toast.error(getApiErrorMessage(err, t(errorKey)));
         } finally {
-            setIsExportingTimes(false);
-        }
-    };
-
-    // Separate state/handlers from the exports above so each button's loading/error stays independent.
-    const handleExportQry = async () => {
-        setIsExportingQry(true);
-        try {
-            const { blob, fileName } = await ProductionOtReportApi.exportQryExportExcel(
-                date,
-                departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId
-            );
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = fileName ?? `Qry_EXPORT_EXCEL_${date.replace(/-/g, "")}.xlsx`;
-            link.click();
-            URL.revokeObjectURL(url);
-        } catch (err) {
-            toast.error(getApiErrorMessage(err, t("exportDetailError")));
-        } finally {
-            setIsExportingQry(false);
-        }
-    };
-
-    const handleExportSum = async () => {
-        setIsExportingSum(true);
-        try {
-            const { blob, fileName } = await ProductionOtReportApi.exportSumExportData(
-                date,
-                departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId
-            );
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = fileName ?? `SUM_EXPORT_DATA_${date.replace(/-/g, "")}.xlsx`;
-            link.click();
-            URL.revokeObjectURL(url);
-        } catch (err) {
-            toast.error(getApiErrorMessage(err, t("exportSummaryError")));
-        } finally {
-            setIsExportingSum(false);
+            setIsExporting(false);
         }
     };
 
@@ -446,48 +390,18 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         setIsExportingTickets(true);
         setTicketExportProgress(null);
         try {
-            const groups = await ProductionOtReportApi.getTicketBatch(date, departmentId === "" ? undefined : departmentId, workshopId === "" ? undefined : workshopId);
-            if (groups.length === 0) {
+            const batch = await ProductionOtReportApi.getTicketBatch(filter);
+            if (batch.length === 0) {
                 toast.error(t("exportTicketZipNoDataError"));
                 return;
             }
-            const result = await buildProductionTicketZip(groups, date, (done, total) => setTicketExportProgress({ done, total }));
-            if (!result) return;
-            const url = URL.createObjectURL(result.blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = result.fileName;
-            link.click();
-            URL.revokeObjectURL(url);
+            const result = await buildProductionTicketZip(batch, date, (done, total) => setTicketExportProgress({ done, total }));
+            if (result) download(result.blob, result.fileName);
         } catch (err) {
             toast.error(getApiErrorMessage(err, t("exportTicketZipError")));
         } finally {
             setIsExportingTickets(false);
             setTicketExportProgress(null);
-        }
-    };
-
-    // Both office files take the same range and filters: the General Affairs mail Excel, or Qry_EXPORT_EXCEL of the picked groups.
-    const handleExportOffice = async (exporter: typeof GeneralAffairsReportApi.exportExcel) => {
-        const [fromDate, toDate] = period === "month" ? [`${month}-01`, lastDayOfMonth(month)] : [date, date];
-        setIsExportingOffice(true);
-        try {
-            const { blob, fileName } = await exporter(
-                fromDate,
-                toDate,
-                workshopId === "" ? undefined : workshopId,
-                departmentId === "" ? undefined : departmentId
-            );
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = fileName ?? `Du lieu tang ca ${period === "month" ? month : date}.xlsx`;
-            link.click();
-            URL.revokeObjectURL(url);
-        } catch (err) {
-            toast.error(getApiErrorMessage(err, t("officeExportError")));
-        } finally {
-            setIsExportingOffice(false);
         }
     };
 
@@ -497,21 +411,32 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         searchText: `${dept.departmentNameVn} ${dept.departmentCode}`.toLowerCase(),
     }));
 
-    const isAnyExporting = isExportingExcel || isExportingTimes || isExportingQry || isExportingSum || isExportingTickets;
+    const isBusy = isExporting || isExportingTickets;
     const exportMenuLabel = isExportingTickets
         ? ticketExportProgress
             ? t("exportTicketZipProgress", { done: ticketExportProgress.done, total: ticketExportProgress.total })
             : t("exportTicketZipPreparing")
-        : isAnyExporting
+        : isExporting
           ? t("exporting")
           : t("exportMenuLabel");
     const excelIcon = <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />;
+    // The General Affairs file has its own fixed layout and ignores the group filter.
     const exportItems = [
-        { label: t("exportHoursButton"), onClick: handleExportExcel, icon: excelIcon },
-        { label: t("exportTimesButton"), onClick: handleExportTimes, icon: excelIcon },
-        { label: t("exportDetailButton"), onClick: handleExportQry, icon: excelIcon },
-        { label: t("exportSummaryButton"), onClick: handleExportSum, icon: excelIcon },
-        { label: t("exportTicketZipButton"), onClick: handleExportTicketZip, icon: <FileText className="h-3.5 w-3.5 shrink-0" /> },
+        {
+            label: t("officeExportGeneralAffairs"),
+            onClick: () => exportExcel((f) => GeneralAffairsReportApi.exportExcel(f.fromDate, f.toDate, f.workshopId, f.departmentId), "Du lieu tang ca", "officeExportError"),
+            icon: excelIcon,
+        },
+        { label: t("exportHoursButton"), onClick: () => exportExcel(ProductionOtReportApi.exportHoursReportExcel, "TongGioTangCa", "exportHoursError"), icon: excelIcon },
+        { label: t("exportTimesButton"), onClick: () => exportExcel(ProductionOtReportApi.exportTimesReportExcel, "SoLuotTangCa", "exportTimesError"), icon: excelIcon },
+        { label: t("exportDetailButton"), onClick: () => exportExcel(ProductionOtReportApi.exportQryExportExcel, "Qry_EXPORT_EXCEL", "exportDetailError"), icon: excelIcon },
+        { label: t("exportSummaryButton"), onClick: () => exportExcel(ProductionOtReportApi.exportSumExportData, "SUM_EXPORT_DATA", "exportSummaryError"), icon: excelIcon },
+        {
+            label: isDay ? t("exportTicketZipButton") : `${t("exportTicketZipButton")} (${t("dayOnlySuffix")})`,
+            onClick: handleExportTicketZip,
+            icon: <FileText className="h-3.5 w-3.5 shrink-0" />,
+            disabled: !isDay,
+        },
     ];
 
     return (
@@ -519,39 +444,28 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
             <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
                 {/* Top-aligned because the group picker grows with its chips; action buttons offset by one label height. */}
                 <div className="flex flex-wrap items-start gap-3">
-                    <label className="block w-36">
-                        <span className={labelClassName}>{t("scopeLabel")}</span>
-                        <StyledSelect
-                            value={scope}
-                            onChange={(value) => setScope(value as "office" | "production")}
-                            triggerClassName={`${fieldClassName} w-full pr-8`}
-                            options={[
-                                { value: "office", label: t("scopeOffice") },
-                                { value: "production", label: t("scopeProduction") },
-                            ]}
-                        />
-                    </label>
                     <div>
                         <span className={labelClassName}>
                             {t("fieldDateLabel")}
-                            <InfoTooltip text={scope === "office" ? t("officeExportHint") : t("searchHint")} />
+                            <InfoTooltip text={t("searchHint")} />
                         </span>
                         <div className="flex gap-2">
-                            {scope === "office" && (
-                                <StyledSelect
-                                    value={period}
-                                    onChange={(value) => setPeriod(value as "day" | "month")}
-                                    triggerClassName={`${fieldClassName} w-32 pr-8`}
-                                    options={[
-                                        { value: "day", label: t("periodDay") },
-                                        { value: "month", label: t("periodMonth") },
-                                    ]}
-                                />
-                            )}
-                            {scope === "office" && period === "month" ? (
-                                <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label={t("periodMonth")} className={`${fieldClassName} w-40`} />
-                            ) : (
+                            <StyledSelect
+                                value={period}
+                                onChange={(value) => {
+                                    setPeriod(value as "day" | "month");
+                                    setReport(null);
+                                }}
+                                triggerClassName={`${fieldClassName} w-32 pr-8`}
+                                options={[
+                                    { value: "day", label: t("periodDay") },
+                                    { value: "month", label: t("periodMonth") },
+                                ]}
+                            />
+                            {isDay ? (
                                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label={t("fieldDateLabel")} className={`${fieldClassName} w-40`} />
+                            ) : (
+                                <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label={t("periodMonth")} className={`${fieldClassName} w-40`} />
                             )}
                         </div>
                     </div>
@@ -565,68 +479,40 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
                         />
                     </label>
                     <label className="block w-56">
-                        <span className={labelClassName}>
-                            {scope === "office" ? t("fieldOfficeDepartmentLabel") : t("fieldDepartmentLabel")}
-                        </span>
-                        <SearchableSelect
-                            options={departmentOptions}
-                            value={departmentId}
-                            onChange={setDepartmentId}
+                        <span className={labelClassName}>{t("fieldDepartmentLabel")}</span>
+                        <SearchableSelect options={departmentOptions} value={departmentId} onChange={setDepartmentId} placeholder={t("filterAllDepartment")} />
+                    </label>
+                    <div className="w-64">
+                        <span className={labelClassName}>{t("fieldGroupLabel")}</span>
+                        <MultiSelect
+                            options={groups.map((g) => ({ value: g.id, label: g.nameVn ?? g.code, searchText: `${g.nameVn ?? ""} ${g.code}`.toLowerCase() }))}
+                            values={groupIds}
+                            onChange={setGroupIds}
                             placeholder={t("filterAllDepartment")}
                         />
-                    </label>
-                    {scope === "office" && (
-                        <div className="w-64">
-                            <span className={labelClassName}>
-                                {t("fieldProductivityGroupLabel")}
-                                <InfoTooltip text={t("productivityGroupHint")} />
-                            </span>
-                            <MultiSelect
-                                options={productivityGroups.map((g) => ({ value: g.id, label: g.nameVn ?? g.code, searchText: `${g.nameVn ?? ""} ${g.code}`.toLowerCase() }))}
-                                values={groupIds}
-                                onChange={setGroupIds}
-                                placeholder={t("filterAllDepartment")}
-                            />
-                        </div>
-                    )}
-                    {scope === "office" ? (
-                        <div className="mt-[22px]">
-                        <ActionMenu
-                            label={isExportingOffice ? t("exporting") : t("exportMenuLabel")}
-                            icon={isExportingOffice ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                            items={[
-                                { label: t("officeExportGeneralAffairs"), onClick: () => handleExportOffice(GeneralAffairsReportApi.exportExcel), icon: excelIcon },
-                                {
-                                    label: t("officeExportProductivity"),
-                                    onClick: () => handleExportOffice((from, to, ws, dept) => ProductionOtReportApi.exportOfficeQryExportExcel(from, to, ws, dept, groupIds)),
-                                    icon: excelIcon,
-                                },
-                            ]}
-                            disabled={isExportingOffice || !(period === "month" ? month : date)}
-                        />
-                        </div>
-                    ) : (
+                    </div>
                     <div className="mt-[22px] flex gap-2">
-                        <button
-                            type="button"
-                            onClick={handleSearch}
-                            disabled={isLoading || !date}
-                            className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Search className="h-3.5 w-3.5" /> {isLoading ? t("searching") : t("searchButton")}
-                        </button>
+                        {isDay && (
+                            <button
+                                type="button"
+                                onClick={handleSearch}
+                                disabled={isLoading || !date}
+                                className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <Search className="h-3.5 w-3.5" /> {isLoading ? t("searching") : t("searchButton")}
+                            </button>
+                        )}
                         <ActionMenu
                             label={exportMenuLabel}
-                            icon={isAnyExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                            icon={isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                             items={exportItems}
-                            disabled={isAnyExporting || !date}
+                            disabled={isBusy || !hasPeriod}
                         />
                     </div>
-                    )}
                 </div>
             </div>
 
-            {scope === "production" && report && (
+            {isDay && report && (
                 <div className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3">
                         <div className="flex flex-wrap gap-6 text-sm text-[#5e3f3a]">

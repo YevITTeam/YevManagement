@@ -181,7 +181,7 @@ namespace Attendance.Application.Services
         {
             if (step.Candidates.Count == 0) return;
 
-            var recipients = await GetMailRecipientsAsync(step.Candidates.Select(c => c.UserName));
+            var recipients = await GetMailRecipientsAsync(step.Candidates.Where(c => c.ReceivesMail).Select(c => c.UserName));
             if (await SendApprovalMailsAsync(otForm, step, recipients))
                 await _unitOfWork.SaveChangesAsync();
         }

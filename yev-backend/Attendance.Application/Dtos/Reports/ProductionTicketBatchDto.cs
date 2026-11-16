@@ -43,5 +43,9 @@ namespace Attendance.Application.Dtos.Reports
         public string? TeamCodeSnapshot { get; set; }
 
         public string? ShiftTeamCodeSnapshot { get; set; }
+
+        public decimal? CustomMonthlyOtHourLimitSnapshot { get; set; }
+
+        public decimal? CustomYearlyOtHourLimitSnapshot { get; set; }
     }
 }

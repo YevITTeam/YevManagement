@@ -12,8 +12,5 @@ namespace Attendance.Application.Interfaces.Service
         Task<List<ProductionOptionDto>> GetShiftTeamOptionsAsync(int? productionLineId, int? teamId);
 
         Task<List<string>> GetCongDoanOptionsAsync();
-
-        // Scoped to departments the caller coordinates.
-        Task UpdateAsync(int employeeId, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin);
     }
 }

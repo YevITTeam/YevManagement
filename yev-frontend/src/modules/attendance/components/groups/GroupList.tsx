@@ -52,6 +52,8 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
     const [editingGroup, setEditingGroup] = useState<GroupDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    const [pendingMerge, setPendingMerge] = useState<{ values: GroupFormValues; pairs: string[] } | null>(null);
+
     const [deletingGroup, setDeletingGroup] = useState<GroupDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
@@ -140,16 +142,41 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
         setEditingGroup(null);
     };
 
-    const handleSubmitForm = async (values: GroupFormValues) => {
+    // Pairs already owned by another group of the same workshop, department and kind: saving them is a merge, so ask first.
+    const findOwnedPairs = async (values: GroupFormValues) => {
+        if (values.lines.length === 0 || !values.lineKind) return [];
+        const others = (await GroupApi.getAllGroups()).filter(
+            (g) =>
+                g.id !== editingGroup?.id &&
+                g.workshopId === values.workshopId &&
+                g.departmentId === values.departmentId &&
+                g.lineKind === values.lineKind
+        );
+        return others.flatMap((g) =>
+            g.lines
+                .filter((l) => values.lines.some((v) => v.productionLineId === l.productionLineId && v.shiftTeamId === l.shiftTeamId))
+                .map((l) => `${l.lineCode} · ${l.shiftTeamCode} (${g.groupNameVn})`)
+        );
+    };
+
+    const handleSubmitForm = async (values: GroupFormValues, takeOverLines = false) => {
         setIsSaving(true);
         try {
+            if (!takeOverLines) {
+                const pairs = await findOwnedPairs(values);
+                if (pairs.length > 0) {
+                    setPendingMerge({ values, pairs });
+                    return;
+                }
+            }
             if (formMode === "create") {
-                await GroupApi.createGroup(values);
+                await GroupApi.createGroup({ ...values, takeOverLines });
                 toast.success(t("createSuccess"));
             } else if (editingGroup) {
-                await GroupApi.updateGroup(editingGroup.id, values);
+                await GroupApi.updateGroup(editingGroup.id, { ...values, takeOverLines });
                 toast.success(t("updateSuccess"));
             }
+            setPendingMerge(null);
             setFormOpen(false);
             setEditingGroup(null);
             await fetchGroups();
@@ -245,13 +272,14 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                                 <th className="px-3 py-2">{t("colNameVn")}</th>
                                 <th className="px-3 py-2">{t("colWorkshop")}</th>
                                 <th className="px-3 py-2">{t("colDepartment")}</th>
+                                <th className="px-3 py-2">{t("colLines")}</th>
                                 <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && groups.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-12">
+                                    <td colSpan={6} className="px-4 py-12">
                                         <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
                                             <Inbox className="h-8 w-8 text-[#c7ccd1]" />
                                             {t("noData")}
@@ -268,6 +296,10 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                                         <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
                                             {group.departmentNameVn}
                                         </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                        {group.lines.map((l) => `${l.lineCode} · ${l.shiftTeamCode}`).join(", ")}
+                                        {group.lineKind && <span className="ml-1 text-xs text-[#8a8f94]">{group.lineKind}</span>}
                                     </td>
                                     <td className="px-3 py-2 text-right text-sm">
                                         <div className="inline-flex items-center gap-1.5">
@@ -312,6 +344,21 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                 loading={isSaving}
                 onClose={closeForm}
                 onSubmit={handleSubmitForm}
+            />
+
+            <ConfirmDialog
+                isOpen={pendingMerge !== null}
+                title={t("mergeTitle")}
+                message={t("mergeMessage", { pairs: pendingMerge?.pairs.join(", ") ?? "" })}
+                approveLabel={t("mergeApprove")}
+                deniedLabel={tCommon("cancel")}
+                loading={isSaving}
+                onApprove={async () => {
+                    if (pendingMerge) await handleSubmitForm(pendingMerge.values, true);
+                }}
+                onDenied={() => {
+                    if (!isSaving) setPendingMerge(null);
+                }}
             />
 
             <ConfirmDialog

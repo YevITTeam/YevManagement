@@ -1,6 +1,7 @@
 using Attendance.Application.Dtos.AttendanceSettings;
 using Attendance.Application.Dtos.ProductionEmployees;
 using Attendance.Application.Interfaces.Service;
+using Attendance.Domain.Constants;
 using Attendance.Domain.Entities;
 using Attendance.Domain.Enums;
 using Shared.Application.Helper;
@@ -35,7 +36,7 @@ namespace Attendance.Application.Services
             if (productionLineId == null && teamId == null && shiftTeamId == null && congDoan == null && trimmedKeyword == null)
                 throw new DomainException("Vui lòng chọn Team/Line/Nhóm ca hoặc nhập từ khoá để tìm nhân viên.");
 
-            var filtered = _unitOfWork.Employees.GetQueryable().Where(x => !x.IsDeleted && x.ProductionLineId != null
+            var filtered = _unitOfWork.Employees.GetQueryable().Where(x => !x.IsDeleted && x.ResignedAt == null && x.ProductionLineId != null
                     && (productionLineId == null || x.ProductionLineId == productionLineId)
                     && (teamId == null || x.TeamId == teamId)
                     && (shiftTeamId == null || x.ShiftTeamId == shiftTeamId)
@@ -141,35 +142,6 @@ namespace Attendance.Application.Services
                 predicate: x => !x.IsDeleted && x.ProductionLineId != null && x.CongDoan != null,
                 selector: x => x.CongDoan!);
             return items.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
-        }
-
-        // Manual fix between imports; the next import overwrites it.
-        public async Task UpdateAsync(int employeeId, UpdateProductionEmployeeDto request, string callerUserName, bool isAdmin)
-        {
-            var entity = (await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.Id == employeeId && !x.IsDeleted, x => x.Group!))
-                .OrThrowNotFound("Nhân viên", employeeId);
-
-            if (!isAdmin)
-            {
-                var departmentId = entity!.DepartmentId ?? entity.Group?.DepartmentId;
-                var managedDepartmentIds = await _departmentAccessGuard.GetManagedDepartmentIdsAsync(callerUserName);
-                if (departmentId == null || !managedDepartmentIds.Contains(departmentId.Value))
-                    throw new DomainException("Bạn chỉ được sửa nhân sự dưới chuyền thuộc Bộ phận mình phụ trách.");
-            }
-
-            if (request.ProductionLineId.HasValue)
-                (await _unitOfWork.ProductionLines.GetByIdAsync(request.ProductionLineId.Value)).OrThrowNotFound("Line", request.ProductionLineId.Value);
-            if (request.TeamId.HasValue)
-                (await _unitOfWork.ProductionTeams.GetByIdAsync(request.TeamId.Value)).OrThrowNotFound("Team", request.TeamId.Value);
-            if (request.ShiftTeamId.HasValue)
-                (await _unitOfWork.ProductionShiftTeams.GetByIdAsync(request.ShiftTeamId.Value)).OrThrowNotFound("Nhóm ca", request.ShiftTeamId.Value);
-
-            entity!.ProductionLineId = request.ProductionLineId;
-            entity.TeamId = request.TeamId;
-            entity.ShiftTeamId = request.ShiftTeamId;
-            entity.CongDoan = string.IsNullOrWhiteSpace(request.CongDoan) ? null : request.CongDoan.Trim();
-            entity.TaskName = string.IsNullOrWhiteSpace(request.TaskName) ? null : request.TaskName.Trim();
-            await _unitOfWork.SaveChangesAsync();
         }
     }
 }

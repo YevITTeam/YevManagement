@@ -29,6 +29,8 @@ function toPrintableEmployee(e: ProductionTicketBatchGroupDto["employees"][numbe
         yearToDate: e.yearToDate,
         customMonthlyOtHourLimit: null,
         customYearlyOtHourLimit: null,
+        customMonthlyOtHourLimitSnapshot: e.customMonthlyOtHourLimitSnapshot,
+        customYearlyOtHourLimitSnapshot: e.customYearlyOtHourLimitSnapshot,
         mealTicketType: 0,
         actualHours: 0,
         didEat: false,

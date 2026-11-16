@@ -30,16 +30,22 @@ public partial class Employee
 
     public decimal? CustomYearlyOtHourLimit { get; set; }
 
-    // On the production roster when ProductionLineId is set; the import sets Line, Team and shift team together.
+    // On the production roster when ProductionLineId is set; Team always follows the line.
     public int? ProductionLineId { get; set; }
 
     public int? TeamId { get; set; }
+
+    // TT/GT (StaffKinds), must be a kind the line has; together with Line × Ca it picks the employee's group.
+    public string? StaffKind { get; set; }
 
     public int? ShiftTeamId { get; set; }
 
     public string? CongDoan { get; set; }
 
     public string? TaskName { get; set; }
+
+    // Set when a full-roster import no longer lists the person; they leave new forms until someone deletes or restores them.
+    public DateTime? ResignedAt { get; set; }
 
     public bool IsDeleted { get; set; }
 

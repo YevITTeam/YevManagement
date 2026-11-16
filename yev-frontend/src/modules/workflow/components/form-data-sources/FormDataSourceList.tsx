@@ -12,6 +12,7 @@ import FormDataSourceForm, { type FormDataSourceFormValues } from "./FormDataSou
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { TableSkeletonRows } from "@/components/common/TableSkeletonRows";
+import { Pagination } from "@/components/ui/Pagination";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -33,8 +34,6 @@ export default function FormDataSourceList() {
     const [pageIndex, setPageIndex] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -51,8 +50,6 @@ export default function FormDataSourceList() {
             setDataSources(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
         t("loadError"),
         (message) => toast.error(message)
@@ -134,12 +131,9 @@ export default function FormDataSourceList() {
     };
 
     return (
-        <div className="space-y-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
-                    <p className="mt-1 text-[15px] text-[#5e3f3a]">{t("description")}</p>
-                </div>
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h1 className="text-lg font-semibold text-[#191c1e]">{t("title")}</h1>
 
                 <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -161,14 +155,14 @@ export default function FormDataSourceList() {
             </div>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
+                <div className="border-b border-[#e0e3e5] bg-[#f8fafc] p-4">
                     <div className="flex gap-2">
                         <input
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
                             placeholder={t("searchPlaceholder")}
-                            className="h-10 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                         />
                         <button
                             onClick={handleSearch}
@@ -180,9 +174,6 @@ export default function FormDataSourceList() {
                             <Search className="h-4 w-4" />
                         </button>
                     </div>
-                    <div className="text-sm text-[#5e3f3a]">
-                        {isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: dataSources.length, total: totalCount })}
-                    </div>
                 </div>
 
                 {error && (
@@ -193,12 +184,12 @@ export default function FormDataSourceList() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-6 py-3">{t("colCode")}</th>
-                                <th className="px-6 py-3">{t("colNameVn")}</th>
-                                <th className="px-6 py-3">{t("colSourceKind")}</th>
-                                <th className="px-6 py-3">{t("colValueColumn")}</th>
-                                <th className="px-6 py-3">{t("colDisplayColumn")}</th>
-                                {canManage && <th className="px-6 py-3 text-right">{tCommon("actions")}</th>}
+                                <th className="px-4 py-3">{t("colCode")}</th>
+                                <th className="px-4 py-3">{t("colNameVn")}</th>
+                                <th className="hidden px-4 py-3 md:table-cell">{t("colSourceKind")}</th>
+                                <th className="hidden px-4 py-3 lg:table-cell">{t("colValueColumn")}</th>
+                                <th className="hidden px-4 py-3 lg:table-cell">{t("colDisplayColumn")}</th>
+                                {canManage && <th className="px-4 py-3 text-right">{tCommon("actions")}</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -212,13 +203,13 @@ export default function FormDataSourceList() {
                             )}
                             {!isLoading && dataSources.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="px-6 py-4 text-sm font-semibold text-[#191c1e]">{item.code}</td>
-                                    <td className="px-6 py-4 text-sm text-[#191c1e]">{item.nameVn}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{sourceKindLabel(item.sourceKind)}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.valueColumn}</td>
-                                    <td className="px-6 py-4 text-sm text-[#5e3f3a]">{item.displayColumn}</td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-[#191c1e]">{item.code}</td>
+                                    <td className="px-4 py-3 text-sm text-[#191c1e]">{item.nameVn}</td>
+                                    <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-[#5e3f3a] md:table-cell">{sourceKindLabel(item.sourceKind)}</td>
+                                    <td className="hidden px-4 py-3 font-mono text-xs text-[#5e3f3a] lg:table-cell">{item.valueColumn}</td>
+                                    <td className="hidden px-4 py-3 font-mono text-xs text-[#5e3f3a] lg:table-cell">{item.displayColumn}</td>
                                     {canManage && (
-                                        <td className="px-6 py-4 text-right text-sm">
+                                        <td className="px-4 py-3 text-right text-sm">
                                             <div className="inline-flex items-center gap-1.5">
                                                 <button
                                                     onClick={() => openEditForm(item)}
@@ -245,25 +236,14 @@ export default function FormDataSourceList() {
                     </table>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        {tCommon("prevPage")}
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        {tCommon("pageOf", { current: pageIndex, total: totalPages })}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        {tCommon("nextPage")}
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: dataSources.length, total: totalCount })}
+                    compactSummary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: dataSources.length, total: totalCount })}
+                />
             </section>
 
             <FormDataSourceForm

@@ -132,18 +132,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Lets the FE pre-fill and lock Team/Line/Shift for Line Leaders; empty for Admin or non-leaders.
-        [RequirePermission("Attendance.OTForm.CreateProduction")]
-        [HttpGet("my-production-create-scopes")]
-        public async Task<ActionResult<ApiResponse<List<MyProductionCreateScopeItemDto>>>> GetMyProductionCreateScopes()
-        {
-            var isAdmin = User.IsInRole(AdminRole);
-            var result = await _otFormService.GetMyProductionCreateScopesAsync(CurrentUserName, isAdmin);
-            return Success(result);
-        }
-
-        // Create and CreateProduction are separate permissions; accept either so production-only Line Leaders can check overlaps.
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
+        [RequirePermission("Attendance.OTForm.Create")]
         [HttpPost("check-overlap")]
         public async Task<ActionResult<ApiResponse<List<int>>>> CheckOverlap([FromBody] CheckOtFormOverlapDto request)
         {
@@ -151,22 +140,11 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        // Accepts either Create or CreateProduction; the mode-specific permission is re-checked below so
-        // neither can be used to create the other kind of form.
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
+        [RequirePermission("Attendance.OTForm.Create")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateOtFormDto request)
         {
             var isAdmin = User.IsInRole(AdminRole);
-            if (request.IsProductionForm)
-            {
-                if (!User.HasClaim("Permission", "Attendance.OTForm.CreateProduction"))
-                    throw new DomainException("Bạn không có quyền tạo đơn tăng ca theo chuyền.");
-            }
-            else if (!User.HasClaim("Permission", "Attendance.OTForm.Create"))
-            {
-                throw new DomainException("Bạn không có quyền tạo đơn tăng ca theo Nhóm.");
-            }
             var result = await _otFormService.CreateAsync(CurrentUserName, CurrentFullName, isAdmin, request);
             return CreatedSuccess(nameof(GetById), new { id = result.Id }, result, "Tạo đơn tăng ca thành công.");
         }
@@ -181,7 +159,7 @@ namespace Attendance.Api.Controllers
         }
 
         // Accepts either permission; OtFormService.UpdateAsync enforces the real per-step/scope rules.
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
+        [RequirePermission("Attendance.OTForm.Create")]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<OtFormDto>>> Update(int id, [FromBody] UpdateOtFormDto request)
         {
@@ -250,7 +228,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
+        [RequirePermission("Attendance.OTForm.Create")]
         [RequestSizeLimit(11 * 1024 * 1024)]
         [HttpPost("{id}/paper-scan")]
         public async Task<ActionResult<ApiResponse<bool>>> UploadPaperScan(int id, IFormFile file)

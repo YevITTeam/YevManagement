@@ -123,10 +123,10 @@ export default function FormDefinitionDetail({ id }: FormDefinitionDetailProps) 
 
     if (isLoading) {
         return (
-            <div className="space-y-3 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
-                <Skeleton className="h-7 w-64" />
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="h-4 w-96" />
+            <div className="space-y-3 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-6">
+                <Skeleton className="h-7 w-64 max-w-full" />
+                <Skeleton className="h-4 w-48 max-w-full" />
+                <Skeleton className="h-4 w-96 max-w-full" />
             </div>
         );
     }
@@ -152,9 +152,9 @@ export default function FormDefinitionDetail({ id }: FormDefinitionDetailProps) 
                 <ArrowLeft className="h-4 w-4" /> {t("backToList")}
             </Link>
 
-            <div className="flex flex-col gap-4 rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm md:flex-row md:items-start md:justify-between">
-                <div>
-                    <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-4 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-6 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <h1 className="text-2xl font-semibold text-[#191c1e]">{formDefinition.nameVn}</h1>
                         <Badge variant={formDefinition.isPublished ? "success" : "neutral"} withDot>
                             {formDefinition.isPublished ? t("statusPublished") : t("statusDraft")}
@@ -170,27 +170,32 @@ export default function FormDefinitionDetail({ id }: FormDefinitionDetailProps) 
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
                         <button
                             onClick={() => setCloneDialogOpen(true)}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
-                            <Copy className="h-3.5 w-3.5" /> {t("cloneAction")}
+                            <Copy className="hidden h-3.5 w-3.5 sm:block" /> {t("cloneAction")}
                         </button>
                         <button
                             onClick={() => setPublishConfirmOpen(true)}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
-                            <Rocket className="h-3.5 w-3.5" /> {formDefinition.isPublished ? t("republishAction") : t("publishAction")}
+                            <Rocket className="hidden h-3.5 w-3.5 sm:block" /> {formDefinition.isPublished ? t("republishAction") : t("publishAction")}
                         </button>
                         <button
                             onClick={() => setEditFormOpen(true)}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
                         >
-                            <Pencil className="h-3.5 w-3.5" /> {t("editBasicInfo")}
+                            <Pencil className="hidden h-3.5 w-3.5 sm:block" /> {t("editBasicInfo")}
                         </button>
                     </div>
                 )}
             </div>
 
-            <Tabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
+            {/* w-max keeps tab labels on one line; the row scrolls sideways on phones instead of wrapping. */}
+            <div className="overflow-x-auto">
+                <div className="w-max">
+                    <Tabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
+                </div>
+            </div>
 
             <div>
                 {activeTab === "fields" && (

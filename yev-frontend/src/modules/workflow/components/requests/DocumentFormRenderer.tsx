@@ -259,5 +259,5 @@ export default function DocumentFormRenderer({
         },
     };
 
-    return <div className="workflow-document-canvas text-sm text-[#191c1e]">{parse(layoutHtml, parserOptions)}</div>;
+    return <div className="workflow-document-canvas overflow-x-auto text-sm text-[#191c1e]">{parse(layoutHtml, parserOptions)}</div>;
 }

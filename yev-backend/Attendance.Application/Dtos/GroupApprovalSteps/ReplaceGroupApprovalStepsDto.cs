@@ -16,6 +16,17 @@ namespace Attendance.Application.Dtos.GroupApprovalSteps
 
         // Ignored unless CanResubmit.
         public bool ResubmitSkipsIntermediate { get; set; }
+
+        [Required]
+        public List<ReplaceGroupApprovalStepMemberDto> Members { get; set; } = new();
+    }
+
+    public class ReplaceGroupApprovalStepMemberDto
+    {
+        [Required]
+        public int EmployeeId { get; set; }
+
+        public bool ReceivesMail { get; set; }
     }
 
     // Replaces the whole list; element order is StepOrder. Empty clears the Group's tree.
@@ -23,5 +34,9 @@ namespace Attendance.Application.Dtos.GroupApprovalSteps
     {
         [Required]
         public List<ReplaceGroupApprovalStepItemDto> Steps { get; set; } = new();
+
+        public bool CreatorMustSign { get; set; }
+
+        public bool StepwiseEdit { get; set; }
     }
 }

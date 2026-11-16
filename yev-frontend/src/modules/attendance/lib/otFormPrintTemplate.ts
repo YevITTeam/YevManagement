@@ -13,6 +13,22 @@ export interface PrintLimits {
     yearlyOtHourLimit: number;
 }
 
+// Shared with the detail/e-mail screens. Red keeps marking anyone past the company limit (or past their own, lower one);
+// a personal limit, as it stood when the person was put on the form, is noted beside it so a raised limit stays visible.
+export function formOverLimit(
+    row: Pick<OtFormEmployeeDto, "monthToDate" | "yearToDate" | "customMonthlyOtHourLimitSnapshot" | "customYearlyOtHourLimitSnapshot">,
+    limits: PrintLimits
+) {
+    const check = (hours: number, shared: number, own: number | null) => {
+        const over = hours > shared || (own !== null && hours > own);
+        return { over, ownLimit: over ? own : null, withinOwn: own !== null && hours <= own };
+    };
+    return {
+        month: check(row.monthToDate, limits.monthlyOtHourLimit, row.customMonthlyOtHourLimitSnapshot),
+        year: check(row.yearToDate, limits.yearlyOtHourLimit, row.customYearlyOtHourLimitSnapshot),
+    };
+}
+
 export interface PageSpec {
     widthPt: number;
     heightPt: number;
@@ -88,6 +104,14 @@ export function formatDate(value: string) {
 
 export function formatTime(value: string) {
     return value?.slice(0, 5) ?? "-";
+}
+
+// The header carries the dates, so list rows need none: every time sits inside the form's span.
+// UTC keeps the local offset from shifting the date.
+function nextDay(date: string) {
+    const d = new Date(date);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
 }
 
 // "dd/mm/yyyy hh:mm" printed under each signature.
@@ -344,7 +368,8 @@ function headerBlock(form: OtFormDto, paperSize: PaperSize) {
     const attachNote = `<div style="text-align:right;font-size:${S.small}pt">(Kèm theo danh sách ở trang sau)</div>${
         L.attachNoteJp ? `<div style="text-align:right;font-size:${S.small}pt">${jp(L.attachNoteJp)}</div>` : ""
     }`;
-    const timeLine1 = `<div style="font-size:${S.label}pt">Từ ${jp("から")} <span style="font-weight:bold">${esc(formatTime(form.startTime))}</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Đến ${jp("まで")} <span style="font-weight:bold">${esc(`${formatTime(form.endTime)}${isOvernight(form.startTime, form.endTime) ? " +1" : ""} (${form.totalHour}h)`)}</span></div>`;
+    const overnight = isOvernight(form.startTime, form.endTime);
+    const timeLine1 = `<div style="font-size:${S.label}pt">Từ ${jp("から")} <span style="font-weight:bold">${esc(overnight ? `${formatTime(form.startTime)} ${formatDate(form.date)}` : formatTime(form.startTime))}</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Đến ${jp("まで")} <span style="font-weight:bold">${esc(`${overnight ? `${formatTime(form.endTime)} ${formatDate(nextDay(form.date))}` : formatTime(form.endTime)} (${form.totalHour}h)`)}</span></div>`;
     const timeLine2 = `<div style="font-size:${S.label}pt">Ngày ${jp("日付")} <span style="font-weight:bold">${esc(formatDate(form.date))}</span></div>`;
     const infoTable = table(
         infoWidths,
@@ -474,8 +499,8 @@ function employeeTable(
     const head = (vn: string, jpText: string) => bilingualHeader(vn, jpText, S.list);
     const fit = (text: string, col: number) =>
         `<span style="font-size:${fitPt(text, widths[col] - 6, S.list)}pt">${esc(text)}</span>`;
-    const accumulation = (hours: number, limit: number) =>
-        hours > limit
+    const accumulation = (hours: number, isOver: boolean) =>
+        isOver
             ? `<span style="font-weight:bold;text-decoration:underline;color:${OVER_LIMIT_COLOR};font-size:${S.list}pt">${hours}</span>`
             : `<span style="font-size:${S.list}pt">${hours}</span>`;
 
@@ -487,9 +512,9 @@ function employeeTable(
                 { html: `<span style="font-size:${S.list}pt">${startIndex + i + 1}</span>`, align: "center" },
                 { html: e ? fit(e.fullName, 1) : "", nowrap: true },
                 { html: e ? fit(e.employeeCode, 2) : "", nowrap: true },
-                { html: e ? fit(`${formatTime(e.startTime)} — ${formatTime(e.endTime)}${isOvernight(e.startTime, e.endTime) ? " +1" : ""}`, 3) : "", nowrap: true },
-                { html: e ? accumulation(e.monthToDate, limits.monthlyOtHourLimit) : "", align: "center" },
-                { html: e ? accumulation(e.yearToDate, limits.yearlyOtHourLimit) : "", align: "center" },
+                { html: e ? fit(`${formatTime(e.startTime)} — ${formatTime(e.endTime)}`, 3) : "", nowrap: true, align: "center" },
+                { html: e ? accumulation(e.monthToDate, formOverLimit(e, limits).month.over) : "", align: "center" },
+                { html: e ? accumulation(e.yearToDate, formOverLimit(e, limits).year.over) : "", align: "center" },
                 { html: e?.noteVn ? fit(e.noteVn, 6) : "", nowrap: true },
             ],
         };
@@ -573,11 +598,25 @@ export function renderOtFormPages(form: OtFormDto, paperSize: PaperSize, limits:
     // "Ăn sau" only matters when there is a meal ticket to defer; production forms have no ate-later concept.
     const printable = form.employees
         .filter((e) => !e.isRemoved)
-        .map((e) =>
-            !form.isProductionForm && !e.didEat && e.mealTicketType > 0
-                ? { ...e, noteVn: [e.noteVn, "Ăn sau"].filter(Boolean).join("; ") }
-                : e
-        );
+        .map((e) => {
+            const over = formOverLimit(e, limits);
+            const owned = [
+                { check: over.month, unit: "tháng" },
+                { check: over.year, unit: "năm" },
+            ].filter((x) => x.check.ownLimit !== null);
+            // Spelled out so an approver doesn't read the red figure as a breach of a limit that was raised for this person.
+            const limitNote = (within: boolean, status: string) => {
+                const items = owned.filter((x) => x.check.withinOwn === within).map((x) => `${x.check.ownLimit}h/${x.unit}`);
+                return items.length > 0 ? `Giới hạn riêng ${items.join(", ")}: ${status}` : null;
+            };
+            const notes = [
+                e.noteVn,
+                !form.isProductionForm && !e.didEat && e.mealTicketType > 0 ? "Ăn sau" : null,
+                limitNote(true, "chưa vượt"),
+                limitNote(false, "đã vượt"),
+            ].filter(Boolean);
+            return notes.length > 0 ? { ...e, noteVn: notes.join("; ") } : e;
+        });
     const chunks = buildEmployeePages(printable, paperSize);
     const capacity = EMPLOYEE_PAGE_CAPACITY[paperSize];
     const rowHeight = EMPLOYEE_ROW_HEIGHT[paperSize];

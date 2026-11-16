@@ -19,11 +19,22 @@ public partial class Group
     // false = office forms of this group always eat during the shift (meal break deducted).
     public bool AllowEatLater { get; set; } = true;
 
+    // Every creator signs the requester box at creation; counts toward the two boxes on the paper form.
+    public bool CreatorMustSign { get; set; }
+
+    // Office forms: the edit right climbs with the approvals (creator until the first approval, then the last approved level).
+    public bool StepwiseEdit { get; set; }
+
+    // TT/GT of everyone in the group; required once the group covers any Line × Ca (GroupLines).
+    public string? LineKind { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public virtual Department Department { get; set; } = null!;
 
     public virtual Workshop Workshop { get; set; } = null!;
+
+    public virtual ICollection<GroupLine> GroupLines { get; set; } = new List<GroupLine>();
 
     public virtual ICollection<OtForm> OtForms { get; set; } = new List<OtForm>();
 

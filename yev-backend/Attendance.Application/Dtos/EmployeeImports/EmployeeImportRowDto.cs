@@ -22,6 +22,10 @@ namespace Attendance.Application.Dtos.EmployeeImports
         public string? ShiftTeamCode { get; set; }
         public string? CongDoan { get; set; }
         public string? TaskName { get; set; }
+        // TT/GT; on preview rows this is the resolved value.
+        public string? StaffKind { get; set; }
+        // Xưởng column; on preview rows the resolved workshop.
+        public string? WorkshopCode { get; set; }
 
         public int? ResolvedProductionLineId { get; set; }
         public int? ResolvedTeamId { get; set; }

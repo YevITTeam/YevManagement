@@ -3,31 +3,26 @@ using Attendance.Application.Dtos.Reports;
 
 namespace Attendance.Application.Interfaces.Service
 {
-    // Daily reports for completed production-line forms.
+    // OT reports over completed forms; every query takes the same filter (date range, workshop, department, groups).
     public interface IProductionOtReportService
     {
-        // departmentId null = all departments, since production forms may belong to any department.
+        // One day only; JSON, the FE renders the PDF.
+        Task<ProductionTicketReportDto> GetTicketReportAsync(ReportFilterDto filter);
 
-        // Returns JSON; FE renders the PDF.
-        Task<ProductionTicketReportDto> GetTicketReportAsync(DateOnly date, int? departmentId, int? workshopId = null);
-
-        // Returned as raw bytes; the controller wraps it in File(...).
-        Task<(byte[] Content, string FileName)> ExportHoursReportAsync(DateOnly date, int? departmentId, int? workshopId = null);
+        // Excel files return raw bytes; the controller wraps them in File(...). One row per person per day unless noted.
+        Task<(byte[] Content, string FileName)> ExportHoursReportAsync(ReportFilterDto filter);
 
         // One row per OT form (not merged per person), plus repeated per-day totals.
-        Task<(byte[] Content, string FileName)> ExportTimesReportAsync(DateOnly date, int? departmentId, int? workshopId = null);
+        Task<(byte[] Content, string FileName)> ExportTimesReportAsync(ReportFilterDto filter);
 
-        // File names follow "{QueryName}_{yyyy-MM-d}_{DepartmentCode}.xlsx" (day without leading zero).
-
-        // 17 columns, one row per person per day.
-        Task<(byte[] Content, string FileName)> ExportQryExportExcelAsync(DateOnly date, int? departmentId, int? workshopId = null);
-        Task<(byte[] Content, string FileName)> ExportOfficeQryExportExcelAsync(DateOnly fromDate, DateOnly toDate, int? departmentId, int? workshopId = null, int[]? groupIds = null);
-        Task<IReadOnlyList<ProductionOptionDto>> GetOfficeProductivityGroupsAsync(int? workshopId, int? departmentId);
+        Task<(byte[] Content, string FileName)> ExportQryExportExcelAsync(ReportFilterDto filter);
 
         // Separate purpose from Qry_EXPORT_EXCEL, not a reduced version of it.
-        Task<(byte[] Content, string FileName)> ExportSumExportDataAsync(DateOnly date, int? departmentId, int? workshopId = null);
+        Task<(byte[] Content, string FileName)> ExportSumExportDataAsync(ReportFilterDto filter);
 
-        // One item per Block/ShiftTeam with OT that day; FE renders the PDFs and zips them.
-        Task<List<ProductionTicketBatchGroupDto>> GetTicketBatchAsync(DateOnly date, int? departmentId, int? workshopId = null);
+        Task<IReadOnlyList<ProductionOptionDto>> GetGroupsAsync(int? workshopId, int? departmentId);
+
+        // One day only; one item per Block/ShiftTeam, the FE renders the PDFs and zips them.
+        Task<List<ProductionTicketBatchGroupDto>> GetTicketBatchAsync(ReportFilterDto filter);
     }
 }

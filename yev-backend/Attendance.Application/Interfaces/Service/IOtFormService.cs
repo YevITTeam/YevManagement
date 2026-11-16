@@ -47,7 +47,6 @@ namespace Attendance.Application.Interfaces.Service
         Task<List<MyCreateScopeItemDto>> GetMyCreateScopesAsync(string userName, bool isAdmin);
 
         // Lets FE lock the Team/Line/Shift-team dropdowns for Line Leaders.
-        Task<List<MyProductionCreateScopeItemDto>> GetMyProductionCreateScopesAsync(string userName, bool isAdmin);
 
         Task<List<int>> CheckOverlapAsync(CheckOtFormOverlapDto request);
 

@@ -18,19 +18,42 @@ interface ProductionCatalogFormProps {
     isOpen: boolean;
     mode: "create" | "edit";
     initial: ProductionCatalogItemDto | null;
-    teamOptions: SelectOption[];
+    workshopOptions: SelectOption[];
+    // All teams; the form narrows them to the chosen workshop.
+    teams: ProductionCatalogItemDto[];
     loading: boolean;
     onClose: () => void;
     onSubmit: (values: SaveProductionCatalogItemDto) => void | Promise<void>;
 }
 
-const emptyValues = { code: "", nameVn: "", teamId: "" as number | "", congDoan: "" };
+const emptyValues = {
+    code: "",
+    nameVn: "",
+    workshopId: "" as number | "",
+    teamId: "" as number | "",
+    congDoan: "",
+    cdMae: "",
+    sortCode: "",
+    hasDirectStaff: true,
+    hasIndirectStaff: true,
+};
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
-export default function ProductionCatalogForm({ kind, kindLabel, isOpen, mode, initial, teamOptions, loading, onClose, onSubmit }: ProductionCatalogFormProps) {
+export default function ProductionCatalogForm({
+    kind,
+    kindLabel,
+    isOpen,
+    mode,
+    initial,
+    workshopOptions,
+    teams,
+    loading,
+    onClose,
+    onSubmit,
+}: ProductionCatalogFormProps) {
     const t = useTranslations("Attendance.ProductionCatalog");
     const tCommon = useTranslations("Common");
     const [values, setValues] = useState(emptyValues);
@@ -38,15 +61,32 @@ export default function ProductionCatalogForm({ kind, kindLabel, isOpen, mode, i
     useDialogReset(isOpen, initial, (current) => {
         setValues(
             current
-                ? { code: current.code, nameVn: current.nameVn ?? "", teamId: current.teamId ?? "", congDoan: current.congDoan ?? "" }
-                : emptyValues
+                ? {
+                      code: current.code,
+                      nameVn: current.nameVn ?? "",
+                      workshopId: current.workshopId ?? "",
+                      teamId: current.teamId ?? "",
+                      congDoan: current.congDoan ?? "",
+                      cdMae: current.cdMae ?? "",
+                      sortCode: current.sortCode ?? "",
+                      hasDirectStaff: current.hasDirectStaff,
+                      hasIndirectStaff: current.hasIndirectStaff,
+                  }
+                : { ...emptyValues, workshopId: workshopOptions.length === 1 ? Number(workshopOptions[0].value) : "" }
         );
     });
 
     if (!isOpen) return null;
 
     const isLine = kind === "Line";
-    const canSubmit = values.code.trim() !== "" && (!isLine || values.teamId !== "");
+    const hasWorkshop = kind !== "ShiftTeam";
+    const canSubmit =
+        values.code.trim() !== "" &&
+        (!hasWorkshop || values.workshopId !== "") &&
+        (!isLine || values.hasDirectStaff || values.hasIndirectStaff);
+    const teamOptions: SelectOption[] = teams
+        .filter((team) => team.workshopId === values.workshopId)
+        .map((team) => ({ value: team.id, label: team.code, searchText: team.code.toLowerCase() }));
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
@@ -54,10 +94,28 @@ export default function ProductionCatalogForm({ kind, kindLabel, isOpen, mode, i
         onSubmit({
             code: values.code.trim(),
             nameVn: isLine ? null : values.nameVn.trim() || null,
+            workshopId: hasWorkshop && values.workshopId !== "" ? values.workshopId : null,
             teamId: isLine && values.teamId !== "" ? values.teamId : null,
             congDoan: isLine ? values.congDoan.trim() || null : null,
+            cdMae: isLine ? values.cdMae.trim() || null : null,
+            sortCode: isLine ? values.sortCode.trim() || null : null,
+            hasDirectStaff: isLine && values.hasDirectStaff,
+            hasIndirectStaff: isLine && values.hasIndirectStaff,
         });
     };
+
+    const textField = (key: "congDoan" | "cdMae" | "sortCode", label: string) => (
+        <label className="block w-28">
+            <span className={fieldLabelClassName}>{label}</span>
+            <input
+                value={values[key]}
+                onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+                maxLength={50}
+                disabled={loading}
+                className={fieldClassName}
+            />
+        </label>
+    );
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -67,7 +125,7 @@ export default function ProductionCatalogForm({ kind, kindLabel, isOpen, mode, i
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="production-catalog-form-title"
-                className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 w-full max-w-xl rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="production-catalog-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -85,6 +143,19 @@ export default function ProductionCatalogForm({ kind, kindLabel, isOpen, mode, i
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
+                        {hasWorkshop && (
+                            <div className="w-36">
+                                <span className={fieldLabelClassName}>{t("colWorkshop")}<RequiredMark /></span>
+                                <SearchableSelect
+                                    options={workshopOptions}
+                                    value={values.workshopId}
+                                    onChange={(workshopId) => setValues((current) => ({ ...current, workshopId, teamId: "" }))}
+                                    placeholder=""
+                                    disabled={loading}
+                                />
+                            </div>
+                        )}
+
                         <label className="block w-32">
                             <span className={fieldLabelClassName}>{t("colCode")}<RequiredMark /></span>
                             <input
@@ -100,26 +171,33 @@ export default function ProductionCatalogForm({ kind, kindLabel, isOpen, mode, i
 
                         {isLine ? (
                             <>
-                                <div className="w-40">
-                                    <span className={fieldLabelClassName}>{t("colTeam")}<RequiredMark /></span>
+                                <div className="w-32">
+                                    <span className={fieldLabelClassName}>{t("colTeam")}</span>
                                     <SearchableSelect
                                         options={teamOptions}
                                         value={values.teamId}
                                         onChange={(teamId) => setValues((current) => ({ ...current, teamId }))}
-                                        placeholder={t("selectTeam")}
-                                        disabled={loading}
+                                        placeholder=""
+                                        disabled={loading || values.workshopId === ""}
                                     />
                                 </div>
-                                <label className="block w-32">
-                                    <span className={fieldLabelClassName}>{t("colCongDoan")}</span>
-                                    <input
-                                        value={values.congDoan}
-                                        onChange={(event) => setValues((current) => ({ ...current, congDoan: event.target.value }))}
-                                        maxLength={50}
-                                        disabled={loading}
-                                        className={fieldClassName}
-                                    />
-                                </label>
+                                {textField("congDoan", t("colCongDoan"))}
+                                {textField("cdMae", t("colCdMae"))}
+                                {textField("sortCode", t("colSortCode"))}
+                                <div className="flex h-10 items-center gap-4" title={t("staffKindHint")}>
+                                    {(["hasDirectStaff", "hasIndirectStaff"] as const).map((key) => (
+                                        <label key={key} className="flex items-center gap-1.5 text-sm text-[#191c1e]">
+                                            <input
+                                                type="checkbox"
+                                                checked={values[key]}
+                                                onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.checked }))}
+                                                disabled={loading}
+                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
+                                            />
+                                            {key === "hasDirectStaff" ? "TT" : "GT"}
+                                        </label>
+                                    ))}
+                                </div>
                             </>
                         ) : (
                             <label className="block min-w-48 flex-1">

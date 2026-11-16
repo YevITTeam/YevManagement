@@ -44,18 +44,25 @@ export default function DocumentImportDropzone({ onClose, onImported }: Document
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="fixed inset-0 bg-black/40" onClick={() => !isConverting && onClose()} />
 
-            <div role="dialog" aria-modal="true" className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
-                <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-[#191c1e]">{t("importDocxTitle")}</h3>
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="document-import-title"
+                className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-xl sm:p-6"
+            >
+                <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#e0e3e5] pb-4">
+                    <h3 id="document-import-title" className="text-lg font-semibold text-[#191c1e]">
+                        {t("importDocxTitle")}
+                    </h3>
                     <button
+                        type="button"
                         onClick={() => !isConverting && onClose()}
-                        className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
+                        className="shrink-0 cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
                         aria-label={tCommon("close")}
                     >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
-
 
                 <div
                     onDragOver={(e) => {
@@ -70,7 +77,7 @@ export default function DocumentImportDropzone({ onClose, onImported }: Document
                         if (file) handleFile(file);
                     }}
                     onClick={() => !isConverting && inputRef.current?.click()}
-                    className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-10 text-center transition-colors ${
+                    className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-6 text-center sm:p-10 transition-colors ${
                         isDragOver ? "border-[#e3000f] bg-[#fff4f2]" : "border-[#e0e3e5] hover:border-[#e3000f]/50"
                     } ${isConverting ? "pointer-events-none opacity-60" : ""}`}
                 >

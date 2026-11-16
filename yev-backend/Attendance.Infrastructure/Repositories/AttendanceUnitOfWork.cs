@@ -38,11 +38,11 @@ namespace Attendance.Infrastructure.Repositories
             IDepartmentApprovalStepCoordinatorRepository departmentApprovalStepCoordinators,
             IGroupApprovalStepCoordinatorRepository groupApprovalStepCoordinators,
             IGroupBorrowedApproverRepository groupBorrowedApprovers,
+            IGroupApprovalStepMemberRepository groupApprovalStepMembers,
             IEmployeeAccumulationHistoryRepository employeeAccumulationHistories,
             IProductionLineRepository productionLines,
             IProductionShiftTeamRepository productionShiftTeams,
             IProductionTeamRepository productionTeams,
-            IProductionApprovalStepRepository productionApprovalSteps,
             IOtFormEditLogRepository otFormEditLogs,
             IOtFormPaperScanRepository otFormPaperScans,
             IApprovalDelegationRepository approvalDelegations,
@@ -62,7 +62,6 @@ namespace Attendance.Infrastructure.Repositories
             ProductionLines = productionLines;
             ProductionShiftTeams = productionShiftTeams;
             ProductionTeams = productionTeams;
-            ProductionApprovalSteps = productionApprovalSteps;
             AttendanceSettings = attendanceSettings;
             WorkCalendarDays = workCalendarDays;
             OtFormBatches = otFormBatches;
@@ -76,6 +75,7 @@ namespace Attendance.Infrastructure.Repositories
             DepartmentApprovalStepCoordinators = departmentApprovalStepCoordinators;
             GroupApprovalStepCoordinators = groupApprovalStepCoordinators;
             GroupBorrowedApprovers = groupBorrowedApprovers;
+            GroupApprovalStepMembers = groupApprovalStepMembers;
             Departments = departments;
             Groups = groups;
             Workshops = workshops;
@@ -125,11 +125,11 @@ namespace Attendance.Infrastructure.Repositories
         public IDepartmentApprovalStepCoordinatorRepository DepartmentApprovalStepCoordinators { get; }
         public IGroupApprovalStepCoordinatorRepository GroupApprovalStepCoordinators { get; }
         public IGroupBorrowedApproverRepository GroupBorrowedApprovers { get; }
+        public IGroupApprovalStepMemberRepository GroupApprovalStepMembers { get; }
         public IEmployeeAccumulationHistoryRepository EmployeeAccumulationHistories { get; }
         public IProductionLineRepository ProductionLines { get; }
         public IProductionShiftTeamRepository ProductionShiftTeams { get; }
         public IProductionTeamRepository ProductionTeams { get; }
-        public IProductionApprovalStepRepository ProductionApprovalSteps { get; }
         public IOtFormEditLogRepository OtFormEditLogs { get; }
         public IOtFormPaperScanRepository OtFormPaperScans { get; }
         public IApprovalDelegationRepository ApprovalDelegations { get; }

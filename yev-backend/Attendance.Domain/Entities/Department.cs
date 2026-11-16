@@ -22,5 +22,4 @@ public partial class Department
 
     public virtual ICollection<DepartmentApprovalStepCoordinator> DepartmentApprovalStepCoordinators { get; set; } = new List<DepartmentApprovalStepCoordinator>();
 
-    public virtual ICollection<ProductionApprovalStep> ProductionApprovalSteps { get; set; } = new List<ProductionApprovalStep>();
 }

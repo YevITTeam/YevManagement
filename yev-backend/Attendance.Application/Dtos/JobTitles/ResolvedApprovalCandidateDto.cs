@@ -5,5 +5,6 @@ namespace Attendance.Application.Dtos.JobTitles
         public int EmployeeId { get; set; }
         public string UserName { get; set; } = null!;
         public string FullName { get; set; } = null!;
+        public bool ReceivesMail { get; set; } = true;
     }
 }

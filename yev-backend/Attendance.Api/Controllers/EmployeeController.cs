@@ -12,12 +12,10 @@ namespace Attendance.Api.Controllers
     {
         private const string AdminRole = "Admin";
         private readonly IEmployeeService _employeeService;
-        private readonly IProductionEmployeeService _productionEmployeeService;
 
-        public EmployeeController(IEmployeeService employeeService, IProductionEmployeeService productionEmployeeService)
+        public EmployeeController(IEmployeeService employeeService)
         {
             _employeeService = employeeService;
-            _productionEmployeeService = productionEmployeeService;
         }
 
         [RequirePermission("Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
@@ -27,15 +25,6 @@ namespace Attendance.Api.Controllers
         {
             var result = await _employeeService.GetPagedAsync(CurrentUserName, User.IsInRole(AdminRole), pageIndex, pageSize, filter);
             return Success(result);
-        }
-
-        // Quick single-person edit between imports.
-        [RequirePermission("Attendance.ProductionEmployee.Update")]
-        [HttpPut("{id}/production-info")]
-        public async Task<ActionResult<ApiResponse<bool>>> UpdateProductionInfo(int id, [FromBody] UpdateProductionEmployeeDto request)
-        {
-            await _productionEmployeeService.UpdateAsync(id, request, CurrentUserName, User.IsInRole(AdminRole));
-            return Success(true, "Cập nhật thông tin dưới chuyền thành công.");
         }
 
         // date = the form's date so projected accumulation uses that month/year; defaults to today.
@@ -159,8 +148,24 @@ namespace Attendance.Api.Controllers
             return Success(true, "Xóa nhân viên thành công.");
         }
 
-        // Scoped assignment reuses the approval-tree permission so coordinators don't need Employee.Update (Admin-only);
-        // the service limits non-Admins to their own Department.
+        [RequirePermission("Attendance.Employee.Delete")]
+        [HttpPost("bulk-delete")]
+        public async Task<ActionResult<ApiResponse<int>>> DeleteMany([FromBody] List<int> ids)
+        {
+            var count = await _employeeService.DeleteManyAsync(CurrentUserName, User.IsInRole(AdminRole), ids);
+            return Success(count, $"Đã xoá {count} nhân viên.");
+        }
+
+        // Clears the resigned mark set by an Overwrite import.
+        [RequirePermission("Attendance.Employee.Update")]
+        [HttpPost("restore-resigned")]
+        public async Task<ActionResult<ApiResponse<int>>> RestoreResigned([FromBody] List<int> ids)
+        {
+            var count = await _employeeService.RestoreResignedAsync(CurrentUserName, User.IsInRole(AdminRole), ids);
+            return Success(count, $"Đã bỏ đánh dấu Nghỉ việc cho {count} nhân viên.");
+        }
+
+        // Part of editing the approval tree, so the service only lets Admin through.
         [RequirePermission("Attendance.DepartmentApprovalStep.Update")]
         [HttpPut("{id}/department-job-title")]
         public async Task<ActionResult<ApiResponse<EmployeeDto>>> AssignDepartmentJobTitle(

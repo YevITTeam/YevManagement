@@ -1,7 +1,6 @@
 namespace Attendance.Domain.Entities;
 
-// Someone from elsewhere in the Department lent to this Group: may create its forms and, when their title is one of
-// its steps, approve them. Their own GroupId/JobTitle stay untouched and the chain still skips steps by their rank.
+// ponytail: the app no longer reads this; kept so existing rows can be moved onto levels, then drop the table.
 public partial class GroupBorrowedApprover
 {
     public int Id { get; set; }

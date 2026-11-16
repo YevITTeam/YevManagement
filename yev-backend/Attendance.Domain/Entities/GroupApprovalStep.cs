@@ -1,6 +1,7 @@
 namespace Attendance.Domain.Entities;
 
 // Intermediate (non-terminal) approval levels per group; terminal levels stay in DepartmentApprovalStep.
+// The job title names the level and its rank; Members decides who acts on it.
 // Managed by whole-list replace, no per-row CRUD.
 public partial class GroupApprovalStep
 {
@@ -29,4 +30,6 @@ public partial class GroupApprovalStep
     public virtual Group Group { get; set; } = null!;
 
     public virtual JobTitle JobTitle { get; set; } = null!;
+
+    public virtual ICollection<GroupApprovalStepMember> Members { get; set; } = new List<GroupApprovalStepMember>();
 }

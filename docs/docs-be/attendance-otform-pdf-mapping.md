@@ -33,8 +33,8 @@ Bước có `isPaperApproval` in chữ "Đã ký giấy" + "Xác nhận bởi <A
 |---|---|
 | Số lượng nhân viên / 人数 | `numberOfEmployee` |
 | Người chịu trách nhiệm / 責任者 | Bước trong `approvalSteps[]` có `isResponsibleSnapshot == true` → người đã ký bước đó (`approvalHistories[stepOrder].approverFullName`, fallback `approverUserName`); chưa ký thì `candidates[].fullName` của bước (nối ` / `); chỉ khi chuỗi không có bước IsResponsible mới lấy `createdByFullName`/`createdByUserName`. Dùng chung cho đơn Nhóm và đơn chuyền |
-| Thời gian — Từ / から | `startTime` (`HH:mm`) |
-| Thời gian — Đến / まで | `endTime` (`HH:mm`) — giờ kết thúc tối đa của đơn; từng NV có thể sớm hơn (§5) |
+| Thời gian — Từ / から | `startTime` (`HH:mm`); đơn qua đêm (`endTime < startTime`) ghi kèm ngày: `HH:mm dd/MM/yyyy` theo `date` |
+| Thời gian — Đến / まで | `endTime` (`HH:mm`) — giờ kết thúc tối đa của đơn; từng NV có thể sớm hơn (§5). Đơn qua đêm ghi kèm ngày hôm sau `HH:mm dd/MM/yyyy` |
 | Ngày / 日付 | `date` (`dd/MM/yyyy`) |
 | Lý do / 理由 | Dòng 1: `reasonNameVn` (+ `: {subReason}` nếu có). Dòng 2 (font nhỏ hơn, bỏ nếu null): `reasonNameJp` |
 | Tên công đoạn / 工程名 | Xem §3 |
@@ -66,10 +66,10 @@ Phiếu giấy không có ô cho số phiếu ăn. Khi `isEat=true`, ô "Ăn" **
 | Stt | Tự sinh 1..N |
 | Họ và tên / 氏名 | `employees[i].fullName` |
 | Mã NV / 社員コード | `employees[i].employeeCode` |
-| Thời gian / 時間 | `startTime – endTime` (`HH:mm - HH:mm`); `startTime` = giờ đầu đơn |
-| Lũy kế — Tháng / 月間 | `employees[i].monthToDate` (BE đã cộng giờ của chính đơn) |
+| Thời gian / 時間 | `startTime – endTime` (`HH:mm - HH:mm`); `startTime` = giờ đầu đơn. Chỉ ghi giờ, kể cả đơn qua đêm: ngày đã ghi ở ô Thời gian đầu phiếu, giờ nào sớm hơn giờ bắt đầu đơn là ngày hôm sau |
+| Lũy kế — Tháng / 月間 | `employees[i].monthToDate` (BE đã cộng giờ của chính đơn); đỏ đậm gạch chân khi vượt mốc chung hoặc vượt mốc riêng lúc lập đơn (`formOverLimit`) |
 | Lũy kế — Năm / 年間 | `employees[i].yearToDate` (như trên) |
-| Ghi chú / 備考 | `employees[i].noteVn` (+ `noteJp`); form thường + `didEat = false` + `mealTicketType > 0` → nối thêm "Ăn sau" |
+| Ghi chú / 備考 | `employees[i].noteVn` (+ `noteJp`); form thường + `didEat = false` + `mealTicketType > 0` → nối thêm "Ăn sau"; ô lũy kế đang đỏ mà người đó có mốc riêng (`customMonthly/YearlyOtHourLimitSnapshot`) → nối "Giới hạn riêng {x}h/tháng, {y}h/năm: chưa vượt" (hoặc "đã vượt"; khác trạng thái thì tách 2 cụm) |
 
 ## 6. Chú thích TH1/TH2/TH3 (footer)
 

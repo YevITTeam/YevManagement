@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
     DndContext,
     DragOverlay,
@@ -47,7 +47,7 @@ import OrgUnitForm, { type OrgUnitFormValues, type FlatOrgUnitOption } from "./O
 import AssignEmployeeDialog from "./AssignEmployeeDialog";
 import OrgUnitMemberTree from "./OrgUnitMemberTree";
 import OrgUnitDetailPanel from "./OrgUnitDetailPanel";
-import OrgUnitChart, { type LevelInfo } from "./OrgUnitChart";
+import OrgUnitChart from "./OrgUnitChart";
 import { Tabs } from "@/components/ui/Tabs";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -143,6 +143,12 @@ function RootDropZone({ label }: { label: string }) {
             {label}
         </div>
     );
+}
+
+interface LevelInfo {
+    name: string;
+    icon: LucideIcon;
+    isTop: boolean;
 }
 
 // One icon per org level, from the top level down; deeper levels reuse the last icon.
@@ -244,8 +250,9 @@ function TreeNode({ node, levels, collapsedIds, canManage, selectedId, onSelect,
 
                 <span className="flex-1" />
 
+                {/* Hidden on phones where the row is too narrow; the detail panel carries the same actions. */}
                 {canManage && (
-                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+                    <div className="hidden shrink-0 items-center gap-0.5 opacity-0 transition-opacity sm:flex group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                         <button type="button" onClick={() => onAddChild(node.id)} title={t("actionAddChild")} aria-label={t("actionAddChild")} className={rowActionClassName}>
                             <Plus className="size-3.5" />
                         </button>
@@ -304,6 +311,15 @@ export default function OrgUnitList() {
     const [jobTitles, setJobTitles] = useState<JobTitleDto[]>([]);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [dragging, setDragging] = useState<DragData | null>(null);
+    const detailRef = useRef<HTMLElement>(null);
+
+    // Below lg the detail panel stacks under a possibly long tree, so bring it into view on select.
+    const selectUnit = (id: number) => {
+        setSelectedId(id);
+        if (window.matchMedia("(max-width: 1023.98px)").matches) {
+            requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+        }
+    };
 
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -320,7 +336,7 @@ export default function OrgUnitList() {
     // Every node starts expanded; only the folded ones are tracked.
     const [collapsedIds, setCollapsedIds] = useState<Set<number>>(new Set());
     const [search, setSearch] = useState("");
-    const [view, setView] = useState<"list" | "chart">("list");
+    const [view, setView] = useState<"list" | "chart">("chart");
 
     const { isLoading, error, refetch: fetchAll } = useFetchEffect(
         async () => {
@@ -507,7 +523,7 @@ export default function OrgUnitList() {
     return (
         <div className="space-y-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("title")}</h1>
+                <h1 className="text-lg font-semibold text-[#191c1e]">{t("title")}</h1>
 
                 <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -579,22 +595,30 @@ export default function OrgUnitList() {
                                 activeKey={view}
                                 onChange={setView}
                             />
+                            {view === "list" && (
+                            <>
                             <button
                                 type="button"
                                 onClick={() => setCollapsedIds(new Set(foldableIds))}
                                 disabled={isSearching || foldableIds.length === 0}
-                                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-xs font-semibold text-[#191c1e] transition hover:bg-[#e6e9ec] disabled:cursor-not-allowed disabled:opacity-50"
+                                title={t("collapseAll")}
+                                aria-label={t("collapseAll")}
+                                className="flex h-8 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-2.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#e6e9ec] disabled:cursor-not-allowed disabled:opacity-50 sm:px-3"
                             >
-                                <ChevronsDownUp className="h-3.5 w-3.5" /> {t("collapseAll")}
+                                <ChevronsDownUp className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{t("collapseAll")}</span>
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setCollapsedIds(new Set())}
                                 disabled={isSearching || collapsedIds.size === 0}
-                                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-xs font-semibold text-[#191c1e] transition hover:bg-[#e6e9ec] disabled:cursor-not-allowed disabled:opacity-50"
+                                title={t("expandAll")}
+                                aria-label={t("expandAll")}
+                                className="flex h-8 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-2.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#e6e9ec] disabled:cursor-not-allowed disabled:opacity-50 sm:px-3"
                             >
-                                <ChevronsUpDown className="h-3.5 w-3.5" /> {t("expandAll")}
+                                <ChevronsUpDown className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{t("expandAll")}</span>
                             </button>
+                            </>
+                            )}
                         </div>
                     </div>
                 )}
@@ -619,7 +643,7 @@ export default function OrgUnitList() {
                                 collapsedIds={effectiveCollapsedIds}
                                 canManage={canManage}
                                 selectedId={selectedId}
-                                onSelect={setSelectedId}
+                                onSelect={selectUnit}
                                 onToggle={toggleNode}
                                 onAddChild={(parentId) => openCreateForm(parentId)}
                                 onAssignMember={(n) => setAssigningFor(n)}
@@ -627,24 +651,17 @@ export default function OrgUnitList() {
                                 onDelete={(n) => setDeletingItem(n)}
                             />
                         ))}
-                    {view === "chart" && visibleTree.length > 0 && (
-                        <OrgUnitChart
-                            nodes={visibleTree}
-                            levels={levels}
-                            collapsedIds={effectiveCollapsedIds}
-                            canManage={canManage}
-                            onToggle={toggleNode}
-                            onAddChild={(parentId) => openCreateForm(parentId)}
-                            onAssignMember={(n) => setAssigningFor(n)}
-                            onEdit={(id) => openEditForm(id)}
-                            onDelete={(n) => setDeletingItem(n)}
-                        />
-                    )}
+                    {view === "chart" && visibleTree.length > 0 && <OrgUnitChart nodes={visibleTree} />}
                 </div>
             </section>
 
             {view === "list" && (
-                <aside className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm lg:sticky lg:top-4">
+                <aside
+                    ref={detailRef}
+                    className={`scroll-mt-3 overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm lg:sticky lg:top-4 ${
+                        selectedNode ? "" : "hidden lg:block"
+                    }`}
+                >
                     {selectedNode ? (
                         <OrgUnitDetailPanel
                             key={selectedNode.id}
@@ -653,7 +670,7 @@ export default function OrgUnitList() {
                             parentName={parentMap.get(selectedNode.id)?.nameVn ?? null}
                             jobTitles={jobTitles}
                             canManage={canManage}
-                            onSelect={setSelectedId}
+                            onSelect={selectUnit}
                             onAddChild={(parentId) => openCreateForm(parentId)}
                             onAssignMember={(n) => setAssigningFor(n)}
                             onEdit={(id) => openEditForm(id)}

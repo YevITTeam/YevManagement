@@ -103,7 +103,7 @@ export default function WorkflowRequestDataView({ schema, data, printMode }: Wor
                 );
             },
         };
-        return <div className="workflow-document-canvas text-sm">{parse(schema.layoutHtml, options)}</div>;
+        return <div className="workflow-document-canvas overflow-x-auto text-sm print:overflow-visible">{parse(schema.layoutHtml, options)}</div>;
     }
 
     const sortedFields = [...schema.fields].sort((a, b) => a.sortOrder - b.sortOrder);

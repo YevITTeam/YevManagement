@@ -27,6 +27,7 @@ import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSe
 import AccumulationHistoryModal from "@/modules/attendance/components/employees/AccumulationHistoryModal";
 import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
 import OtFormPrintView from "@/modules/attendance/components/ot-form/OtFormPrintView";
+import { formOverLimit } from "@/modules/attendance/lib/otFormPrintTemplate";
 
 interface OtFormDetailProps {
     id: number;
@@ -163,16 +164,14 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
     const showApprovalActions = !readOnly && canApprove && form?.status === 0 && currentStep !== null;
     const requireSignatureToApprove = currentStep?.requiresSignatureSnapshot ?? false;
 
-    // Group forms: Create + must be the creator. Production-line forms: CreateProduction, editable per step;
-    // candidate checks are left to BE (OtFormService.UpdateAsync) like Approve/Reject.
+    // Create + listed editor (the creator, or the last approved level on stepwise groups); old production-line forms are read-only.
     // Account names differ only in case between login ("YEV\x") and imported data ("yev\x").
     const myUserName = user?.userName.toLowerCase();
     const canEdit =
         !readOnly &&
         Boolean(form?.isEditable) &&
-        (form?.isProductionForm
-            ? hasPermission(user, "Attendance.OTForm.CreateProduction")
-            : hasPermission(user, "Attendance.OTForm.Create") && form?.createdByUserName.toLowerCase() === myUserName);
+        !form?.isProductionForm &&
+        hasPermission(user, "Attendance.OTForm.Create") && Boolean(form?.editorUserNames.some((n) => n.toLowerCase() === myUserName));
 
     const canResubmit =
         !readOnly &&
@@ -774,8 +773,9 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                 </thead>
                                 <tbody>
                                     {form.employees.map((employee) => {
-                                        const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
-                                        const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
+                                        const over = formOverLimit(employee, setting);
+                                        const isMonthOverLimit = over.month.over;
+                                        const isYearOverLimit = over.year.over;
                                         const isOverLimit = isMonthOverLimit || isYearOverLimit;
                                         const hours = employee.actualHours;
                                         // Removed: keep the row as an audit trail, dimmed and struck through, with the reason instead of the numbers.
@@ -831,6 +831,11 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                 </td>
                                                 <td className={`px-3 py-2.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                     {employee.monthToDate}h
+                                                    {over.month.ownLimit !== null && (
+                                                        <div className="text-[11px] font-normal text-[#8a8f94]" title={t("customLimitHint")}>
+                                                            {t(over.month.withinOwn ? "customLimitWithin" : "customLimitExceeded", { hours: over.month.ownLimit })}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className={`whitespace-nowrap px-3 py-2.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                     <span className="inline-flex items-center gap-1">
@@ -847,6 +852,11 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                             </button>
                                                         )}
                                                     </span>
+                                                    {over.year.ownLimit !== null && (
+                                                        <div className="text-[11px] font-normal text-[#8a8f94]" title={t("customLimitHint")}>
+                                                            {t(over.year.withinOwn ? "customLimitWithin" : "customLimitExceeded", { hours: over.year.ownLimit })}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 {/* Meal ticket type plus a "didn't eat" label; production-line forms always eat (DidEat true), so no label there. */}
                                                 <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm">

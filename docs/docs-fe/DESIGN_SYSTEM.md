@@ -43,6 +43,7 @@ Mẫu: `src/app/[locale]/layout.tsx` (root), `(pc-manager)/layout.tsx` + `PcMana
 - Sidebar `fixed left-0 top-0 z-40 h-screen w-[13.75rem]`, viền phải `#e0e3e5`, nền `#f7f9fb`; logo ô vuông đỏ; nội dung cột chính `mx-auto max-w-[1600px]`.
 - **Khung chiều cao + vùng cuộn chỉ khai ở root layout** (`body flex h-screen flex-col overflow-hidden` + `<main min-h-0 flex-1 overflow-y-auto>`). Layout con CHỈ `min-h-full`: cấm `h-screen`/`min-h-screen`/`calc(100vh-…)`, cấm `overflow-y-auto` bọc toàn trang, cấm lồng `<main>`. Vi phạm → 2 thanh cuộn chồng nhau cắt nội dung (Header `h-16` nằm trong luồng nên `100vh` + header tràn viewport).
 - Mọi flex item làm vùng cuộn (`flex-1 overflow-y-auto`) phải có `min-h-0`. Bảng luôn bọc `overflow-x-auto`.
+- Trang chi tiết có luồng duyệt: từ `xl` hai cột, cột phải `22rem` giữ bước duyệt + thao tác + lịch sử để người duyệt thấy nút ngay; dưới `xl` một cột. Màn thiết kế kiểu bảng công cụ + canvas: từ `lg` bảng công cụ là cột `w-56` dính khi cuộn, dưới `lg` nằm trên canvas dạng lưới 2–3 cột. Nội dung rộng cố định (văn bản .docx, canvas) cuộn ngang trong khung riêng, không kéo cả trang.
 - **Dưới `md` sidebar là ngăn kéo**: ẩn sẵn, mở bằng nút ☰ trên `Header`, đóng khi chuyển trang hoặc bấm lớp phủ; `--sidebar-w` về 0 (`globals.css`). Sidebar mới phải gắn `sidebarDrawerClass(mobileOpen)` từ `useSidebarCollapse`. Logo trên `Header` luôn là link về trang chủ (logo trong sidebar chỉ là nút mở rộng); trang có sidebar thì dưới `lg` chỉ hiện logo, không kèm chữ.
 - Nav item sidebar: `border-l-4`, active = `border-[#e3000f] bg-[#eceef0] text-[#191c1e]` + icon đỏ; thường = `border-transparent text-[#5e3f3a] hover:bg-[#eceef0]`. Mẫu `WorkflowManagerSidebar.tsx` (nhóm có overline, `aria-current`).
 
@@ -63,6 +64,7 @@ Chung: `inline-flex items-center gap-2 rounded-lg text-sm font-semibold transiti
 
 Nút header trang cỡ nhỏ `px-3 py-1.5 text-xs`. Tự viết class (không có component Button chung).
 **Nút rộng vừa chữ, KHÔNG `w-full`/ô grid chia đều**; nhóm nút `flex flex-wrap gap-2`, `whitespace-nowrap`, không `truncate`. Ngoại lệ: submit full-width trong form hẹp (login).
+Nút chỉ hiện khi hover (`opacity-0 group-hover:opacity-100`) phải kèm `[@media(hover:none)]:opacity-100`, không thì màn cảm ứng không bấm được. Nút có chữ dài trên header/toolbar: dưới `sm` chỉ còn icon (giữ `title` + `aria-label`).
 
 ### 4.3. Ô nhập & filter
 Ô chuẩn `h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]`; cỡ gọn `h-9 rounded-md px-2.5` (màn cấu hình/hàng nhiều ô, mẫu `AttendanceSettingPanel.tsx`). Một màn dùng 1 cỡ, không trộn trong cùng hàng.
@@ -115,7 +117,8 @@ Chọn 1 trong 2–3 tuỳ chọn ngắn trên thanh công cụ (khổ giấy…
 ### 4.11. Cây phân cấp (đơn vị + nhân sự)
 Mẫu `workflow/components/org-units/OrgUnitList.tsx`, `OrgUnitChart.tsx`.
 - Cây phẳng, không lồng khung: chỉ đường dẫn mảnh (`ml-5 border-l pl-3`). Đơn vị = hàng chữ đậm + icon vuông theo cấp (cấp cao nhất đỏ nhạt, còn lại xám); người = hàng nhẹ hơn + avatar tròn xám, chức danh chữ phụ cùng dòng. Hàng đơn vị: chevron · icon · tên · mã · số nhân sự; thao tác neo mép phải, luôn chiếm chỗ (chỉ đổi `opacity`).
-- Hai dạng xem bằng `Tabs`: "Cây danh sách" và "Sơ đồ khối" (thẻ `w-56`, đường bus `#c9cdd1`, nút tròn đáy thẻ thu/mở nhánh, canvas `overflow-x-auto`). Ô tìm không dấu; đang tìm thì ép mở hết nhánh.
+- Hai dạng xem bằng `Tabs`: "Sơ đồ khối" (mặc định) và "Cây danh sách". Ô tìm không dấu; đang tìm thì ép mở hết nhánh.
+- Sơ đồ khối = sơ đồ **nhân sự**, chỉ xem: mỗi chức danh có người giữ là một dải ngang (xếp theo `RankOrder`, nền xen kẽ trắng/`#f8fafc`), cột trái dính khi cuộn ngang ghi chức danh + số người; thẻ cùng chức danh luôn thẳng hàng, dây nối nhảy qua dải trống thì kéo dài. Dây quản lý suy từ cây đơn vị: trong một đơn vị mỗi bậc chức danh báo cáo người đầu tiên của bậc cao hơn kế trên, người cao nhất đơn vị báo cáo người cao nhất của đơn vị cha gần nhất có người. Thẻ `w-48` cao cố định: avatar tròn chữ cái đè mép trên, tên + mã nhân viên, dải dưới ghi đơn vị đang thuộc, tô màu theo dải (`#e3000f` → `#191c1e` → `#9a5b00` → `#5e3f3a`, chữ trắng). Đường bus `#c9cdd1`, nút tròn đáy thẻ thu/mở cấp dưới. Thêm/sửa/xoá đơn vị và kéo-thả làm ở "Cây danh sách".
 
 ## 5. Blueprint trang danh sách (CRUD)
 Header (tiêu đề + [Làm mới] [+ Thêm mới]) → `<section rounded-xl border shadow-sm>` gồm toolbar/filter → error bar → bảng (+ empty) → Pagination; kèm modal form dùng chung, `ConfirmDialog` xoá, toast cho mọi thao tác. Mẫu: `BranchList` + `BranchForm`, `DeviceTypeList` + `DeviceTypeForm`.

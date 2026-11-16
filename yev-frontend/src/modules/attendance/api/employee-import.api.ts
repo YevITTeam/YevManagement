@@ -2,6 +2,7 @@ import { api, getForBlob, type BlobDownloadResult } from "@/lib/client";
 import type {
     EmployeeExportFilter,
     EmployeeImportConfirmResultDto,
+    EmployeeImportMode,
     EmployeeImportPreviewResultDto,
     EmployeeImportPreviewRowDto,
     EmployeeOtHourLimitImportResultDto,
@@ -38,19 +39,20 @@ export const toExportQuery = (filter: EmployeeExportFilter, extra: Record<string
 
 export const EmployeeImportApi = {
     // Read-only, no DB writes.
-    previewImport: async (file: File) => {
+    previewImport: async (file: File, mode: EmployeeImportMode) => {
         const formData = new FormData();
         formData.append("file", file);
         const response = await api.postForm<ApiResponse<EmployeeImportPreviewResultDto>>(
-            ENDPOINTS.EMPLOYEE_IMPORT.preview,
+            `${ENDPOINTS.EMPLOYEE_IMPORT.preview}?mode=${mode}`,
             formData
         );
         return response.data;
     },
     // Re-send the preview rows unchanged (including Resolved*/isNew*); BE re-validates from scratch.
-    confirmImport: async (rows: EmployeeImportPreviewRowDto[]) => {
+    confirmImport: async (rows: EmployeeImportPreviewRowDto[], mode: EmployeeImportMode) => {
         const response = await api.post<ApiResponse<EmployeeImportConfirmResultDto>>(ENDPOINTS.EMPLOYEE_IMPORT.confirm, {
             rows,
+            mode,
         });
         return response.data;
     },

@@ -256,7 +256,7 @@ const DocumentFieldCanvas = forwardRef<DocumentFieldCanvasHandle, DocumentFieldC
                 onDrop={handleDrop}
                 onClick={handleContainerClick}
                 onDragStart={handleContainerDragStart}
-                className="workflow-document-canvas min-h-[600px] p-10 text-neutral-900 outline-none"
+                className="workflow-document-canvas min-h-[600px] p-4 text-neutral-900 sm:p-10 outline-none"
             />
             <div ref={indicatorRef} className="pointer-events-none absolute w-0.5 rounded-full bg-[#e3000f] opacity-0 transition-opacity" />
         </div>

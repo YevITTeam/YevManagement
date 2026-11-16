@@ -11,6 +11,8 @@ namespace Attendance.Application.Dtos.Employees
         public int? TeamId { get; set; }
         public int? ShiftTeamId { get; set; }
         public string? CongDoan { get; set; }
+        // true = only people marked resigned, false = only working people, null = everyone.
+        public bool? Resigned { get; set; }
     }
 
     public class EmployeeExportRowDto
@@ -22,6 +24,7 @@ namespace Attendance.Application.Dtos.Employees
         public string? DepartmentNameVn { get; set; }
         public string? GroupCode { get; set; }
         public string? GroupNameVn { get; set; }
+        public string? WorkshopCode { get; set; }
         public string? JobTitleCode { get; set; }
         public int TerminalLevel { get; set; }
         public decimal? CustomMonthlyOtHourLimit { get; set; }
@@ -34,5 +37,6 @@ namespace Attendance.Application.Dtos.Employees
         public string? ShiftTeamCode { get; set; }
         public string? CongDoan { get; set; }
         public string? TaskName { get; set; }
+        public string? StaffKind { get; set; }
     }
 }

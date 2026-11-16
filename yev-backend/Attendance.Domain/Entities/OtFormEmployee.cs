@@ -57,6 +57,11 @@ public partial class OtFormEmployee
 
     public string? ShiftTeamCodeSnapshot { get; set; }
 
+    // The employee's own month/year limit when they were put on the form, so a later change doesn't rewrite the printed note. Null = none.
+    public decimal? CustomMonthlyOtHourLimitSnapshot { get; set; }
+
+    public decimal? CustomYearlyOtHourLimitSnapshot { get; set; }
+
     public virtual OtForm OtForm { get; set; } = null!;
 
     public virtual Employee Employee { get; set; } = null!;

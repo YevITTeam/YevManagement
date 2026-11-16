@@ -10,6 +10,8 @@ import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
 import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
+import { ProductionEmployeeApi } from "@/modules/attendance/api/production-employee.api";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
@@ -39,6 +41,12 @@ export interface EmployeeFormValues {
     // Per-employee OT limits; null = global default. No daily override — the daily limit is always shared.
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
+    // Line × Ca × TT/GT of one of the department's groups; picking it also picks that group.
+    productionLineId: number | null;
+    shiftTeamId: number | null;
+    staffKind: string | null;
+    congDoan: string | null;
+    taskName: string | null;
 }
 
 interface EmployeeFormProps {
@@ -67,7 +75,21 @@ const emptyValues: EmployeeFormValues = {
     jobTitleId: null,
     customMonthlyOtHourLimit: null,
     customYearlyOtHourLimit: null,
+    productionLineId: null,
+    shiftTeamId: null,
+    staffKind: null,
+    congDoan: null,
+    taskName: null,
 };
+
+interface LinePair {
+    groupId: number;
+    productionLineId: number;
+    shiftTeamId: number;
+    lineCode: string;
+    shiftTeamCode: string;
+    kind: string;
+}
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -76,6 +98,7 @@ const hourFieldClassName = fieldClassName.replace("w-full", "w-24");
 
 export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit, scope, canEditOtLimit = false }: EmployeeFormProps) {
     const t = useTranslations("Attendance.Employee");
+    const tProduction = useTranslations("Attendance.ProductionEmployeeList");
     const tCommon = useTranslations("Common");
     const { setting } = useAttendanceSetting();
     const [values, setValues] = useState<EmployeeFormValues>(emptyValues);
@@ -85,6 +108,8 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
     const [jobTitles, setJobTitles] = useState<JobTitleDto[]>([]);
     const [usersWithRoles, setUsersWithRoles] = useState<UserDto[]>([]);
     const [showUserSuggestions, setShowUserSuggestions] = useState(false);
+    const [shiftTeamNames, setShiftTeamNames] = useState<Record<string, string>>({});
+    const [congDoanOptions, setCongDoanOptions] = useState<string[]>([]);
     // Only filters the group list: an employee's department is derived from their group, not stored.
     // null = not picked manually, follow the selected group's department.
     const [departmentFilter, setDepartmentFilter] = useState<number | "" | null>(null);
@@ -115,6 +140,12 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         AuthApi.getAllUsersWithRoles()
             .then((data) => setUsersWithRoles(data))
             .catch((err) => console.error(err));
+        ProductionEmployeeApi.getShiftTeamOptions()
+            .then((data) => setShiftTeamNames(Object.fromEntries(data.map((s) => [s.code, s.nameVn ?? s.code]))))
+            .catch((err) => console.error(err));
+        ProductionEmployeeApi.getCongDoanOptions()
+            .then(setCongDoanOptions)
+            .catch((err) => console.error(err));
     }, [isOpen, isScopeRestricted]);
 
     useDialogReset(isOpen, initial, (current) => {
@@ -133,6 +164,11 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                       jobTitleId: current.jobTitleId,
                       customMonthlyOtHourLimit: current.customMonthlyOtHourLimit,
                       customYearlyOtHourLimit: current.customYearlyOtHourLimit,
+                      productionLineId: current.productionLineId ?? null,
+                      shiftTeamId: current.shiftTeamId ?? null,
+                      staffKind: current.staffKind ?? null,
+                      congDoan: current.congDoan ?? null,
+                      taskName: current.taskName ?? null,
                   }
                 : emptyValues
         );
@@ -165,6 +201,57 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         .filter((g) => (effectiveDepartmentFilter === "" || g.departmentId === effectiveDepartmentFilter)
             && (effectiveWorkshopFilter === "" || g.workshopId === effectiveWorkshopFilter))
         .map((g) => ({ value: g.id, label: g.groupNameVn, searchText: g.groupNameVn.toLowerCase() }));
+
+    // Only the Line × Ca the department's groups (same workshop) cover; the group follows the picked pair.
+    const linePairs: LinePair[] = selectedGroup
+        ? effectiveGroups
+              .filter((g) => g.departmentId === selectedGroup.departmentId && g.workshopId === selectedGroup.workshopId)
+              .flatMap((g) => (g.lines ?? []).map((l) => ({ ...l, groupId: g.id, lineCode: l.lineCode ?? "", shiftTeamCode: l.shiftTeamCode ?? "", kind: g.lineKind ?? "" })))
+        : [];
+    const uniqueBy = <T,>(items: T[], key: (item: T) => string | number) => items.filter((item, i) => items.findIndex((x) => key(x) === key(item)) === i);
+    const lineOptions: SelectOption[] = uniqueBy(linePairs, (p) => p.productionLineId)
+        .sort((a, b) => a.lineCode.localeCompare(b.lineCode))
+        .map((p) => ({ value: p.productionLineId, label: p.lineCode, searchText: p.lineCode.toLowerCase() }));
+    const shiftOptions = uniqueBy(linePairs.filter((p) => p.productionLineId === values.productionLineId), (p) => p.shiftTeamId)
+        .map((p) => ({ value: p.shiftTeamId, label: shiftTeamNames[p.shiftTeamCode] ?? p.shiftTeamCode }));
+    const kindOptions = uniqueBy(
+        linePairs.filter((p) => p.productionLineId === values.productionLineId && p.shiftTeamId === values.shiftTeamId),
+        (p) => p.kind
+    ).map((p) => ({ value: p.kind, label: p.kind }));
+
+    // Keeps whatever the user did not change when possible, then moves the person to the group owning the pair.
+    const pickPair = (lineId: number | null, shiftTeamId: number | null, kind: string | null) => {
+        const onLine = linePairs.filter((p) => p.productionLineId === lineId);
+        const onShift = onLine.filter((p) => p.shiftTeamId === shiftTeamId);
+        const pair = onShift.find((p) => p.kind === kind) ?? onShift[0] ?? onLine.find((p) => p.kind === kind) ?? onLine[0];
+        if (!pair) return;
+        setValues((current) => ({
+            ...current,
+            groupId: pair.groupId,
+            productionLineId: pair.productionLineId,
+            shiftTeamId: pair.shiftTeamId,
+            staffKind: pair.kind,
+            // A new line brings its own Công đoạn; BE fills it when left blank.
+            congDoan: pair.productionLineId === current.productionLineId ? current.congDoan : null,
+        }));
+    };
+
+    const handleGroupChange = (v: number | "") => {
+        const group = effectiveGroups.find((g) => g.id === v);
+        setValues((current) => {
+            const covered = group?.lines?.some((l) => l.productionLineId === current.productionLineId && l.shiftTeamId === current.shiftTeamId);
+            const first = group?.lines?.[0];
+            if (!group || covered || !first) return { ...current, groupId: v === "" ? null : v, staffKind: group?.lineKind ?? current.staffKind };
+            return {
+                ...current,
+                groupId: group.id,
+                productionLineId: first.productionLineId,
+                shiftTeamId: first.shiftTeamId,
+                staffKind: group.lineKind,
+                congDoan: first.productionLineId === current.productionLineId ? current.congDoan : null,
+            };
+        });
+    };
 
     const handleDepartmentFilterChange = (v: number | "") => {
         setDepartmentFilter(v);
@@ -408,9 +495,79 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                                 <SearchableSelect
                                     options={filteredGroupOptions}
                                     value={values.groupId ?? ""}
-                                    onChange={(v) => setValues((current) => ({ ...current, groupId: v === "" ? null : v }))}
+                                    onChange={handleGroupChange}
                                     placeholder={t("fieldGroupPlaceholder")}
                                     disabled={loading}
+                                />
+                            </label>
+                        )}
+
+                        {needsGroup && selectedGroup && (
+                            <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5 sm:col-span-2">
+                                <label className="block w-44">
+                                    <span className={fieldLabelClassName}>{tProduction("fieldLine")}</span>
+                                    <SearchableSelect
+                                        options={lineOptions}
+                                        value={values.productionLineId ?? ""}
+                                        onChange={(v) => v !== "" && pickPair(v, values.shiftTeamId, values.staffKind)}
+                                        placeholder=""
+                                        disabled={loading}
+                                    />
+                                </label>
+                                <div className="w-36">
+                                    <span className={fieldLabelClassName}>{tProduction("fieldShiftTeam")}</span>
+                                    <StyledSelect
+                                        options={shiftOptions}
+                                        value={values.shiftTeamId ?? 0}
+                                        onChange={(v) => pickPair(values.productionLineId, v, values.staffKind)}
+                                        disabled={loading || shiftOptions.length === 0}
+                                        triggerClassName={`${fieldClassName} pr-8 text-left`}
+                                        ariaLabel={tProduction("fieldShiftTeam")}
+                                    />
+                                </div>
+                                <div className="w-24">
+                                    <span className={fieldLabelClassName}>{tProduction("fieldStaffKind")}</span>
+                                    <StyledSelect
+                                        options={kindOptions}
+                                        value={values.staffKind ?? ""}
+                                        onChange={(v) => pickPair(values.productionLineId, values.shiftTeamId, v)}
+                                        disabled={loading || kindOptions.length < 2}
+                                        triggerClassName={`${fieldClassName} pr-8 text-left`}
+                                        ariaLabel={tProduction("fieldStaffKind")}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {needsGroup && selectedGroup && (
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{tProduction("colCongDoan")}</span>
+                                <input
+                                    value={values.congDoan ?? ""}
+                                    onChange={(event) => setValues((current) => ({ ...current, congDoan: event.target.value || null }))}
+                                    list="employee-cong-doan-options"
+                                    maxLength={50}
+                                    disabled={loading}
+                                    className={fieldClassName}
+                                />
+                                {/* Reports group by exact text, so suggest existing values to avoid near-duplicates. */}
+                                <datalist id="employee-cong-doan-options">
+                                    {congDoanOptions.map((option) => (
+                                        <option key={option} value={option} />
+                                    ))}
+                                </datalist>
+                            </label>
+                        )}
+
+                        {needsGroup && selectedGroup && (
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{tProduction("colTaskName")}</span>
+                                <input
+                                    value={values.taskName ?? ""}
+                                    onChange={(event) => setValues((current) => ({ ...current, taskName: event.target.value || null }))}
+                                    maxLength={255}
+                                    disabled={loading}
+                                    className={fieldClassName}
                                 />
                             </label>
                         )}

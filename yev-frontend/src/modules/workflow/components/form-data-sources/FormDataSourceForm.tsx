@@ -107,7 +107,7 @@ export default function FormDataSourceForm({ isOpen, mode, initial, loading = fa
                             disabled={loading}
                             autoFocus
                             required
-                            className={fieldClassName}
+                            className={`${fieldClassName} max-w-40`}
                         />
                     </label>
 
@@ -149,29 +149,31 @@ export default function FormDataSourceForm({ isOpen, mode, initial, loading = fa
                         </select>
                     </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldValueColumn")}</span>
-                        <input
-                            value={values.valueColumn}
-                            onChange={(event) => setValues((current) => ({ ...current, valueColumn: event.target.value }))}
-                            placeholder={t("fieldValueColumnPlaceholder")}
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                    <div className="flex flex-wrap gap-4">
+                        <label className="block w-44">
+                            <span className={fieldLabelClassName}>{t("fieldValueColumn")}</span>
+                            <input
+                                value={values.valueColumn}
+                                onChange={(event) => setValues((current) => ({ ...current, valueColumn: event.target.value }))}
+                                placeholder={t("fieldValueColumnPlaceholder")}
+                                disabled={loading}
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
 
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("fieldDisplayColumn")}</span>
-                        <input
-                            value={values.displayColumn}
-                            onChange={(event) => setValues((current) => ({ ...current, displayColumn: event.target.value }))}
-                            placeholder={t("fieldDisplayColumnPlaceholder")}
-                            disabled={loading}
-                            required
-                            className={fieldClassName}
-                        />
-                    </label>
+                        <label className="block w-44">
+                            <span className={fieldLabelClassName}>{t("fieldDisplayColumn")}</span>
+                            <input
+                                value={values.displayColumn}
+                                onChange={(event) => setValues((current) => ({ ...current, displayColumn: event.target.value }))}
+                                placeholder={t("fieldDisplayColumnPlaceholder")}
+                                disabled={loading}
+                                required
+                                className={fieldClassName}
+                            />
+                        </label>
+                    </div>
 
                     <label className="block">
                         <span className={fieldLabelClassName}>{t("fieldFilterJson")}</span>

@@ -6,10 +6,12 @@ import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
 import { EmployeeImportApi } from "@/modules/attendance/api/employee-import.api";
-import type {
-    EmployeeImportConfirmResultDto,
-    EmployeeImportPreviewRowDto,
-    EmployeeImportRemovedRowDto,
+import {
+    EMPLOYEE_IMPORT_MODE,
+    type EmployeeImportConfirmResultDto,
+    type EmployeeImportMode,
+    type EmployeeImportPreviewRowDto,
+    type EmployeeImportRemovedRowDto,
 } from "@/modules/attendance/types/employee-import.dto";
 import ExportFilteredButton from "./ExportFilteredButton";
 import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
@@ -25,6 +27,7 @@ interface EmployeeImportDialogProps {
 export default function EmployeeImportDialog({ isOpen, onClose, onImported, exportFilter }: EmployeeImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
     const [file, setFile] = useState<File | null>(null);
+    const [mode, setMode] = useState<EmployeeImportMode>(EMPLOYEE_IMPORT_MODE.add);
     const [isPreviewing, setIsPreviewing] = useState(false);
     const [isConfirming, setIsConfirming] = useState(false);
     const [rows, setRows] = useState<EmployeeImportPreviewRowDto[]>([]);
@@ -61,12 +64,21 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
         if (hadResult) onImported();
     };
 
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const selected = event.target.files?.[0] ?? null;
-        setFile(selected);
+    const clearPreview = () => {
         setRows([]);
         setRemovedRows([]);
         setSummary(null);
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setFile(event.target.files?.[0] ?? null);
+        clearPreview();
+    };
+
+    // The preview depends on the mode (group resolution and resigned list), so switching discards it.
+    const handleModeChange = (next: EmployeeImportMode) => {
+        setMode(next);
+        clearPreview();
     };
 
     const handlePreview = async () => {
@@ -76,7 +88,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
         }
         setIsPreviewing(true);
         try {
-            const previewResult = await EmployeeImportApi.previewImport(file);
+            const previewResult = await EmployeeImportApi.previewImport(file, mode);
             setRows(previewResult.rows);
             setRemovedRows(previewResult.removedRows);
             setSummary({
@@ -106,7 +118,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
         setIsConfirming(true);
         try {
             // Send all rows including invalid ones; BE re-validates and skips bad rows.
-            const confirmResult = await EmployeeImportApi.confirmImport(rows);
+            const confirmResult = await EmployeeImportApi.confirmImport(rows, mode);
             setResult(confirmResult);
             toast.success(
                 t("importConfirmSuccess", {
@@ -181,7 +193,9 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                 {t("importNewDepartmentCount", { count: result.createdDepartmentCount })}
                             </span>
                             <span className="text-[#5e3f3a]">{t("importNewGroupCount", { count: result.createdGroupCount })}</span>
-                            <span className="text-[#5e3f3a]">{t("importRemovedCount", { count: result.removedFromLineCount })}</span>
+                            {result.resignedCount > 0 && (
+                                <span className="text-[#930006]">{t("importRemovedCount", { count: result.resignedCount })}</span>
+                            )}
                             <span className={result.skippedCount > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 {t("importSkippedCount", { count: result.skippedCount })}
                             </span>
@@ -214,6 +228,27 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                 ) : (
                     <>
                         <div className="flex flex-wrap items-center gap-3 border-b border-[#e0e3e5] p-4">
+                            <div className="inline-flex shrink-0 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-0.5" role="radiogroup">
+                                {([
+                                    [EMPLOYEE_IMPORT_MODE.add, t("importModeAdd"), t("importModeAddHint")],
+                                    [EMPLOYEE_IMPORT_MODE.overwrite, t("importModeOverwrite"), t("importModeOverwriteHint")],
+                                ] as const).map(([value, label, hint]) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={mode === value}
+                                        title={hint}
+                                        disabled={isBusy}
+                                        onClick={() => handleModeChange(value)}
+                                        className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed ${
+                                            mode === value ? "bg-white text-[#191c1e] shadow-sm" : "text-[#5e3f3a] hover:text-[#191c1e]"
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -290,13 +325,13 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                                     {row.resolvedLastName ?? "-"} {row.resolvedFirstName ?? ""}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
-                                                    {row.departmentCode} — {row.departmentNameVn}
+                                                    {[row.workshopCode, row.departmentCode].filter(Boolean).join(" · ") || "-"}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
-                                                    {row.groupCode} — {row.groupNameVn}
+                                                    {row.groupCode ? `${row.groupCode} — ${row.groupNameVn ?? ""}` : "-"}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
-                                                    {[row.lineCode, row.teamCode, row.shiftTeamCode, row.congDoan, row.taskName]
+                                                    {[row.lineCode, row.teamCode, row.shiftTeamCode, row.staffKind, row.congDoan, row.taskName]
                                                         .filter(Boolean)
                                                         .join(" · ") || "-"}
                                                 </td>
@@ -326,6 +361,7 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                                 <tr key={row.employeeCode} className="border-b border-[#f1f5f9]">
                                                     <td className="whitespace-nowrap px-3 py-2 font-semibold text-[#191c1e]">{row.employeeCode}</td>
                                                     <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.fullName}</td>
+                                                    <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.groupNameVn ?? "-"}</td>
                                                     <td className="w-full px-3 py-2 text-[#5e3f3a]">{row.lineCode ?? "-"}</td>
                                                 </tr>
                                             ))}

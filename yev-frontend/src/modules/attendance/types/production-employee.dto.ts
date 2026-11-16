@@ -18,15 +18,6 @@ export interface ProductionEmployeeSearchItemDto {
     customYearlyOtHourLimit: number | null;
 }
 
-// All three Ids are nullable; clearing one unassigns it.
-export interface UpdateProductionEmployeeDto {
-    productionLineId: number | null;
-    teamId: number | null;
-    shiftTeamId: number | null;
-    congDoan: string | null;
-    taskName: string | null;
-}
-
 export interface ProductionOptionDto {
     id: number;
     code: string;

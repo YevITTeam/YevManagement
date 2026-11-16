@@ -7,9 +7,10 @@ using Shared.Application.Wrapper;
 
 namespace Attendance.Api.Controllers
 {
-    // Daily reports for completed production-line OT forms.
+    // OT reports over completed forms; Excel endpoints return the .xlsx directly, not ApiResponse<T>.
     public class ProductionOtReportController : BaseController
     {
+        private const string XlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
         private readonly IProductionOtReportService _productionOtReportService;
 
         public ProductionOtReportController(IProductionOtReportService productionOtReportService)
@@ -19,70 +20,51 @@ namespace Attendance.Api.Controllers
 
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("ticket-report")]
-        public async Task<ActionResult<ApiResponse<ProductionTicketReportDto>>> GetTicketReport([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
-        {
-            var result = await _productionOtReportService.GetTicketReportAsync(date, departmentId, workshopId);
-            return Success(result);
-        }
+        public async Task<ActionResult<ApiResponse<ProductionTicketReportDto>>> GetTicketReport([FromQuery] ReportFilterDto filter)
+            => Success(await _productionOtReportService.GetTicketReportAsync(filter));
 
-        // Returns the .xlsx directly, not ApiResponse<T>.
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("hours-report-excel")]
-        public async Task<IActionResult> ExportHoursReport([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
+        public async Task<IActionResult> ExportHoursReport([FromQuery] ReportFilterDto filter)
         {
-            var (content, fileName) = await _productionOtReportService.ExportHoursReportAsync(date, departmentId, workshopId);
-            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            var (content, fileName) = await _productionOtReportService.ExportHoursReportAsync(filter);
+            return File(content, XlsxType, fileName);
         }
 
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("times-report-excel")]
-        public async Task<IActionResult> ExportTimesReport([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
+        public async Task<IActionResult> ExportTimesReport([FromQuery] ReportFilterDto filter)
         {
-            var (content, fileName) = await _productionOtReportService.ExportTimesReportAsync(date, departmentId, workshopId);
-            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            var (content, fileName) = await _productionOtReportService.ExportTimesReportAsync(filter);
+            return File(content, XlsxType, fileName);
         }
 
-        // File names follow the real naming rule (ProductionOtReportService.BuildRealFileNameAsync).
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("qry-export-excel")]
-        public async Task<IActionResult> ExportQryExportExcel([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
+        public async Task<IActionResult> ExportQryExportExcel([FromQuery] ReportFilterDto filter)
         {
-            var (content, fileName) = await _productionOtReportService.ExportQryExportExcelAsync(date, departmentId, workshopId);
-            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
-        }
-
-        [RequirePermission("Attendance.ProductionOtReport.View")]
-        [HttpGet("office-qry-export-excel")]
-        public async Task<IActionResult> ExportOfficeQryExportExcel([FromQuery] DateOnly fromDate, [FromQuery] DateOnly toDate, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null, [FromQuery] int[]? groupIds = null)
-        {
-            var (content, fileName) = await _productionOtReportService.ExportOfficeQryExportExcelAsync(fromDate, toDate, departmentId, workshopId, groupIds);
-            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
-        }
-
-        // Own route so report viewers without Attendance.Group.View can still pick groups.
-        [RequirePermission("Attendance.ProductionOtReport.View")]
-        [HttpGet("office-productivity-groups")]
-        public async Task<ActionResult<ApiResponse<IReadOnlyList<ProductionOptionDto>>>> GetOfficeProductivityGroups([FromQuery] int? workshopId, [FromQuery] int? departmentId)
-        {
-            var result = await _productionOtReportService.GetOfficeProductivityGroupsAsync(workshopId, departmentId);
-            return Success(result);
+            var (content, fileName) = await _productionOtReportService.ExportQryExportExcelAsync(filter);
+            return File(content, XlsxType, fileName);
         }
 
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("sum-export-data")]
-        public async Task<IActionResult> ExportSumExportData([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
+        public async Task<IActionResult> ExportSumExportData([FromQuery] ReportFilterDto filter)
         {
-            var (content, fileName) = await _productionOtReportService.ExportSumExportDataAsync(date, departmentId, workshopId);
-            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            var (content, fileName) = await _productionOtReportService.ExportSumExportDataAsync(filter);
+            return File(content, XlsxType, fileName);
         }
+
+        // Own route so report viewers without Attendance.Group.View can still pick groups.
+        [RequirePermission("Attendance.ProductionOtReport.View")]
+        [HttpGet("groups")]
+        public async Task<ActionResult<ApiResponse<IReadOnlyList<ProductionOptionDto>>>> GetGroups([FromQuery] int? workshopId, [FromQuery] int? departmentId)
+            => Success(await _productionOtReportService.GetGroupsAsync(workshopId, departmentId));
 
         // Employee rows only; the FE loads signatures/reasons via GET /api/OtForm/{PrimaryOtFormId}.
         [RequirePermission("Attendance.ProductionOtReport.View")]
         [HttpGet("ticket-batch")]
-        public async Task<ActionResult<ApiResponse<List<ProductionTicketBatchGroupDto>>>> GetTicketBatch([FromQuery] DateOnly date, [FromQuery] int? departmentId, [FromQuery] int? workshopId = null)
-        {
-            var result = await _productionOtReportService.GetTicketBatchAsync(date, departmentId, workshopId);
-            return Success(result);
-        }
+        public async Task<ActionResult<ApiResponse<List<ProductionTicketBatchGroupDto>>>> GetTicketBatch([FromQuery] ReportFilterDto filter)
+            => Success(await _productionOtReportService.GetTicketBatchAsync(filter));
     }
 }

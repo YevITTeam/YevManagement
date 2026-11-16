@@ -19,7 +19,7 @@ namespace Attendance.Api.Controllers
 
         // Reuses OT-create permissions; CreateProduction included so production-only Line Leaders can search employees
         // (a 403 here surfaces in the FE only as "no matches").
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction")]
+        [RequirePermission("Attendance.OTForm.Create")]
         [HttpGet("search")]
         public async Task<ActionResult<ApiResponse<List<ProductionEmployeeSearchItemDto>>>> Search(
             [FromQuery] int? productionLineId, [FromQuery] int? teamId, [FromQuery] int? shiftTeamId,
@@ -29,7 +29,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction", "Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
         [HttpGet("line-options")]
         public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetLineOptions([FromQuery] int? teamId)
         {
@@ -37,7 +37,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction", "Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
         [HttpGet("team-options")]
         public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetTeamOptions()
         {
@@ -45,7 +45,7 @@ namespace Attendance.Api.Controllers
             return Success(result);
         }
 
-        [RequirePermission("Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction", "Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
+        [RequirePermission("Attendance.OTForm.Create", "Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
         [HttpGet("shift-team-options")]
         public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetShiftTeamOptions(
             [FromQuery] int? productionLineId, [FromQuery] int? teamId)

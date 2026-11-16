@@ -56,7 +56,7 @@ export default function OrgLevelForm({ isOpen, mode, initial, loading = false, o
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="org-level-form-title"
-                className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
+                className="z-60 mx-4 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
             >
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
                     <h3 id="org-level-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -82,7 +82,7 @@ export default function OrgLevelForm({ isOpen, mode, initial, loading = false, o
                             disabled={loading}
                             autoFocus
                             required
-                            className={fieldClassName}
+                            className={`${fieldClassName} max-w-24`}
                         />
                     </label>
 

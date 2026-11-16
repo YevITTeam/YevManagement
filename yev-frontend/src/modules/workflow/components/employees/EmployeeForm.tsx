@@ -119,7 +119,7 @@ export default function EmployeeForm({
                             disabled={loading}
                             autoFocus
                             required
-                            className={fieldClassName}
+                            className={`${fieldClassName} max-w-40`}
                         />
                     </label>
 

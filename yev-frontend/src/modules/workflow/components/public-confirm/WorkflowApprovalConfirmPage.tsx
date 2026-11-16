@@ -89,8 +89,8 @@ export default function WorkflowApprovalConfirmPage() {
     };
 
     return (
-        <div className="mx-auto max-w-2xl px-4 py-12">
-            <div className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+        <div className="mx-auto max-w-2xl px-4 py-6 sm:py-12">
+            <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-6">
                 <h1 className="text-xl font-semibold text-[#191c1e]">{t("title")}</h1>
 
                 {isLoading && <p className="mt-4 text-sm text-[#5e3f3a]">{t("loading")}</p>}
@@ -102,7 +102,7 @@ export default function WorkflowApprovalConfirmPage() {
                 {!isLoading && !loadError && request && (
                     <div className="mt-4 space-y-5">
                         <div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                                 <h2 className="text-lg font-semibold text-[#191c1e]">{request.requestCode ?? "—"}</h2>
                                 <span className="rounded-full bg-[#f2f4f6] px-2.5 py-1 text-xs font-semibold text-[#5e3f3a]">
                                     {t(STATUS_KEY[request.status] ?? "statusDraft")}
@@ -113,7 +113,7 @@ export default function WorkflowApprovalConfirmPage() {
                         </div>
 
                         {request.formSchemaJson && (
-                            <div className="rounded-lg border border-[#e0e3e5] p-4">
+                            <div className="rounded-lg border border-[#e0e3e5] p-3 sm:p-4">
                                 <WorkflowRequestDataView schema={request.formSchemaJson} data={request.dataJson ?? {}} />
                             </div>
                         )}
@@ -137,9 +137,9 @@ export default function WorkflowApprovalConfirmPage() {
                                         .slice()
                                         .sort((a, b) => a.stepOrder - b.stepOrder)
                                         .map((s) => (
-                                            <div key={s.id} className="flex items-center justify-between rounded-lg border border-[#e0e3e5] px-3 py-1.5 text-sm">
-                                                <span className="text-[#191c1e]">{s.stepNameSnapshot}</span>
-                                                <span className="text-xs text-[#8a8f94]">{t(STEP_STATUS_KEY[s.status] ?? "stepWaiting")}</span>
+                                            <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border border-[#e0e3e5] px-3 py-1.5 text-sm">
+                                                <span className="min-w-0 text-[#191c1e]">{s.stepNameSnapshot}</span>
+                                                <span className="shrink-0 text-xs text-[#8a8f94]">{t(STEP_STATUS_KEY[s.status] ?? "stepWaiting")}</span>
                                             </div>
                                         ))}
                                 </div>

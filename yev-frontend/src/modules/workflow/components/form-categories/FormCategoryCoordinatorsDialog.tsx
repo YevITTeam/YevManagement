@@ -149,9 +149,8 @@ export default function FormCategoryCoordinatorsDialog({ formCategory, onClose }
                             )}
                         </div>
 
-                        <p className="mt-3 text-xs text-[#5e3f3a]">{t("coordinatorsSelectedCount", { count: selectedIds.size })}</p>
-
-                        <div className="mt-4 flex justify-end gap-3 border-t border-[#e0e3e5] pt-4">
+                        <div className="mt-4 flex items-center gap-3 border-t border-[#e0e3e5] pt-4">
+                            <p className="mr-auto text-xs text-[#5e3f3a]">{t("coordinatorsSelectedCount", { count: selectedIds.size })}</p>
                             <button
                                 type="button"
                                 onClick={onClose}

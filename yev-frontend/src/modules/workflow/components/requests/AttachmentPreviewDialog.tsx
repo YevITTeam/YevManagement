@@ -32,6 +32,7 @@ function getPreviewKind(contentType: string, fileName: string): PreviewKind {
 
 export default function AttachmentPreviewDialog({ attachment, onClose }: AttachmentPreviewDialogProps) {
     const t = useTranslations("Workflow.WorkflowRequest");
+    const tCommon = useTranslations("Common");
     const [blobUrl, setBlobUrl] = useState<string | null>(null);
     const [kind, setKind] = useState<PreviewKind>("unsupported");
 
@@ -70,27 +71,28 @@ export default function AttachmentPreviewDialog({ attachment, onClose }: Attachm
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
             <div className="fixed inset-0 bg-black/60" onClick={onClose} />
 
             <div role="dialog" aria-modal="true" className="z-10 flex h-full max-h-[90vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl">
-                <div className="flex items-center justify-between gap-3 border-b border-[#e0e3e5] px-5 py-3">
+                <div className="flex items-center justify-between gap-3 border-b border-[#e0e3e5] px-4 py-3 sm:px-5">
                     <p className="min-w-0 truncate text-sm font-semibold text-[#191c1e]">{attachment.originalFileName}</p>
                     <div className="flex shrink-0 items-center gap-1.5">
                         <button
                             onClick={handleDownload}
                             disabled={!blobUrl}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                            title={t("downloadButton")}
+                            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            <Download className="h-3.5 w-3.5" /> {t("downloadButton")}
+                            <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{t("downloadButton")}</span>
                         </button>
-                        <button onClick={onClose} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-[#5e3f3a] hover:bg-[#f2f4f6]">
+                        <button onClick={onClose} aria-label={tCommon("close")} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-[#5e3f3a] hover:bg-[#f2f4f6]">
                             <X className="h-5 w-5" />
                         </button>
                     </div>
                 </div>
 
-                <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[#f8fafc] p-4">
+                <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[#f8fafc] p-2 sm:p-4">
                     {isLoading ? (
                         <p className="text-sm text-[#5e3f3a]">{t("previewLoading")}</p>
                     ) : error || !blobUrl ? (

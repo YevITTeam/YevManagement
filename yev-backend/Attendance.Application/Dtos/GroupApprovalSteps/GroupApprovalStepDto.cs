@@ -1,5 +1,15 @@
 namespace Attendance.Application.Dtos.GroupApprovalSteps
 {
+    public class GroupApprovalStepMemberDto
+    {
+        public int EmployeeId { get; set; }
+        public string EmployeeCode { get; set; } = null!;
+        public string LastName { get; set; } = null!;
+        public string FirstName { get; set; } = null!;
+        public string? GroupNameVn { get; set; }
+        public bool ReceivesMail { get; set; }
+    }
+
     public class GroupApprovalStepDto
     {
         public int Id { get; set; }
@@ -16,5 +26,7 @@ namespace Attendance.Application.Dtos.GroupApprovalSteps
 
         // Always None here; kept so the FE shares display logic with DepartmentApprovalStepDto.
         public int TerminalLevel { get; set; }
+
+        public List<GroupApprovalStepMemberDto> Members { get; set; } = new();
     }
 }

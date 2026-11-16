@@ -1,5 +1,5 @@
 import { api } from "@/lib/client";
-import type { GroupDto } from "@/modules/attendance/types/group.dto";
+import type { GroupDto, GroupLineDto } from "@/modules/attendance/types/group.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
 const ENDPOINTS = {
@@ -30,6 +30,10 @@ export interface CreateUpdateGroupDto {
     departmentId: number;
     workshopId: number;
     allowEatLater: boolean;
+    lineKind: string | null;
+    lines: GroupLineDto[];
+    // Move pairs owned by another group of the same workshop/department/kind here, with their people.
+    takeOverLines?: boolean;
 }
 
 export const GroupApi = {

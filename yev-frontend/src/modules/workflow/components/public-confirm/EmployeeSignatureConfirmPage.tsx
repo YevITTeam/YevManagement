@@ -47,8 +47,8 @@ export default function EmployeeSignatureConfirmPage() {
     };
 
     return (
-        <div className="mx-auto max-w-lg px-4 py-12">
-            <div className="rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-sm">
+        <div className="mx-auto max-w-lg px-4 py-6 sm:py-12">
+            <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm sm:p-6">
                 <h1 className="text-xl font-semibold text-[#191c1e]">{t("title")}</h1>
 
                 {isLoading && <p className="mt-4 text-sm text-[#5e3f3a]">{t("loading")}</p>}

@@ -24,6 +24,7 @@ const STATUS_LABEL_KEY: Record<number, string> = {
 // Prints the on-screen layout via window.print() + @media print (no html2canvas); one signature box per actual approval step.
 export default function WorkflowRequestPrintView({ request, onClose }: WorkflowRequestPrintViewProps) {
     const t = useTranslations("Workflow.WorkflowRequest");
+    const tCommon = useTranslations("Common");
 
     if (!request.formSchemaJson) return null;
 
@@ -40,25 +41,25 @@ export default function WorkflowRequestPrintView({ request, onClose }: WorkflowR
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[#f2f4f6] print:static print:bg-white">
             <style>{`@page { size: A4; margin: 15mm; }`}</style>
 
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#e0e3e5] bg-white px-6 py-3 print:hidden">
-                <p className="text-sm font-semibold text-[#191c1e]">{t("printPreviewTitle")}</p>
-                <div className="flex items-center gap-2">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#e0e3e5] bg-white px-4 py-3 sm:px-6 print:hidden">
+                <p className="min-w-0 truncate text-sm font-semibold text-[#191c1e]">{t("printPreviewTitle")}</p>
+                <div className="flex shrink-0 items-center gap-2">
                     <button
                         onClick={() => window.print()}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                        className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                     >
                         <Printer className="h-4 w-4" /> {t("printButton")}
                     </button>
-                    <button onClick={onClose} className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#5e3f3a] hover:bg-[#f2f4f6]">
+                    <button onClick={onClose} aria-label={tCommon("close")} className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#5e3f3a] hover:bg-[#f2f4f6]">
                         <X className="h-5 w-5" />
                     </button>
                 </div>
             </div>
 
-            <div className="mx-auto max-w-3xl bg-white p-8 print:max-w-none print:p-0 print:shadow-none">
+            <div className="mx-auto max-w-3xl bg-white p-4 sm:my-6 sm:p-8 print:my-0 print:max-w-none print:p-0 print:shadow-none">
                 <div className="mb-6 break-inside-avoid border-b border-[#191c1e] pb-4">
                     <h1 className="text-xl font-bold text-[#191c1e]">{request.formDefinitionNameVn}</h1>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-[#191c1e]">
+                    <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-[#191c1e] sm:grid-cols-2 print:grid-cols-2">
                         <p>
                             <span className="font-semibold">{t("printRequestCode")}:</span> {request.requestCode ?? "—"}
                         </p>

@@ -48,5 +48,7 @@ namespace Attendance.Application.Dtos.Employees
         public string? ShiftTeamCode { get; set; }
         public string? CongDoan { get; set; }
         public string? TaskName { get; set; }
+        public string? StaffKind { get; set; }
+        public DateTime? ResignedAt { get; set; }
     }
 }

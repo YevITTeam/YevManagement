@@ -152,24 +152,22 @@ export default function FormApprovalRoutesPanel({ formDefinitionId, routeConditi
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={addRoute}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                    >
-                        <Plus className="h-3.5 w-3.5" /> {t("addRoute")}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <Save className="h-3.5 w-3.5" /> {isSaving ? t("saving") : t("saveChanges")}
-                    </button>
-                </div>
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={addRoute}
+                    className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                >
+                    <Plus className="h-3.5 w-3.5" /> {t("addRoute")}
+                </button>
+                <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    <Save className="h-3.5 w-3.5" /> {isSaving ? t("saving") : t("saveChanges")}
+                </button>
             </div>
 
             {routes.length === 0 ? (

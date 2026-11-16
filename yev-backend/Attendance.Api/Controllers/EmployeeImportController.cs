@@ -22,13 +22,13 @@ namespace Attendance.Api.Controllers
 
         [RequirePermission("Attendance.Employee.Create")]
         [HttpPost("preview")]
-        public async Task<ActionResult<ApiResponse<EmployeeImportPreviewResultDto>>> Preview(IFormFile file)
+        public async Task<ActionResult<ApiResponse<EmployeeImportPreviewResultDto>>> Preview(IFormFile file, [FromQuery] EmployeeImportMode mode = EmployeeImportMode.Add)
         {
             if (file == null || file.Length == 0)
                 return Fail<EmployeeImportPreviewResultDto>("Vui lòng chọn file Excel để import.");
 
             await using var stream = file.OpenReadStream();
-            var result = await _employeeImportService.PreviewAsync(stream, CurrentUserName, User.IsInRole(AdminRole));
+            var result = await _employeeImportService.PreviewAsync(stream, mode, CurrentUserName, User.IsInRole(AdminRole));
             return Success(result, "Đọc file thành công, vui lòng xem lại bản xem trước bên dưới.");
         }
 
@@ -39,6 +39,7 @@ namespace Attendance.Api.Controllers
             var result = await _employeeImportService.ConfirmAsync(request, CurrentUserName, User.IsInRole(AdminRole));
             var message = $"Import thành công: {result.CreatedEmployeeCount} nhân viên mới, {result.UpdatedEmployeeCount} nhân viên cập nhật " +
                 $"({result.CreatedDepartmentCount} phòng ban mới, {result.CreatedGroupCount} nhóm mới)" +
+                (result.ResignedCount > 0 ? $", {result.ResignedCount} người đánh dấu Nghỉ việc" : "") +
                 (result.SkippedCount > 0 ? $", bỏ qua {result.SkippedCount} dòng lỗi." : ".");
             return Success(result, message);
         }

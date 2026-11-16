@@ -9,21 +9,31 @@ export interface EmployeeExportFilter {
     teamId?: number;
     shiftTeamId?: number;
     congDoan?: string;
+    // true = only people marked resigned, false = only working people.
+    resigned?: boolean;
 }
+
+// Overwrite: the file is the full roster of its departments (line data picks the group, absentees become resigned).
+// Add: only listed people change, a filled group code wins.
+export type EmployeeImportMode = 1 | 2;
+export const EMPLOYEE_IMPORT_MODE = { overwrite: 1, add: 2 } as const;
 
 export interface EmployeeImportPreviewRowDto {
     rowNumber: number;
     employeeCode: string;
     fullName: string;
-    departmentCode: string;
-    departmentNameVn: string;
-    groupCode: string;
-    groupNameVn: string;
+    departmentCode: string | null;
+    departmentNameVn: string | null;
+    groupCode: string | null;
+    groupNameVn: string | null;
+    workshopCode: string | null;
     lineCode: string | null;
     teamCode: string | null;
     shiftTeamCode: string | null;
     congDoan: string | null;
     taskName: string | null;
+    // TT/GT as resolved by the preview.
+    staffKind: string | null;
     resolvedFirstName: string | null;
     resolvedLastName: string | null;
     isNewDepartment: boolean;
@@ -46,6 +56,7 @@ export interface EmployeeImportPreviewResultDto {
 export interface EmployeeImportRemovedRowDto {
     employeeCode: string;
     fullName: string;
+    groupNameVn: string | null;
     lineCode: string | null;
 }
 
@@ -60,7 +71,7 @@ export interface EmployeeImportConfirmResultDto {
     createdGroupCount: number;
     createdEmployeeCount: number;
     updatedEmployeeCount: number;
-    removedFromLineCount: number;
+    resignedCount: number;
     skippedCount: number;
     skippedRows: SkippedEmployeeImportRowDto[];
 }

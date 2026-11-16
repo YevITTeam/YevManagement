@@ -21,7 +21,7 @@ import OtCaseBadge from "@/modules/attendance/components/OtCaseBadge";
 import OtFormDetail from "@/modules/attendance/components/ot-form/OtFormDetail";
 import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { useAuth } from "@/modules/auth/context/AuthContext";
-import { hasAnyPermission, hasPermission } from "@/modules/auth/lib/permissions";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { getApiErrorMessage } from "@/lib/apiError";
@@ -113,8 +113,7 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
     const router = useRouter();
     const locale = useLocale();
     const { user } = useAuth();
-    // Create and CreateProduction are separate: Line Leaders with only CreateProduction still need the create button.
-    const canCreate = hasAnyPermission(user, ["Attendance.OTForm.Create", "Attendance.OTForm.CreateProduction"]);
+    const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canBulkApprove = mode === "pending-approvals" && hasPermission(user, "Attendance.OTForm.Approve");
     const [forms, setForms] = useState<OtFormListItemDto[]>([]);
 
@@ -504,7 +503,7 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
     );
 
     const renderEditButton = (form: OtFormListItemDto) =>
-        form.isEditable && canCreate ? (
+        form.isEditable && !form.isProductionForm && canCreate ? (
             <button
                 onClick={(event) => {
                     event.stopPropagation();
@@ -1012,7 +1011,7 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                                                     >
                                                         <Eye className="h-3.5 w-3.5" />
                                                     </button>
-                                                    {form.isEditable && (
+                                                    {form.isEditable && !form.isProductionForm && (
                                                         <a
                                                             href={getPathname({ href: { pathname: "/ot/forms/edit", query: { id: String(form.id) } }, locale })}
                                                             target="_blank"

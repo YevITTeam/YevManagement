@@ -30,5 +30,4 @@ public partial class JobTitle
 
     public virtual ICollection<JobTitlePermission> JobTitlePermissions { get; set; } = new List<JobTitlePermission>();
 
-    public virtual ICollection<ProductionApprovalStep> ProductionApprovalSteps { get; set; } = new List<ProductionApprovalStep>();
 }

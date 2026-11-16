@@ -100,7 +100,7 @@ export default function FormCategoryForm({ isOpen, mode, initial, orgUnitTree, l
                             disabled={loading}
                             autoFocus
                             required
-                            className={fieldClassName}
+                            className={`${fieldClassName} max-w-40`}
                         />
                     </label>
 
@@ -145,7 +145,7 @@ export default function FormCategoryForm({ isOpen, mode, initial, orgUnitTree, l
                             value={values.sortOrder}
                             onChange={(event) => setValues((current) => ({ ...current, sortOrder: Number(event.target.value) }))}
                             disabled={loading}
-                            className={fieldClassName}
+                            className={`${fieldClassName} max-w-24`}
                         />
                     </label>
 

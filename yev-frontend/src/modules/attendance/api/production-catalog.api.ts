@@ -19,6 +19,7 @@ export interface GetProductionCatalogParams {
     pageSize: number;
     keyword?: string;
     teamId?: number;
+    workshopId?: number;
 }
 
 export const ProductionCatalogApi = {
@@ -26,6 +27,7 @@ export const ProductionCatalogApi = {
         const query = new URLSearchParams({ PageIndex: String(params.pageIndex), PageSize: String(params.pageSize) });
         if (params.keyword) query.set("Keyword", params.keyword);
         if (params.teamId !== undefined) query.set("TeamId", String(params.teamId));
+        if (params.workshopId !== undefined) query.set("WorkshopId", String(params.workshopId));
         const response = await api.get<ApiResponseWithPageNation<ProductionCatalogItemDto>>(`${ENDPOINTS.PRODUCTION_CATALOG.gridList(kind)}?${query}`);
         return response.data;
     },

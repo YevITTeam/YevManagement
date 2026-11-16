@@ -130,19 +130,19 @@ export default function WorkflowRequestList() {
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <h1 className="text-2xl font-semibold text-[#191c1e]">{t("listTitle")}</h1>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h1 className="text-lg font-semibold text-[#191c1e]">{t("listTitle")}</h1>
                 <div className="flex flex-wrap items-center gap-2">
                     <button
                         onClick={() => refetch()}
                         disabled={isLoading}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                        className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                     >
                         <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
                     </button>
                     <button
                         onClick={() => router.push({ pathname: "/workflow/requests/new" })}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                        className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
                     >
                         <Plus className="h-3.5 w-3.5" /> {t("createNew")}
                     </button>
@@ -151,7 +151,10 @@ export default function WorkflowRequestList() {
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e3e5] px-4 py-2.5">
-                    <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
+                    {/* Tabs stay on one line and scroll sideways on phones instead of wrapping. */}
+                    <div className="min-w-0 max-w-full overflow-x-auto [&_[role=tab]]:shrink-0 [&_[role=tab]]:whitespace-nowrap">
+                        <Tabs tabs={tabs} activeKey={tab} onChange={setTab} />
+                    </div>
                     {tab !== "pending" && (
                         <StyledSelect
                             options={statusOptions}
@@ -193,7 +196,7 @@ export default function WorkflowRequestList() {
                                             >
                                                 <td className="whitespace-nowrap px-4 py-2.5 font-semibold tabular-nums text-[#191c1e]">{renderCode(item)}</td>
                                                 <td className="px-4 py-2.5 text-[#191c1e]">
-                                                    <span className="block max-w-[26rem] truncate" title={item.formDefinitionNameVn}>
+                                                    <span className="block max-w-[26rem] truncate xl:max-w-[36rem]" title={item.formDefinitionNameVn}>
                                                         {item.formDefinitionNameVn}
                                                     </span>
                                                 </td>

@@ -1,6 +1,5 @@
 import { api } from "@/lib/client";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
-import type { UpdateProductionEmployeeDto } from "@/modules/attendance/types/production-employee.dto";
 import type { EmployeeAccumulationDayDto, EmployeeAccumulationHistoryYearDto, UpdateEmployeeAccumulationDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
 import type { GroupDto } from "@/modules/attendance/types/group.dto";
@@ -25,8 +24,9 @@ const ENDPOINTS = {
         createEmployee: "/Employee",
         updateEmployee: (id: number) => `/Employee/${id}`,
         updateOtLimit: (id: number) => `/Employee/${id}/ot-limit`,
-        updateProductionInfo: (id: number) => `/Employee/${id}/production-info`,
         deleteEmployee: (id: number) => `/Employee/${id}`,
+        bulkDelete: "/Employee/bulk-delete",
+        restoreResigned: "/Employee/restore-resigned",
         assignDepartmentJobTitle: (id: number, departmentId: number) => `/Employee/${id}/department-job-title?departmentId=${departmentId}`,
         assignGroupJobTitle: (id: number, groupId: number) => `/Employee/${id}/group-job-title?groupId=${groupId}`,
         getInMyScope: "/Employee/in-my-scope",
@@ -59,6 +59,7 @@ export interface GetEmployeePageNationParams {
     teamId?: number;
     shiftTeamId?: number;
     congDoan?: string;
+    resigned?: boolean;
 }
 
 // A department can hold thousands of employees: the server always caps the list, so pass jobTitled (holders only)
@@ -90,6 +91,11 @@ export interface CreateUpdateEmployeeDto {
     // Per-employee OT limits; null = use the global default.
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
+    // A Line × Ca the group covers; null = keep or take the group's pair. Team and TT/GT follow the group.
+    productionLineId?: number | null;
+    shiftTeamId?: number | null;
+    congDoan?: string | null;
+    taskName?: string | null;
 }
 
 // Separate narrow permission (Attendance.Employee.UpdateOtLimit) so department coordinators can edit OT
@@ -112,6 +118,7 @@ export const EmployeeApi = {
         if (params?.congDoan) query.set("CongDoan", params.congDoan);
         if (params?.groupId) query.set("GroupId", String(params.groupId));
         if (params?.workshopId) query.set("WorkshopId", String(params.workshopId));
+        if (params?.resigned !== undefined) query.set("Resigned", String(params.resigned));
 
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.EMPLOYEE.getEmployeePageNation}?${queryString}` : ENDPOINTS.EMPLOYEE.getEmployeePageNation;
@@ -144,16 +151,20 @@ export const EmployeeApi = {
         const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.updateEmployee(id), { id, ...data });
         return response.data;
     },
-    updateProductionInfo: async (id: number, data: UpdateProductionEmployeeDto) => {
-        const response = await api.put<ApiResponse<boolean>>(ENDPOINTS.EMPLOYEE.updateProductionInfo(id), data);
-        return response.data;
-    },
     updateOtLimit: async (id: number, data: UpdateEmployeeOtLimitDto) => {
         const response = await api.put<ApiResponse<EmployeeDto>>(ENDPOINTS.EMPLOYEE.updateOtLimit(id), data);
         return response.data;
     },
     deleteEmployee: async (id: number) => {
         const response = await api.delete<ApiResponse<void>>(ENDPOINTS.EMPLOYEE.deleteEmployee(id));
+        return response.data;
+    },
+    bulkDelete: async (ids: number[]) => {
+        const response = await api.post<ApiResponse<number>>(ENDPOINTS.EMPLOYEE.bulkDelete, ids);
+        return response.data;
+    },
+    restoreResigned: async (ids: number[]) => {
+        const response = await api.post<ApiResponse<number>>(ENDPOINTS.EMPLOYEE.restoreResigned, ids);
         return response.data;
     },
     // Uses the unit's approval-tree permission, not Employee.Update, so tree coordinators can call it; BE limits

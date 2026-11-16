@@ -47,4 +47,8 @@ export interface EmployeeDto {
     shiftTeamCode?: string | null;
     congDoan?: string | null;
     taskName?: string | null;
+    // TT/GT
+    staffKind?: string | null;
+    // Set by an Overwrite import when the person is no longer listed.
+    resignedAt?: string | null;
 }
