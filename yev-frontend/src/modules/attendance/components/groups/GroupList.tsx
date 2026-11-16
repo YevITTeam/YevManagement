@@ -142,15 +142,14 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
         setEditingGroup(null);
     };
 
-    // Pairs already owned by another group of the same workshop, department and kind: saving them is a merge, so ask first.
+    // Pairs already owned by another group of the same workshop and department: saving them is a merge, so ask first.
     const findOwnedPairs = async (values: GroupFormValues) => {
-        if (values.lines.length === 0 || !values.lineKind) return [];
+        if (values.lines.length === 0) return [];
         const others = (await GroupApi.getAllGroups()).filter(
             (g) =>
                 g.id !== editingGroup?.id &&
                 g.workshopId === values.workshopId &&
-                g.departmentId === values.departmentId &&
-                g.lineKind === values.lineKind
+                g.departmentId === values.departmentId
         );
         return others.flatMap((g) =>
             g.lines
@@ -299,7 +298,6 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                                     </td>
                                     <td className="px-3 py-2 text-sm text-[#5e3f3a]">
                                         {group.lines.map((l) => `${l.lineCode} · ${l.shiftTeamCode}`).join(", ")}
-                                        {group.lineKind && <span className="ml-1 text-xs text-[#8a8f94]">{group.lineKind}</span>}
                                     </td>
                                     <td className="px-3 py-2 text-right text-sm">
                                         <div className="inline-flex items-center gap-1.5">

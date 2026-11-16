@@ -75,11 +75,15 @@ namespace Attendance.Application.Services
                 if (exists != null) throw new DomainException($"Mã bộ phận '{request.DepartmentCode}' đã tồn tại.");
             }
 
+            var codeChanged = department.DepartmentCode != request.DepartmentCode;
             department.DepartmentCode = request.DepartmentCode;
             department.DepartmentNameVn = request.DepartmentNameVn;
             department.DepartmentNameJp = request.DepartmentNameJp;
 
             _unitOfWork.Departments.Update(department);
+            await _unitOfWork.SaveChangesAsync();
+            if (!codeChanged) return;
+            await GroupLineDefaults.RefreshCodesAsync(_unitOfWork, x => !x.IsDeleted && x.DepartmentId == department.Id);
             await _unitOfWork.SaveChangesAsync();
         }
 

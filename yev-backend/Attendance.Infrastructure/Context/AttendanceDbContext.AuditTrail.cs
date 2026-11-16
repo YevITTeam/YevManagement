@@ -306,6 +306,7 @@ public partial class AttendanceDbContext
             ProductionLine x => x.LineCode,
             ProductionTeam x => x.Code,
             ProductionShiftTeam x => x.Code,
+            ProductionTask x => $"{x.Code} ({x.StaffKind})",
             WorkCalendarDay x => x.Date.ToString("dd/MM/yyyy"),
             UserSignature x => x.UserName,
             SecondaryPassword x => x.UserName,

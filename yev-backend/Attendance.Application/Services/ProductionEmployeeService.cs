@@ -136,6 +136,10 @@ namespace Attendance.Application.Services
             return items.DistinctBy(x => x.Id).OrderBy(x => x.Code.Length).ThenBy(x => x.Code).ToList();
         }
 
+        public async Task<List<ProductionOptionDto>> GetTaskOptionsAsync(int? workshopId) =>
+            (await _unitOfWork.ProductionTasks.SelectAsync(x => !x.IsDeleted && (workshopId == null || x.WorkshopId == workshopId),
+                x => new ProductionOptionDto { Id = x.Id, Code = x.Code, StaffKind = x.StaffKind, WorkshopId = x.WorkshopId })).OrderBy(x => x.Code).ToList();
+
         public async Task<List<string>> GetCongDoanOptionsAsync()
         {
             var items = await _unitOfWork.Employees.SelectAsync(

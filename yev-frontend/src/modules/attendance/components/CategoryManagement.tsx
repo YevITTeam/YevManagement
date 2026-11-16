@@ -28,6 +28,7 @@ type CategoryTab =
     | "production-lines"
     | "production-teams"
     | "production-shift-teams"
+    | "production-tasks"
     | "reasons"
     | "ot-cases"
     | "job-titles"
@@ -36,12 +37,13 @@ type CategoryTab =
     | "reports"
     | "settings";
 
-type CategoryTabGroup = "organization" | "production";
+type CategoryTabGroup = "organization";
 
 const PRODUCTION_KIND_BY_TAB: Partial<Record<CategoryTab, ProductionCatalogKind>> = {
     "production-lines": "Line",
     "production-teams": "Team",
     "production-shift-teams": "ShiftTeam",
+    "production-tasks": "Task",
 };
 
 export default function CategoryManagement() {
@@ -57,9 +59,10 @@ export default function CategoryManagement() {
         { key: "workshops", label: t("tabWorkshops"), addLabel: t("addWorkshops"), visible: hasPermission(user, "Attendance.Workshop.Create"), group: "organization" },
         { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments"), visible: hasPermission(user, "Attendance.Department.Create"), group: "organization" },
         { key: "groups", label: t("tabGroups"), addLabel: t("addGroups"), visible: hasPermission(user, "Attendance.Group.Create"), group: "organization" },
-        { key: "production-lines", label: t("tabProductionLines"), addLabel: t("addProductionLines"), visible: canManageProductionCatalog, group: "production" },
-        { key: "production-teams", label: t("tabProductionTeams"), addLabel: t("addProductionTeams"), visible: canManageProductionCatalog, group: "production" },
-        { key: "production-shift-teams", label: t("tabProductionShiftTeams"), addLabel: t("addProductionShiftTeams"), visible: canManageProductionCatalog, group: "production" },
+        { key: "production-lines", label: t("tabProductionLines"), addLabel: t("addProductionLines"), visible: canManageProductionCatalog, group: "organization" },
+        { key: "production-teams", label: t("tabProductionTeams"), addLabel: t("addProductionTeams"), visible: canManageProductionCatalog, group: "organization" },
+        { key: "production-shift-teams", label: t("tabProductionShiftTeams"), addLabel: t("addProductionShiftTeams"), visible: canManageProductionCatalog, group: "organization" },
+        { key: "production-tasks", label: t("tabProductionTasks"), addLabel: t("addProductionTasks"), visible: canManageProductionCatalog, group: "organization" },
         { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons"), visible: hasPermission(user, "Attendance.Reason.Create") },
         { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases"), visible: hasPermission(user, "Attendance.OtCase.Create") },
         { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles"), visible: hasPermission(user, "Attendance.JobTitle.Create") },
@@ -89,7 +92,7 @@ export default function CategoryManagement() {
         { key: "settings", label: t("tabSettings"), addLabel: null, visible: hasPermission(user, "Attendance.Setting.Update") },
     ];
     const tabs = allTabs.filter((tab) => tab.visible);
-    const groupLabels: Record<CategoryTabGroup, string> = { organization: t("tabOrganization"), production: t("tabProduction") };
+    const groupLabels: Record<CategoryTabGroup, string> = { organization: t("tabOrganization") };
     // A group takes one slot in the top row, at its first visible member.
     const topTabs = tabs.filter((tab, index) => !tab.group || tabs.findIndex((x) => x.group === tab.group) === index);
     const defaultTabKey: CategoryTab = tabs[0]?.key ?? "departments";
@@ -106,6 +109,7 @@ export default function CategoryManagement() {
         "production-lines": false,
         "production-teams": false,
         "production-shift-teams": false,
+        "production-tasks": false,
         reasons: false,
         "ot-cases": false,
         "job-titles": false,
@@ -142,6 +146,7 @@ export default function CategoryManagement() {
         "production-lines": productionCatalogRef,
         "production-teams": productionCatalogRef,
         "production-shift-teams": productionCatalogRef,
+        "production-tasks": productionCatalogRef,
         reasons: reasonRef,
         "ot-cases": otCaseRef,
         "job-titles": jobTitleRef,
@@ -176,6 +181,7 @@ export default function CategoryManagement() {
                 "production-lines": value,
                 "production-teams": value,
                 "production-shift-teams": value,
+                "production-tasks": value,
             })),
         []
     );

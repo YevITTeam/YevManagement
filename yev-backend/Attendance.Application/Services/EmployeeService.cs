@@ -126,7 +126,6 @@ namespace Attendance.Application.Services
                         DepartmentNameVn = x.Department.DepartmentNameVn,
                         WorkshopId = x.WorkshopId,
                         WorkshopNameVn = x.Workshop.WorkshopNameVn,
-                        LineKind = x.LineKind,
                         Lines = x.GroupLines.Select(l => new GroupLineDto
                         {
                             ProductionLineId = l.ProductionLineId,
@@ -822,7 +821,7 @@ namespace Attendance.Application.Services
                 IsDeleted = false
             };
 
-            await SetLineDataAsync(newEmployee, request.ProductionLineId, request.ShiftTeamId, request.CongDoan, request.TaskName);
+            await SetLineDataAsync(newEmployee, request.ProductionLineId, request.ShiftTeamId, request.CongDoan, request.TaskName, request.StaffKind);
             await _unitOfWork.Employees.AddAsync(newEmployee);
             await _unitOfWork.SaveChangesAsync();
             await GroupLineDefaults.ApplyAsync(_unitOfWork, newEmployee);
@@ -870,7 +869,7 @@ namespace Attendance.Application.Services
             employee.GroupId = groupId;
             employee.DepartmentId = departmentId;
             employee.JobTitleId = request.JobTitleId;
-            await SetLineDataAsync(employee, request.ProductionLineId, request.ShiftTeamId, request.CongDoan, request.TaskName);
+            await SetLineDataAsync(employee, request.ProductionLineId, request.ShiftTeamId, request.CongDoan, request.TaskName, request.StaffKind);
 
             _unitOfWork.Employees.Update(employee);
             await _unitOfWork.SaveChangesAsync();
@@ -886,17 +885,28 @@ namespace Attendance.Application.Services
             await SyncAutoGrantedPermissionsCoreAsync(employee);
         }
 
-        // The pair must be one the employee's group covers; GroupLineDefaults then fills team, TT/GT and a blank Công đoạn.
-        private async Task SetLineDataAsync(Employee employee, int? lineId, int? shiftTeamId, string? congDoan, string? taskName)
+        // The pair must be one the employee's group covers and the task one of the workshop's catalog; the task decides TT/GT,
+        // staffKind only counts without one. GroupLineDefaults then fills team and a blank Công đoạn.
+        private async Task SetLineDataAsync(Employee employee, int? lineId, int? shiftTeamId, string? congDoan, string? taskName, string? staffKind)
         {
             if (employee.GroupId == null || lineId == null || shiftTeamId == null) return;
-            var covered = (await _unitOfWork.Groups.SelectAsync(x => x.Id == employee.GroupId,
-                x => x.GroupLines.Any(l => l.ProductionLineId == lineId && l.ShiftTeamId == shiftTeamId))).SingleOrDefault();
-            if (!covered) throw new DomainException("Line × Nhóm ca đã chọn không thuộc Nhóm của nhân viên.");
+            var group = (await _unitOfWork.Groups.SelectAsync(x => x.Id == employee.GroupId, x => new
+            {
+                x.WorkshopId,
+                Covered = x.GroupLines.Any(l => l.ProductionLineId == lineId && l.ShiftTeamId == shiftTeamId)
+            })).Single();
+            if (!group.Covered) throw new DomainException("Line × Nhóm ca đã chọn không thuộc Nhóm của nhân viên.");
+            var task = string.IsNullOrWhiteSpace(taskName) ? null
+                : await _unitOfWork.ProductionTasks.FirstOrDefaultAsync(x => x.WorkshopId == group.WorkshopId && x.Code == taskName.Trim() && !x.IsDeleted)
+                  ?? throw new DomainException($"Công việc '{taskName.Trim()}' chưa có trong danh mục của Xưởng.");
+            var kind = StaffKinds.Normalize(staffKind);
+            if (task == null && kind != null && kind != StaffKinds.Direct && kind != StaffKinds.Indirect)
+                throw new DomainException("TT/GT chỉ nhận TT hoặc GT.");
             employee.ProductionLineId = lineId;
             employee.ShiftTeamId = shiftTeamId;
             employee.CongDoan = string.IsNullOrWhiteSpace(congDoan) ? null : congDoan.Trim();
-            employee.TaskName = string.IsNullOrWhiteSpace(taskName) ? null : taskName.Trim();
+            employee.TaskName = task?.Code;
+            employee.StaffKind = task?.StaffKind ?? kind ?? employee.StaffKind;
         }
 
         // Touches only the two limit fields; scoped like other coordinator edits.

@@ -22,4 +22,7 @@ export interface ProductionOptionDto {
     id: number;
     code: string;
     nameVn: string | null;
+    // Task options only.
+    staffKind?: string | null;
+    workshopId?: number | null;
 }

@@ -91,11 +91,13 @@ export interface CreateUpdateEmployeeDto {
     // Per-employee OT limits; null = use the global default.
     customMonthlyOtHourLimit: number | null;
     customYearlyOtHourLimit: number | null;
-    // A Line × Ca the group covers; null = keep or take the group's pair. Team and TT/GT follow the group.
+    // A Line × Ca the group covers; null = keep or take the group's pair. Team follows the line, TT/GT the task.
     productionLineId?: number | null;
     shiftTeamId?: number | null;
     congDoan?: string | null;
     taskName?: string | null;
+    // Only counts without a task.
+    staffKind?: string | null;
 }
 
 // Separate narrow permission (Attendance.Employee.UpdateOtLimit) so department coordinators can edit OT

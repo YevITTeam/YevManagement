@@ -209,8 +209,6 @@
       "editTitle": "Cập nhật nhóm",
       "fieldDepartment": "Bộ phận",
       "fieldDepartmentPlaceholder": "Chọn bộ phận...",
-      "fieldCode": "Mã nhóm",
-      "fieldCodePlaceholder": "Nhập mã nhóm...",
       "fieldNameVn": "Tên nhóm (VN)",
       "fieldNameVnPlaceholder": "Nhập tên nhóm...",
       "fieldNameJp": "Tên nhóm (JP)",
@@ -234,11 +232,10 @@
       "fieldAllowEatLater": "Cho phép ăn sau khi tăng ca",
       "fieldLine": "Line",
       "fieldShiftTeam": "Ca",
-      "fieldLineKind": "Loại",
       "addLinePair": "Thêm Line × Ca",
       "colLines": "Line × Ca",
       "mergeTitle": "Chuyển Line × Ca sang Nhóm này?",
-      "mergeMessage": "{pairs} đang thuộc Nhóm khác. Lưu sẽ chuyển các cặp này cùng những người đang ở đó sang Nhóm này; họ dùng cây duyệt của Nhóm này.",
+      "mergeMessage": "{pairs} đang thuộc Nhóm khác. Lưu sẽ chuyển các cặp này cùng những người đang ở đó sang Nhóm này; họ dùng cây duyệt của Nhóm này. Nhóm nào không còn Line × Ca sẽ bị xoá.",
       "mergeApprove": "Chuyển"
     },
     "Reason": {
@@ -831,13 +828,14 @@
       "tabWorkshops": "Xưởng",
       "addWorkshops": "+ Thêm xưởng",
       "tabOrganization": "Tổ chức",
-      "tabProduction": "Dưới chuyền",
       "tabProductionLines": "Line",
       "tabProductionTeams": "Team",
       "tabProductionShiftTeams": "Nhóm ca",
       "addProductionLines": "+ Thêm Line",
       "addProductionTeams": "+ Thêm Team",
-      "addProductionShiftTeams": "+ Thêm nhóm ca"
+      "addProductionShiftTeams": "+ Thêm nhóm ca",
+      "tabProductionTasks": "Công việc",
+      "addProductionTasks": "+ Thêm công việc"
     },
     "AttendanceSetting": {
       "loading": "Đang tải cấu hình...",
@@ -1565,6 +1563,7 @@
       "kindLine": "Line",
       "kindTeam": "Team",
       "kindShiftTeam": "nhóm ca",
+      "kindTask": "công việc",
       "searchPlaceholder": "Tìm kiếm...",
       "allTeams": "Tất cả Team",
       "colCode": "Mã",
@@ -1590,8 +1589,7 @@
       "colWorkshop": "Xưởng",
       "allWorkshops": "Tất cả xưởng",
       "colCdMae": "CD_MAE",
-      "colSortCode": "Co",
-      "staffKindHint": "Line có nhân sự trực tiếp (TT) / gián tiếp (GT)"
+      "colSortCode": "Co"
     }
   },
   "Home": {

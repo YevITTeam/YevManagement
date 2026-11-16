@@ -12,6 +12,7 @@ const ENDPOINTS = {
         teamOptions: "/ProductionEmployee/team-options",
         shiftTeamOptions: "/ProductionEmployee/shift-team-options",
         congDoanOptions: "/ProductionEmployee/cong-doan-options",
+        taskOptions: "/ProductionEmployee/task-options",
     },
 } as const;
 
@@ -55,6 +56,12 @@ export const ProductionEmployeeApi = {
         if (teamId !== undefined) query.set("TeamId", String(teamId));
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.PRODUCTION_EMPLOYEE.shiftTeamOptions}?${queryString}` : ENDPOINTS.PRODUCTION_EMPLOYEE.shiftTeamOptions;
+        const response = await api.get<ApiResponse<ProductionOptionDto[]>>(url);
+        return response.data;
+    },
+    // staffKind is the task's TT/GT.
+    getTaskOptions: async (workshopId?: number) => {
+        const url = workshopId !== undefined ? `${ENDPOINTS.PRODUCTION_EMPLOYEE.taskOptions}?workshopId=${workshopId}` : ENDPOINTS.PRODUCTION_EMPLOYEE.taskOptions;
         const response = await api.get<ApiResponse<ProductionOptionDto[]>>(url);
         return response.data;
     },

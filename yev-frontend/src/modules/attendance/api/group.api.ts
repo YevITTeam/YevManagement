@@ -24,15 +24,13 @@ export interface GetGroupPageNationParams {
 }
 
 export interface CreateUpdateGroupDto {
-    groupCode: string;
     groupNameVn: string;
     groupNameJp: string | null;
     departmentId: number;
     workshopId: number;
     allowEatLater: boolean;
-    lineKind: string | null;
     lines: GroupLineDto[];
-    // Move pairs owned by another group of the same workshop/department/kind here, with their people.
+    // Move pairs owned by another group of the same workshop/department here, with their people.
     takeOverLines?: boolean;
 }
 

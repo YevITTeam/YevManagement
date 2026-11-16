@@ -11,17 +11,16 @@ import type { ProductionCatalogItemDto } from "@/modules/attendance/types/produc
 import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import type { GroupDto, GroupLineDto } from "@/modules/attendance/types/group.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 
 export interface GroupFormValues {
     workshopId: number;
     departmentId: number;
-    groupCode: string;
     groupNameVn: string;
     groupNameJp: string | null;
     allowEatLater: boolean;
-    lineKind: string | null;
     // Empty = the server adds "Line = group name × HC".
     lines: GroupLineDto[];
 }
@@ -38,15 +37,11 @@ interface GroupFormProps {
 const emptyValues: GroupFormValues = {
     workshopId: 0,
     departmentId: 0,
-    groupCode: "",
     groupNameVn: "",
     groupNameJp: null,
     allowEatLater: true,
-    lineKind: null,
     lines: [],
 };
-
-const LINE_KINDS = ["TT", "GT"];
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
 const fieldClassName =
@@ -89,11 +84,9 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                 ? {
                       workshopId: current.workshopId,
                       departmentId: current.departmentId,
-                      groupCode: current.groupCode,
                       groupNameVn: current.groupNameVn,
                       groupNameJp: current.groupNameJp,
                       allowEatLater: current.allowEatLater,
-                      lineKind: current.lineKind,
                       lines: current.lines,
                   }
                 : emptyValues
@@ -116,11 +109,8 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
         searchText: w.workshopNameVn.toLowerCase(),
     }));
 
-    // Only lines of the group's workshop that have staff of the chosen kind.
     const lineOptions: SelectOption[] = lines
         .filter((l) => l.workshopId === values.workshopId)
-        .filter((l) => values.lineKind !== "TT" || l.hasDirectStaff)
-        .filter((l) => values.lineKind !== "GT" || l.hasIndirectStaff)
         .map((l) => ({ value: l.id, label: l.code, searchText: l.code.toLowerCase() }));
 
     const pairLabel = (pair: GroupLineDto) => {
@@ -147,8 +137,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        if (!values.workshopId || !values.departmentId || !values.groupCode.trim() || !values.groupNameVn.trim()) return;
-        if (values.lines.length > 0 && !values.lineKind) return;
+        if (!values.workshopId || !values.departmentId || !values.groupNameVn.trim()) return;
         onSubmit({ ...values, groupNameJp: values.groupNameJp?.trim() ? values.groupNameJp.trim() : null });
     };
 
@@ -200,19 +189,6 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             />
                         </label>
 
-                        <label className="block w-32">
-                            <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
-                            <input
-                                value={values.groupCode}
-                                onChange={(event) => setValues((current) => ({ ...current, groupCode: event.target.value }))}
-                                placeholder={t("fieldCodePlaceholder")}
-                                disabled={loading}
-                                autoFocus
-                                required
-                                className={fieldClassName}
-                            />
-                        </label>
-
                         <label className="block min-w-48 flex-1">
                             <span className={fieldLabelClassName}>{t("fieldNameVn")}<RequiredMark /></span>
                             <input
@@ -220,6 +196,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                                 onChange={(event) => setValues((current) => ({ ...current, groupNameVn: event.target.value }))}
                                 placeholder={t("fieldNameVnPlaceholder")}
                                 disabled={loading}
+                                autoFocus
                                 required
                                 className={fieldClassName}
                             />
@@ -239,26 +216,6 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
 
                     <div className="space-y-2">
                         <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
-                            <label className="block w-24">
-                                <span className={fieldLabelClassName}>
-                                    {t("fieldLineKind")}
-                                    {values.lines.length > 0 && <RequiredMark />}
-                                </span>
-                                <select
-                                    value={values.lineKind ?? ""}
-                                    onChange={(event) => setValues((current) => ({ ...current, lineKind: event.target.value || null }))}
-                                    disabled={loading}
-                                    required={values.lines.length > 0}
-                                    className={fieldClassName}
-                                >
-                                    <option value="" />
-                                    {LINE_KINDS.map((k) => (
-                                        <option key={k} value={k}>
-                                            {k}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
 
                             <label className="block w-44">
                                 <span className={fieldLabelClassName}>{t("fieldLine")}</span>
@@ -273,19 +230,14 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
 
                             <label className="block w-32">
                                 <span className={fieldLabelClassName}>{t("fieldShiftTeam")}</span>
-                                <select
+                                <StyledSelect<number | "">
+                                    options={shiftTeams.map((s) => ({ value: s.id, label: s.nameVn ?? s.code }))}
                                     value={newShiftId}
-                                    onChange={(event) => setNewShiftId(event.target.value ? Number(event.target.value) : "")}
+                                    onChange={setNewShiftId}
                                     disabled={loading}
-                                    className={fieldClassName}
-                                >
-                                    <option value="" />
-                                    {shiftTeams.map((s) => (
-                                        <option key={s.id} value={s.id}>
-                                            {s.nameVn ?? s.code}
-                                        </option>
-                                    ))}
-                                </select>
+                                    triggerClassName={`${fieldClassName} pr-8 text-left`}
+                                    ariaLabel={t("fieldShiftTeam")}
+                                />
                             </label>
 
                             <button

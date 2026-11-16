@@ -136,11 +136,11 @@ namespace Attendance.Application.Services
                 foreach (var (code, newGroup) in newGroupsByCode)
                 {
                     var pairs = validRows.Where(r => string.Equals(r.GroupCode, code, StringComparison.OrdinalIgnoreCase) && r.ResolvedProductionLineId != null)
-                        .Select(r => (LineId: r.ResolvedProductionLineId!.Value, ShiftId: r.ResolvedShiftTeamId!.Value, Kind: r.StaffKind)).Distinct().ToList();
-                    foreach (var (lineId, shiftId, _) in pairs)
+                        .Select(r => (LineId: r.ResolvedProductionLineId!.Value, ShiftId: r.ResolvedShiftTeamId!.Value)).Distinct().ToList();
+                    foreach (var (lineId, shiftId) in pairs)
                         newGroup.GroupLines.Add(new GroupLine { ProductionLineId = lineId, ShiftTeamId = shiftId });
-                    if (pairs.Count > 0) newGroup.LineKind = pairs[0].Kind;
                     await GroupLineDefaults.EnsureLinesAsync(_unitOfWork, newGroup);
+                    await GroupLineDefaults.AssignCodeAsync(_unitOfWork, newGroup);
                     await _unitOfWork.SaveChangesAsync();
                 }
                 var defaultedCodes = validRows.Where(r => r.ResolvedProductionLineId == null).Select(r => r.EmployeeCode!).ToList();
@@ -194,11 +194,10 @@ namespace Attendance.Application.Services
             // Workshop a new group is created in: the workshop of its first row.
             public int? NewWorkshopId { get; set; }
             public List<(int LineId, int ShiftTeamId)> Lines { get; set; } = new();
-            public string? LineKind { get; set; }
         }
 
         private sealed record ExistingGroup(int Id, string GroupCode, string GroupNameVn, int DepartmentId, int WorkshopId, string DepartmentCode,
-            string? LineKind, List<(int LineId, int ShiftTeamId)> Lines);
+            List<(int LineId, int ShiftTeamId)> Lines);
 
         private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -216,8 +215,8 @@ namespace Attendance.Application.Services
             var departmentNameByCode = existingDepartments.ToDictionary(x => x.DepartmentCode, x => x.DepartmentNameVn, StringComparer.OrdinalIgnoreCase);
             var existingGroups = (await _unitOfWork.Groups.SelectAsync(
                 x => !x.IsDeleted, x => new { x.Id, x.GroupCode, x.GroupNameVn, x.DepartmentId, x.WorkshopId, DepartmentCode = x.Department.DepartmentCode,
-                    x.LineKind, Lines = x.GroupLines.Select(l => new { l.ProductionLineId, l.ShiftTeamId }).ToList() }))
-                .Select(x => new ExistingGroup(x.Id, x.GroupCode, x.GroupNameVn, x.DepartmentId, x.WorkshopId, x.DepartmentCode, x.LineKind,
+                    Lines = x.GroupLines.Select(l => new { l.ProductionLineId, l.ShiftTeamId }).ToList() }))
+                .Select(x => new ExistingGroup(x.Id, x.GroupCode, x.GroupNameVn, x.DepartmentId, x.WorkshopId, x.DepartmentCode,
                     x.Lines.Select(l => (l.ProductionLineId, l.ShiftTeamId)).ToList()))
                 .ToList();
             var codesInFile = rawRows.Where(r => !string.IsNullOrWhiteSpace(r.EmployeeCode))
@@ -238,9 +237,11 @@ namespace Attendance.Application.Services
                 .ToDictionary(x => x.Code, StringComparer.OrdinalIgnoreCase);
 
             var lines = await _unitOfWork.ProductionLines.SelectAsync(x => !x.IsDeleted,
-                x => new { x.Id, x.WorkshopId, x.LineCode, x.TeamId, x.HasDirectStaff, x.HasIndirectStaff });
+                x => new { x.Id, x.WorkshopId, x.LineCode, x.TeamId });
             var shiftTeams = await _unitOfWork.ProductionShiftTeams.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.Code });
             var workshops = await _unitOfWork.Workshops.SelectAsync(x => !x.IsDeleted, x => new { x.Id, x.WorkshopCode });
+            var tasksByKey = (await _unitOfWork.ProductionTasks.SelectAsync(x => !x.IsDeleted, x => new { x.WorkshopId, x.Code, x.StaffKind }))
+                .ToDictionary(x => (x.WorkshopId, x.Code.Trim().ToUpperInvariant()));
             var linesByKey = lines.ToDictionary(x => (x.WorkshopId, x.LineCode.Trim().ToUpperInvariant()));
             var lineWorkshopsByCode = lines.ToLookup(x => x.LineCode.Trim().ToUpperInvariant(), x => x.WorkshopId);
             var shiftTeamsByCode = shiftTeams.ToDictionary(x => x.Code.Trim(), x => x.Id, StringComparer.OrdinalIgnoreCase);
@@ -262,7 +263,7 @@ namespace Attendance.Application.Services
                     groupPlans[g.GroupCode] = plan = new GroupResolution
                     {
                         Code = g.GroupCode, ExistingId = g.Id, ExistingDepartmentId = g.DepartmentId, Name = g.GroupNameVn, DepartmentCode = g.DepartmentCode,
-                        ExistingWorkshopId = g.WorkshopId, Lines = g.Lines, LineKind = g.LineKind
+                        ExistingWorkshopId = g.WorkshopId, Lines = g.Lines
                     };
                 return plan;
             }
@@ -309,7 +310,6 @@ namespace Attendance.Application.Services
 
             // Phase 2: validate each employee row, referencing the Department/Group plans built above.
             var result = new List<EmployeeImportRowDto>();
-            var newGroupKinds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var row in rawRows)
             {
                 var errors = new List<string>();
@@ -385,8 +385,18 @@ namespace Attendance.Application.Services
                 }
                 var workshopId = rowWorkshopId ?? existingEmployee?.WorkshopId ?? defaultWorkshopId;
 
+                // The task decides TT/GT; the TT/GT column only counts for rows without one.
+                string? taskKind = null;
+                if (taskName != null)
+                {
+                    if (tasksByKey.TryGetValue((workshopId, taskName.ToUpperInvariant()), out var task)) (taskName, taskKind) = (task.Code, task.StaffKind);
+                    else errors.Add($"Công việc '{taskName}' chưa có trong danh mục của xưởng {workshopCodeById.GetValueOrDefault(workshopId)} — thêm ở Danh mục > Tổ chức > Công việc.");
+                }
+
                 int? lineId = null, teamId = null, shiftTeamId = null;
-                string? staffKind = null;
+                if (taskKind == null && fileKind != null && fileKind != StaffKinds.Direct && fileKind != StaffKinds.Indirect)
+                    errors.Add($"Cột TT/GT chỉ nhận TT hoặc GT (đang là '{row.StaffKind}').");
+                var staffKind = taskKind ?? (fileKind is StaffKinds.Direct or StaffKinds.Indirect ? fileKind : null) ?? existingEmployee?.StaffKind;
                 var lineColumnsUsed = lineCode != null || teamCode != null || shiftTeamCode != null || congDoan != null || taskName != null || fileKind != null;
                 if (lineCode != null && shiftTeamCode != null)
                 {
@@ -399,19 +409,6 @@ namespace Attendance.Application.Services
                         // Team is the area a line sits in, so it follows the catalog; the file's Team column is informational.
                         lineId = line.Id;
                         teamId = line.TeamId;
-                        var allowed = StaffKinds.AllowedOn(line.HasDirectStaff, line.HasIndirectStaff);
-                        if (fileKind != null && fileKind != StaffKinds.Direct && fileKind != StaffKinds.Indirect)
-                            errors.Add($"Cột TT/GT chỉ nhận TT hoặc GT (đang là '{row.StaffKind}').");
-                        else if (fileKind != null && !allowed.Contains(fileKind))
-                            errors.Add($"Line '{lineCode}' không có nhân sự {fileKind}.");
-                        else
-                        {
-                            staffKind = fileKind
-                                ?? (allowed.Count == 1 ? allowed[0] : null)
-                                ?? (fileGroup is { Lines.Count: > 0, LineKind: { } groupKind } && allowed.Contains(groupKind) ? groupKind : null)
-                                ?? (existingEmployee?.StaffKind is { } currentKind && allowed.Contains(currentKind) ? currentKind : null);
-                            if (staffKind == null) errors.Add($"Line '{lineCode}' có cả TT và GT — ghi cột TT/GT.");
-                        }
                     }
                 }
                 else if (lineColumnsUsed)
@@ -419,12 +416,12 @@ namespace Attendance.Application.Services
                     errors.Add("Dữ liệu dưới chuyền phải có đủ Line và Nhóm ca.");
                 }
 
-                // Group = Line × Ca × TT/GT inside a department; the HR group code only decides when Add mode names it
+                // Group = Line × Ca inside a department; the group code only decides when Add mode names it
                 // or the row has no line data.
                 GroupResolution? target = null;
-                var hasPair = lineId.HasValue && shiftTeamId.HasValue && staffKind != null;
+                var hasPair = lineId.HasValue && shiftTeamId.HasValue;
                 var pair = hasPair ? (lineId!.Value, shiftTeamId!.Value) : default;
-                var pairLabel = hasPair ? $"Line {lineCodeById[pair.Item1]} · Ca {shiftTeamCodeById[pair.Item2]} {staffKind}" : "";
+                var pairLabel = hasPair ? $"Line {lineCodeById[pair.Item1]} · Ca {shiftTeamCodeById[pair.Item2]}" : "";
                 if (groupCode != null && fileGroup is null or { HasConflict: true })
                 {
                     // Already reported above.
@@ -432,7 +429,7 @@ namespace Attendance.Application.Services
                 else if (mode == EmployeeImportMode.Add && fileGroup != null)
                 {
                     target = fileGroup;
-                    if (hasPair && fileGroup.ExistingId != null && (fileGroup.LineKind != staffKind || !fileGroup.Lines.Contains(pair)))
+                    if (hasPair && fileGroup.ExistingId != null && !fileGroup.Lines.Contains(pair))
                         errors.Add($"{pairLabel} không thuộc Nhóm '{fileGroup.Code}' — thêm ở màn Nhóm, hoặc bỏ Mã nhóm để tự xác định Nhóm.");
                 }
                 else if (hasPair)
@@ -440,7 +437,7 @@ namespace Attendance.Application.Services
                     // A line may serve several departments (PRO and QA KENSA share lines), so the department narrows the match.
                     var departmentFilterSet = fileDepartment != null || fileGroup?.ExistingDepartmentId != null;
                     var departmentFilter = fileDepartment != null ? fileDepartment.ExistingId : fileGroup?.ExistingDepartmentId;
-                    var candidates = existingGroups.Where(g => g.WorkshopId == workshopId && g.LineKind == staffKind && g.Lines.Contains(pair)
+                    var candidates = existingGroups.Where(g => g.WorkshopId == workshopId && g.Lines.Contains(pair)
                         && (!departmentFilterSet || g.DepartmentId == departmentFilter)).ToList();
                     if (candidates.Count > 1 && existingEmployee?.DepartmentId is int currentDepartmentId && candidates.Any(g => g.DepartmentId == currentDepartmentId))
                         candidates = candidates.Where(g => g.DepartmentId == currentDepartmentId).ToList();
@@ -465,16 +462,10 @@ namespace Attendance.Application.Services
                 var isNewDepartment = isNewGroup && departmentPlans.GetValueOrDefault(target!.DepartmentCode)?.ExistingId == null;
                 if (isNewGroup)
                 {
-                    // A new group takes the Line × Ca of its rows on Confirm, so its rows must agree on workshop and TT/GT.
+                    // A new group takes the Line × Ca of its rows on Confirm, so its rows must agree on workshop.
                     target!.NewWorkshopId ??= workshopId;
                     if (target.NewWorkshopId != workshopId)
                         errors.Add($"Nhóm mới '{target.Code}' có dòng ở nhiều Xưởng.");
-                    if (hasPair)
-                    {
-                        if (newGroupKinds.TryGetValue(target.Code, out var newKind) && newKind != staffKind)
-                            errors.Add($"Nhóm mới '{target.Code}' có cả {newKind} và {staffKind} — tách Nhóm hoặc sửa cột TT/GT.");
-                        else newGroupKinds[target.Code] = staffKind!;
-                    }
                 }
                 // Blank line columns keep the person's pair only when the group still covers it; otherwise one pair must be obvious.
                 else if (target != null && !lineColumnsUsed && target.Lines.Count > 1
@@ -508,7 +499,7 @@ namespace Attendance.Application.Services
                     LineCode = lineCode,
                     TeamCode = teamCode,
                     ShiftTeamCode = shiftTeamCode,
-                    StaffKind = staffKind ?? fileKind,
+                    StaffKind = staffKind,
                     CongDoan = congDoan,
                     TaskName = taskName,
                     ResolvedProductionLineId = lineId,
@@ -1065,10 +1056,11 @@ namespace Attendance.Application.Services
         private static readonly string[] EmployeeNotes =
         {
             "Mỗi dòng 1 nhân viên. Mã NV đã có → cập nhật; chưa có → tạo mới. Chọn chế độ trên màn import.",
-            "Ghi đè: file là danh sách đầy đủ của Phòng ban. Có Line + Nhóm ca thì Nhóm tự xác định theo Line × Ca × TT/GT (Mã phòng, Mã nhóm có thể để trống). Người của Phòng ban có trong file nhưng không có dòng nào → đánh dấu Nghỉ việc.",
-            "Thêm: chỉ cập nhật người có trong file. Có Mã nhóm → vào đúng Nhóm đó (Line × Ca ghi trong file phải thuộc Nhóm); không có → tự xác định theo Line × Ca × TT/GT.",
+            "Ghi đè: file là danh sách đầy đủ của Phòng ban. Có Line + Nhóm ca thì Nhóm tự xác định theo Line × Ca (Mã phòng, Mã nhóm có thể để trống). Người của Phòng ban có trong file nhưng không có dòng nào → đánh dấu Nghỉ việc.",
+            "Thêm: chỉ cập nhật người có trong file. Có Mã nhóm → vào đúng Nhóm đó (Line × Ca ghi trong file phải thuộc Nhóm); không có → tự xác định theo Line × Ca.",
             "Line và Nhóm ca để trống → giữ Line × Ca hiện tại nếu Nhóm vẫn gắn, không thì lấy theo Nhóm. Team tự lấy theo Line. Xưởng để trống → theo Nhóm, rồi theo Xưởng duy nhất có Line đó, rồi Xưởng hiện tại.",
-            "TT/GT: Line chỉ có một loại thì tự điền; Line có cả hai thì theo cột TT/GT, trống thì theo Loại của Nhóm trong file, rồi theo dữ liệu đang có.",
+            "Công việc phải có trong danh mục Công việc của Xưởng (Danh mục > Tổ chức) và quyết định TT/GT; cột TT/GT chỉ dùng cho dòng không có Công việc.",
+            "Không có Công việc: TT/GT theo cột TT/GT, trống thì giữ như hiện tại.",
             "Bộ phận/Nhóm chưa có trong hệ thống sẽ được tạo mới (chỉ Admin). Chỉ Admin và Người phụ trách Bộ phận được import, Người phụ trách chỉ trong Bộ phận mình.",
             "Nhân viên giữ chức vụ Trưởng phòng trở lên không import được — sửa ở màn Nhân viên.",
             "Tài khoản đăng nhập, email nhận thông báo, Chức vụ, chữ ký: dùng import Liên kết tài khoản.",

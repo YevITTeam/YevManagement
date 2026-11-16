@@ -568,10 +568,6 @@ namespace Attendance.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
-                    b.Property<string>("LineKind")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
                     b.Property<bool>("StepwiseEdit")
                         .HasColumnType("bit");
 
@@ -583,7 +579,8 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasIndex(new[] { "DepartmentId" }, "IX_Groups_DepartmentId");
 
                     b.HasIndex(new[] { "GroupCode" }, "IX_Groups_GroupCode")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex(new[] { "WorkshopId" }, "IX_Groups_WorkshopId");
 
@@ -1610,12 +1607,6 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<bool>("HasDirectStaff")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("HasIndirectStaff")
-                        .HasColumnType("bit");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
@@ -1668,6 +1659,39 @@ namespace Attendance.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ProductionShiftTeams");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionTask", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("StaffKind")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)");
+
+                    b.Property<int>("WorkshopId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "WorkshopId", "Code" }, "IX_ProductionTasks_WorkshopId_Code")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("ProductionTasks");
                 });
 
             modelBuilder.Entity("Attendance.Domain.Entities.ProductionTeam", b =>
@@ -2402,6 +2426,18 @@ namespace Attendance.Infrastructure.Migrations
                         .HasConstraintName("FK_ProductionLines_Workshops_WorkshopId");
 
                     b.Navigation("Team");
+
+                    b.Navigation("Workshop");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.ProductionTask", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Workshop", "Workshop")
+                        .WithMany()
+                        .HasForeignKey("WorkshopId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_ProductionTasks_Workshops_WorkshopId");
 
                     b.Navigation("Workshop");
                 });

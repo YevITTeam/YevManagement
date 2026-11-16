@@ -209,8 +209,6 @@
       "editTitle": "グループを更新",
       "fieldDepartment": "部署",
       "fieldDepartmentPlaceholder": "部署を選択してください...",
-      "fieldCode": "グループコード",
-      "fieldCodePlaceholder": "グループコードを入力してください...",
       "fieldNameVn": "グループ名（VN）",
       "fieldNameVnPlaceholder": "グループ名を入力してください...",
       "fieldNameJp": "グループ名（JP）",
@@ -234,11 +232,10 @@
       "fieldAllowEatLater": "残業後の食事を許可する",
       "fieldLine": "ライン",
       "fieldShiftTeam": "シフト",
-      "fieldLineKind": "区分",
       "addLinePair": "ライン × シフトを追加",
       "colLines": "ライン × シフト",
       "mergeTitle": "ライン × シフトをこのグループへ移しますか？",
-      "mergeMessage": "{pairs} は他のグループに属しています。保存すると、この組み合わせと該当者がこのグループへ移り、このグループの承認ツリーを使います。",
+      "mergeMessage": "{pairs} は他のグループに属しています。保存すると、この組み合わせと該当者がこのグループへ移り、このグループの承認ツリーを使います。Line × Ca が残らないグループは削除されます。",
       "mergeApprove": "移す"
     },
     "Reason": {
@@ -831,13 +828,14 @@
       "tabWorkshops": "工場",
       "addWorkshops": "＋ 工場を追加",
       "tabOrganization": "組織",
-      "tabProduction": "製造ライン",
       "tabProductionLines": "Line",
       "tabProductionTeams": "Team",
       "tabProductionShiftTeams": "シフトグループ",
       "addProductionLines": "+ Line追加",
       "addProductionTeams": "+ Team追加",
-      "addProductionShiftTeams": "+ シフトグループ追加"
+      "addProductionShiftTeams": "+ シフトグループ追加",
+      "tabProductionTasks": "作業",
+      "addProductionTasks": "+ 作業追加"
     },
     "AttendanceSetting": {
       "loading": "設定を読み込んでいます...",
@@ -1565,6 +1563,7 @@
       "kindLine": "Line",
       "kindTeam": "Team",
       "kindShiftTeam": "シフトグループ",
+      "kindTask": "作業",
       "searchPlaceholder": "検索...",
       "allTeams": "すべてのTeam",
       "colCode": "コード",
@@ -1590,8 +1589,7 @@
       "colWorkshop": "工場",
       "allWorkshops": "全工場",
       "colCdMae": "CD_MAE",
-      "colSortCode": "Co",
-      "staffKindHint": "直接 (TT) / 間接 (GT) 要員がいるライン"
+      "colSortCode": "Co"
     }
   },
   "Home": {

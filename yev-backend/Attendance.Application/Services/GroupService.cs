@@ -1,6 +1,5 @@
 using Attendance.Application.Dtos.Groups;
 using Attendance.Application.Interfaces.Service;
-using Attendance.Domain.Constants;
 using Attendance.Domain.Entities;
 using Shared.Application.Services;
 using Shared.Application.Wrapper;
@@ -38,7 +37,6 @@ namespace Attendance.Application.Services
                     WorkshopId = x.WorkshopId,
                     WorkshopNameVn = x.Workshop.WorkshopNameVn,
                     AllowEatLater = x.AllowEatLater,
-                    LineKind = x.LineKind,
                     Lines = x.GroupLines.Select(l => new GroupLineDto
                     {
                         ProductionLineId = l.ProductionLineId,
@@ -65,7 +63,6 @@ namespace Attendance.Application.Services
                     WorkshopId = x.WorkshopId,
                     WorkshopNameVn = x.Workshop.WorkshopNameVn,
                     AllowEatLater = x.AllowEatLater,
-                    LineKind = x.LineKind,
                     Lines = x.GroupLines.Select(l => new GroupLineDto
                     {
                         ProductionLineId = l.ProductionLineId,
@@ -93,7 +90,6 @@ namespace Attendance.Application.Services
                     WorkshopId = x.WorkshopId,
                     WorkshopNameVn = x.Workshop.WorkshopNameVn,
                     AllowEatLater = x.AllowEatLater,
-                    LineKind = x.LineKind,
                     Lines = x.GroupLines.Select(l => new GroupLineDto
                     {
                         ProductionLineId = l.ProductionLineId,
@@ -119,7 +115,6 @@ namespace Attendance.Application.Services
                 WorkshopId = x.WorkshopId,
                 WorkshopNameVn = x.Workshop.WorkshopNameVn,
                 AllowEatLater = x.AllowEatLater,
-                LineKind = x.LineKind,
                 Lines = x.GroupLines.Select(l => new GroupLineDto
                 {
                     ProductionLineId = l.ProductionLineId,
@@ -139,12 +134,8 @@ namespace Attendance.Application.Services
             var workshop = await _unitOfWork.Workshops.FirstOrDefaultAsync(x => x.Id == request.WorkshopId && !x.IsDeleted);
             workshop.OrThrowNotFound("Xưởng", request.WorkshopId);
 
-            var exists = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.GroupCode == request.GroupCode && !x.IsDeleted);
-            if (exists != null) throw new DomainException($"Mã nhóm '{request.GroupCode}' đã tồn tại.");
-
             var newGroup = new Group
             {
-                GroupCode = request.GroupCode,
                 GroupNameVn = request.GroupNameVn,
                 GroupNameJp = request.GroupNameJp,
                 DepartmentId = request.DepartmentId,
@@ -152,8 +143,9 @@ namespace Attendance.Application.Services
                 AllowEatLater = request.AllowEatLater,
                 IsDeleted = false
             };
-            await ApplyLinesAsync(newGroup, request.Lines, request.LineKind, request.TakeOverLines);
+            await ApplyLinesAsync(newGroup, request.Lines, request.TakeOverLines);
             await GroupLineDefaults.EnsureLinesAsync(_unitOfWork, newGroup);
+            await GroupLineDefaults.AssignCodeAsync(_unitOfWork, newGroup);
 
             await _unitOfWork.Groups.AddAsync(newGroup);
             await _unitOfWork.SaveChangesAsync();
@@ -166,13 +158,7 @@ namespace Attendance.Application.Services
             var group = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.Id == request.Id, x => x.GroupLines);
             group.OrThrowNotFound("Nhóm", request.Id);
 
-            if (group!.GroupCode != request.GroupCode)
-            {
-                var exists = await _unitOfWork.Groups.FirstOrDefaultAsync(x => x.GroupCode == request.GroupCode && !x.IsDeleted);
-                if (exists != null) throw new DomainException($"Mã nhóm '{request.GroupCode}' đã tồn tại.");
-            }
-
-            if (group.DepartmentId != request.DepartmentId)
+            if (group!.DepartmentId != request.DepartmentId)
             {
                 var department = await _unitOfWork.Departments.GetByIdAsync(request.DepartmentId);
                 department.OrThrowNotFound("Bộ phận", request.DepartmentId);
@@ -184,63 +170,55 @@ namespace Attendance.Application.Services
                 workshop.OrThrowNotFound("Xưởng", request.WorkshopId);
             }
 
-            group.GroupCode = request.GroupCode;
             group.GroupNameVn = request.GroupNameVn;
             group.GroupNameJp = request.GroupNameJp;
             group.DepartmentId = request.DepartmentId;
             group.WorkshopId = request.WorkshopId;
             group.AllowEatLater = request.AllowEatLater;
-            await ApplyLinesAsync(group, request.Lines, request.LineKind, request.TakeOverLines);
+            await ApplyLinesAsync(group, request.Lines, request.TakeOverLines);
             await GroupLineDefaults.EnsureLinesAsync(_unitOfWork, group);
+            await GroupLineDefaults.AssignCodeAsync(_unitOfWork, group);
 
             _unitOfWork.Groups.Update(group);
             await _unitOfWork.SaveChangesAsync();
 
-            // Members follow the group's new pairs and kind.
+            // Members follow the group's new pairs.
             foreach (var member in await _unitOfWork.Employees.FindAsync(x => x.GroupId == group.Id && !x.IsDeleted))
                 await GroupLineDefaults.ApplyAsync(_unitOfWork, member);
             await _unitOfWork.SaveChangesAsync();
         }
 
-        private async Task ApplyLinesAsync(Group group, List<GroupLineDto> requested, string? lineKind, bool takeOver)
+        private async Task ApplyLinesAsync(Group group, List<GroupLineDto> requested, bool takeOver)
         {
             var pairs = requested.Select(x => (x.ProductionLineId, x.ShiftTeamId)).Distinct().ToList();
-            var kind = StaffKinds.Normalize(lineKind);
             if (pairs.Count == 0)
             {
-                group.LineKind = null;
                 group.GroupLines.Clear();
                 return;
             }
-            if (kind != StaffKinds.Direct && kind != StaffKinds.Indirect)
-                throw new DomainException("Nhóm gắn Line phải chọn Loại TT hoặc GT.");
 
             var lineIds = pairs.Select(x => x.ProductionLineId).Distinct().ToList();
             var lines = await _unitOfWork.ProductionLines.FindAsync(x => lineIds.Contains(x.Id) && !x.IsDeleted);
             if (lines.Count != lineIds.Count) throw new DomainException("Line không có trong danh mục.");
             var wrongWorkshop = lines.Where(x => x.WorkshopId != group.WorkshopId).Select(x => x.LineCode).ToList();
             if (wrongWorkshop.Count > 0) throw new DomainException($"Line {string.Join(", ", wrongWorkshop)} không thuộc Xưởng của Nhóm.");
-            var wrongKind = lines.Where(x => !StaffKinds.AllowedOn(x).Contains(kind)).Select(x => x.LineCode).ToList();
-            if (wrongKind.Count > 0) throw new DomainException($"Line {string.Join(", ", wrongKind)} không có nhân sự {kind}.");
             var shiftIds = pairs.Select(x => x.ShiftTeamId).Distinct().ToList();
             if ((await _unitOfWork.ProductionShiftTeams.FindAsync(x => shiftIds.Contains(x.Id) && !x.IsDeleted)).Count != shiftIds.Count)
                 throw new DomainException("Ca không có trong danh mục.");
 
-            // The import resolves an employee's group from (workshop, department, kind, Line × Ca), so that key must be unique.
+            // The import resolves an employee's group from (workshop, department, Line × Ca), so that key must be unique.
             // Only pairs this save introduces count, so groups that already clash stay editable until Admin merges them.
-            var introduced = group.LineKind == kind
-                ? pairs.Where(p => !group.GroupLines.Any(x => x.ProductionLineId == p.ProductionLineId && x.ShiftTeamId == p.ShiftTeamId)).ToList()
-                : pairs;
+            var introduced = pairs.Where(p => !group.GroupLines.Any(x => x.ProductionLineId == p.ProductionLineId && x.ShiftTeamId == p.ShiftTeamId)).ToList();
             var introducedLineIds = introduced.Select(p => p.ProductionLineId).ToList();
             var owners = await _unitOfWork.Groups.FindWithIncludesAsync(
-                x => !x.IsDeleted && x.Id != group.Id && x.WorkshopId == group.WorkshopId && x.DepartmentId == group.DepartmentId && x.LineKind == kind
+                x => !x.IsDeleted && x.Id != group.Id && x.WorkshopId == group.WorkshopId && x.DepartmentId == group.DepartmentId
                     && x.GroupLines.Any(l => introducedLineIds.Contains(l.ProductionLineId)),
                 x => x.GroupLines);
             var clashes = owners.SelectMany(o => o.GroupLines.Where(l => introduced.Contains((l.ProductionLineId, l.ShiftTeamId))).Select(l => (Owner: o, Line: l))).ToList();
             if (clashes.Count > 0 && !takeOver)
             {
                 var codes = (await _unitOfWork.ProductionLines.FindAsync(x => lineIds.Contains(x.Id))).ToDictionary(x => x.Id, x => x.LineCode);
-                throw new DomainException($"Đã thuộc Nhóm {kind} khác cùng Phòng ban: {string.Join(", ", clashes.Select(x => $"{codes[x.Line.ProductionLineId]} ({x.Owner.GroupCode})"))}.");
+                throw new DomainException($"Đã thuộc Nhóm khác cùng Phòng ban: {string.Join(", ", clashes.Select(x => $"{codes[x.Line.ProductionLineId]} ({x.Owner.GroupCode})"))}.");
             }
             foreach (var (owner, line) in clashes)
             {
@@ -250,10 +228,19 @@ namespace Attendance.Application.Services
                     member.Group = group;
             }
             // A group left without pairs keeps the "every group has a Line × Ca" rule; Admin deletes it once empty.
-            foreach (var emptied in clashes.Select(x => x.Owner).Distinct().Where(o => o.GroupLines.Count == 0))
-                await GroupLineDefaults.EnsureLinesAsync(_unitOfWork, emptied);
+            foreach (var owner in clashes.Select(x => x.Owner).Distinct())
+            {
+                if (owner.GroupLines.Count > 0)
+                {
+                    await GroupLineDefaults.AssignCodeAsync(_unitOfWork, owner);
+                    continue;
+                }
+                // Nothing left to stand on: everyone joins this group and the emptied one is retired.
+                foreach (var member in await _unitOfWork.Employees.FindAsync(x => x.GroupId == owner.Id && !x.IsDeleted))
+                    member.Group = group;
+                owner.IsDeleted = true;
+            }
 
-            group.LineKind = kind;
             foreach (var stale in group.GroupLines.Where(x => !pairs.Contains((x.ProductionLineId, x.ShiftTeamId))).ToList())
                 group.GroupLines.Remove(stale);
             foreach (var (lineId, shiftId) in pairs.Where(p => !group.GroupLines.Any(x => x.ProductionLineId == p.ProductionLineId && x.ShiftTeamId == p.ShiftTeamId)))

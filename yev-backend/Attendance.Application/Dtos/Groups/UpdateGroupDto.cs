@@ -6,9 +6,6 @@ namespace Attendance.Application.Dtos.Groups
     {
         public int Id { get; set; }
 
-        [Required(ErrorMessage = "Mã nhóm không được để trống")]
-        public string GroupCode { get; set; } = null!;
-
         [Required(ErrorMessage = "Tên nhóm (VN) không được để trống")]
         public string GroupNameVn { get; set; } = null!;
 
@@ -22,13 +19,9 @@ namespace Attendance.Application.Dtos.Groups
 
         public bool AllowEatLater { get; set; } = true;
 
-        // TT/GT; required when Lines is not empty.
-        [MaxLength(20)]
-        public string? LineKind { get; set; }
-
         public List<GroupLineDto> Lines { get; set; } = new();
 
-        // Pairs another group of the same workshop, department and kind owns move here with the people standing on them.
+        // Pairs another group of the same workshop and department owns move here with the people standing on them.
         public bool TakeOverLines { get; set; }
     }
 }

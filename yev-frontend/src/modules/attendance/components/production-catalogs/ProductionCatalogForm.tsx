@@ -11,6 +11,7 @@ import type {
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import { StyledSelect } from "@/components/ui/StyledSelect";
 
 interface ProductionCatalogFormProps {
     kind: ProductionCatalogKind;
@@ -34,8 +35,7 @@ const emptyValues = {
     congDoan: "",
     cdMae: "",
     sortCode: "",
-    hasDirectStaff: true,
-    hasIndirectStaff: true,
+    staffKind: "",
 };
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
@@ -69,8 +69,7 @@ export default function ProductionCatalogForm({
                       congDoan: current.congDoan ?? "",
                       cdMae: current.cdMae ?? "",
                       sortCode: current.sortCode ?? "",
-                      hasDirectStaff: current.hasDirectStaff,
-                      hasIndirectStaff: current.hasIndirectStaff,
+                      staffKind: current.staffKind ?? "",
                   }
                 : { ...emptyValues, workshopId: workshopOptions.length === 1 ? Number(workshopOptions[0].value) : "" }
         );
@@ -79,11 +78,12 @@ export default function ProductionCatalogForm({
     if (!isOpen) return null;
 
     const isLine = kind === "Line";
+    const isTask = kind === "Task";
     const hasWorkshop = kind !== "ShiftTeam";
     const canSubmit =
         values.code.trim() !== "" &&
         (!hasWorkshop || values.workshopId !== "") &&
-        (!isLine || values.hasDirectStaff || values.hasIndirectStaff);
+        (!isTask || values.staffKind !== "");
     const teamOptions: SelectOption[] = teams
         .filter((team) => team.workshopId === values.workshopId)
         .map((team) => ({ value: team.id, label: team.code, searchText: team.code.toLowerCase() }));
@@ -93,14 +93,13 @@ export default function ProductionCatalogForm({
         if (!canSubmit) return;
         onSubmit({
             code: values.code.trim(),
-            nameVn: isLine ? null : values.nameVn.trim() || null,
+            nameVn: isLine || isTask ? null : values.nameVn.trim() || null,
             workshopId: hasWorkshop && values.workshopId !== "" ? values.workshopId : null,
             teamId: isLine && values.teamId !== "" ? values.teamId : null,
             congDoan: isLine ? values.congDoan.trim() || null : null,
             cdMae: isLine ? values.cdMae.trim() || null : null,
             sortCode: isLine ? values.sortCode.trim() || null : null,
-            hasDirectStaff: isLine && values.hasDirectStaff,
-            hasIndirectStaff: isLine && values.hasIndirectStaff,
+            staffKind: isTask ? values.staffKind : null,
         });
     };
 
@@ -161,7 +160,7 @@ export default function ProductionCatalogForm({
                             <input
                                 value={values.code}
                                 onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
-                                maxLength={isLine ? 50 : 20}
+                                maxLength={isLine || isTask ? 50 : 20}
                                 disabled={loading}
                                 autoFocus
                                 required
@@ -184,21 +183,19 @@ export default function ProductionCatalogForm({
                                 {textField("congDoan", t("colCongDoan"))}
                                 {textField("cdMae", t("colCdMae"))}
                                 {textField("sortCode", t("colSortCode"))}
-                                <div className="flex h-10 items-center gap-4" title={t("staffKindHint")}>
-                                    {(["hasDirectStaff", "hasIndirectStaff"] as const).map((key) => (
-                                        <label key={key} className="flex items-center gap-1.5 text-sm text-[#191c1e]">
-                                            <input
-                                                type="checkbox"
-                                                checked={values[key]}
-                                                onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.checked }))}
-                                                disabled={loading}
-                                                className="h-4 w-4 cursor-pointer accent-[#e3000f]"
-                                            />
-                                            {key === "hasDirectStaff" ? "TT" : "GT"}
-                                        </label>
-                                    ))}
-                                </div>
                             </>
+                        ) : isTask ? (
+                            <div className="w-24">
+                                <span className={fieldLabelClassName}>TT/GT<RequiredMark /></span>
+                                <StyledSelect
+                                    options={["TT", "GT"].map((k) => ({ value: k, label: k }))}
+                                    value={values.staffKind}
+                                    onChange={(staffKind) => setValues((current) => ({ ...current, staffKind }))}
+                                    disabled={loading}
+                                    triggerClassName={`${fieldClassName} pr-8 text-left`}
+                                    ariaLabel="TT/GT"
+                                />
+                            </div>
                         ) : (
                             <label className="block min-w-48 flex-1">
                                 <span className={fieldLabelClassName}>{t("colName")}</span>

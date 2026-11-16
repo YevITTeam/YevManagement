@@ -48,6 +48,7 @@ public partial class AttendanceDbContext : DbContext
     public virtual DbSet<GroupLine> GroupLines { get; set; }
     public virtual DbSet<ProductionShiftTeam> ProductionShiftTeams { get; set; }
     public virtual DbSet<ProductionTeam> ProductionTeams { get; set; }
+    public virtual DbSet<ProductionTask> ProductionTasks { get; set; }
     public virtual DbSet<OtFormEditLog> OtFormEditLogs { get; set; }
 
     public virtual DbSet<OtFormPaperScan> OtFormPaperScans { get; set; }
@@ -90,7 +91,7 @@ public partial class AttendanceDbContext : DbContext
 
         modelBuilder.Entity<Group>(entity =>
         {
-            entity.HasIndex(e => e.GroupCode, "IX_Groups_GroupCode").IsUnique();
+            entity.HasIndex(e => e.GroupCode, "IX_Groups_GroupCode").IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasIndex(e => e.DepartmentId, "IX_Groups_DepartmentId");
             entity.HasIndex(e => e.WorkshopId, "IX_Groups_WorkshopId");
             entity.Property(e => e.GroupCode).HasMaxLength(50);
@@ -106,8 +107,6 @@ public partial class AttendanceDbContext : DbContext
                 .HasForeignKey(d => d.WorkshopId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_Groups_Workshops_WorkshopId");
-
-            entity.Property(e => e.LineKind).HasMaxLength(20);
         });
 
         modelBuilder.Entity<GroupLine>(entity =>
@@ -693,6 +692,18 @@ public partial class AttendanceDbContext : DbContext
         {
             entity.Property(e => e.Code).HasMaxLength(20);
             entity.Property(e => e.NameVn).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<ProductionTask>(entity =>
+        {
+            entity.HasIndex(e => new { e.WorkshopId, e.Code }, "IX_ProductionTasks_WorkshopId_Code").IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.Property(e => e.Code).HasMaxLength(50);
+            entity.Property(e => e.StaffKind).HasMaxLength(2);
+
+            entity.HasOne(d => d.Workshop).WithMany()
+                .HasForeignKey(d => d.WorkshopId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_ProductionTasks_Workshops_WorkshopId");
         });
 
         OnModelCreatingPartial(modelBuilder);

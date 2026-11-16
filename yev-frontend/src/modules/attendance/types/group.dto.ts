@@ -16,7 +16,5 @@ export interface GroupDto {
     workshopId: number;
     workshopNameVn: string;
     allowEatLater: boolean;
-    // TT/GT of everyone in the group; set whenever lines is not empty.
-    lineKind: string | null;
     lines: GroupLineDto[];
 }

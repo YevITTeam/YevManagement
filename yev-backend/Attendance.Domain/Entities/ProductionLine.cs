@@ -22,11 +22,6 @@ public partial class ProductionLine
     // "Co": ordering code meant to replace LineCode later.
     public string? SortCode { get; set; }
 
-    // Whether the line has direct (TT) and/or indirect (GT) staff; an employee's TT/GT must be one the line has.
-    public bool HasDirectStaff { get; set; }
-
-    public bool HasIndirectStaff { get; set; }
-
     public bool IsDeleted { get; set; }
 
     public virtual Workshop Workshop { get; set; } = null!;

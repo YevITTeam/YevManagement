@@ -6,7 +6,8 @@ namespace Attendance.Application.Dtos.ProductionCatalogs
     {
         Line,
         Team,
-        ShiftTeam
+        ShiftTeam,
+        Task
     }
 
     public class ProductionCatalogItemDto
@@ -21,8 +22,8 @@ namespace Attendance.Application.Dtos.ProductionCatalogs
         public string? CongDoan { get; set; }
         public string? CdMae { get; set; }
         public string? SortCode { get; set; }
-        public bool HasDirectStaff { get; set; }
-        public bool HasIndirectStaff { get; set; }
+        // Task only: TT/GT.
+        public string? StaffKind { get; set; }
         public int EmployeeCount { get; set; }
     }
 
@@ -35,7 +36,7 @@ namespace Attendance.Application.Dtos.ProductionCatalogs
         [MaxLength(100, ErrorMessage = "Tên tối đa 100 ký tự")]
         public string? NameVn { get; set; }
 
-        // Required for Line and Team, ignored for ShiftTeam (shared by every workshop).
+        // Required for Line, Team and Task, ignored for ShiftTeam (shared by every workshop).
         public int? WorkshopId { get; set; }
 
         public int? TeamId { get; set; }
@@ -49,7 +50,7 @@ namespace Attendance.Application.Dtos.ProductionCatalogs
         [MaxLength(50, ErrorMessage = "Co tối đa 50 ký tự")]
         public string? SortCode { get; set; }
 
-        public bool HasDirectStaff { get; set; }
-        public bool HasIndirectStaff { get; set; }
+
+        public string? StaffKind { get; set; }
     }
 }

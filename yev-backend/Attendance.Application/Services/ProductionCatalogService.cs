@@ -38,8 +38,6 @@ namespace Attendance.Application.Services
                         CongDoan = x.CongDoan,
                         CdMae = x.CdMae,
                         SortCode = x.SortCode,
-                        HasDirectStaff = x.HasDirectStaff,
-                        HasIndirectStaff = x.HasIndirectStaff,
                         EmployeeCount = x.Employees.Count(e => !e.IsDeleted)
                     });
                 case ProductionCatalogKind.Team:
@@ -54,6 +52,19 @@ namespace Attendance.Application.Services
                         WorkshopId = x.WorkshopId,
                         WorkshopCode = x.Workshop.WorkshopCode,
                         EmployeeCount = x.Employees.Count(e => !e.IsDeleted)
+                    });
+                case ProductionCatalogKind.Task:
+                    var tasks = _unitOfWork.ProductionTasks.GetQueryable(false).Where(x => !x.IsDeleted
+                        && (workshopId == null || x.WorkshopId == workshopId)
+                        && (search == null || x.Code.Contains(search)));
+                    return _unitOfWork.ProductionTasks.ToPagedResponseAsync(tasks.OrderBy(x => x.Workshop.WorkshopCode).ThenBy(x => x.Code), pageIndex, pageSize, x => new ProductionCatalogItemDto
+                    {
+                        Id = x.Id,
+                        Code = x.Code,
+                        WorkshopId = x.WorkshopId,
+                        WorkshopCode = x.Workshop.WorkshopCode,
+                        StaffKind = x.StaffKind,
+                        EmployeeCount = x.Workshop.Groups.SelectMany(g => g.Employees).Count(e => !e.IsDeleted && e.TaskName == x.Code)
                     });
                 default:
                     var shiftTeams = _unitOfWork.ProductionShiftTeams.GetQueryable(false).Where(x => !x.IsDeleted
@@ -81,6 +92,9 @@ namespace Attendance.Application.Services
                 case ProductionCatalogKind.Team:
                     await _unitOfWork.ProductionTeams.AddAsync(new ProductionTeam { Code = code, NameVn = Clean(request.NameVn), WorkshopId = request.WorkshopId!.Value });
                     break;
+                case ProductionCatalogKind.Task:
+                    await _unitOfWork.ProductionTasks.AddAsync(new ProductionTask { Code = code, WorkshopId = request.WorkshopId!.Value, StaffKind = request.StaffKind! });
+                    break;
                 default:
                     await _unitOfWork.ProductionShiftTeams.AddAsync(new ProductionShiftTeam { Code = code, NameVn = Clean(request.NameVn) });
                     break;
@@ -97,9 +111,15 @@ namespace Attendance.Application.Services
                     var line = await FindLineAsync(id);
                     if (line.WorkshopId != request.WorkshopId && await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.ProductionLineId == id && !x.IsDeleted) != null)
                         throw new DomainException("Line còn nhân viên đang gán, không thể đổi Xưởng.");
+                    var lineRenamed = line.LineCode != code;
                     line.LineCode = code;
                     ApplyLine(line, request);
                     _unitOfWork.ProductionLines.Update(line);
+                    if (lineRenamed)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        await GroupLineDefaults.RefreshCodesAsync(_unitOfWork, x => !x.IsDeleted && x.GroupLines.Any(l => l.ProductionLineId == id));
+                    }
                     break;
                 case ProductionCatalogKind.Team:
                     var team = await FindTeamAsync(id);
@@ -110,11 +130,29 @@ namespace Attendance.Application.Services
                     team.WorkshopId = request.WorkshopId!.Value;
                     _unitOfWork.ProductionTeams.Update(team);
                     break;
+                case ProductionCatalogKind.Task:
+                    var task = await FindTaskAsync(id);
+                    var holders = await TaskHoldersAsync(task);
+                    if (holders.Count > 0 && (task.WorkshopId != request.WorkshopId || task.StaffKind != request.StaffKind))
+                        throw new DomainException("Công việc còn nhân viên đang làm, không thể đổi Xưởng hoặc TT/GT — chuyển họ sang Công việc khác trước.");
+                    // Employees store the code, so a rename carries over to them.
+                    foreach (var holder in holders) holder.TaskName = code;
+                    task.Code = code;
+                    task.WorkshopId = request.WorkshopId!.Value;
+                    task.StaffKind = request.StaffKind!;
+                    _unitOfWork.ProductionTasks.Update(task);
+                    break;
                 default:
                     var shiftTeam = await FindShiftTeamAsync(id);
+                    var shiftRenamed = shiftTeam.Code != code;
                     shiftTeam.Code = code;
                     shiftTeam.NameVn = Clean(request.NameVn);
                     _unitOfWork.ProductionShiftTeams.Update(shiftTeam);
+                    if (shiftRenamed)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        await GroupLineDefaults.RefreshCodesAsync(_unitOfWork, x => !x.IsDeleted && x.GroupLines.Any(l => l.ShiftTeamId == id));
+                    }
                     break;
             }
             await _unitOfWork.SaveChangesAsync();
@@ -142,6 +180,13 @@ namespace Attendance.Application.Services
                     team.IsDeleted = true;
                     _unitOfWork.ProductionTeams.Update(team);
                     break;
+                case ProductionCatalogKind.Task:
+                    var task = await FindTaskAsync(id);
+                    if ((await TaskHoldersAsync(task)).Count > 0)
+                        throw new DomainException("Công việc còn nhân viên đang làm, không thể xóa.");
+                    task.IsDeleted = true;
+                    _unitOfWork.ProductionTasks.Update(task);
+                    break;
                 default:
                     var shiftTeam = await FindShiftTeamAsync(id);
                     if (await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.ShiftTeamId == id && !x.IsDeleted) != null)
@@ -167,6 +212,16 @@ namespace Attendance.Application.Services
             return team!;
         }
 
+        private async Task<ProductionTask> FindTaskAsync(int id)
+        {
+            var task = await _unitOfWork.ProductionTasks.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+            task.OrThrowNotFound("Công việc", id);
+            return task!;
+        }
+
+        private async Task<List<Employee>> TaskHoldersAsync(ProductionTask task) =>
+            (await _unitOfWork.Employees.FindAsync(x => !x.IsDeleted && x.TaskName == task.Code && x.Group != null && x.Group.WorkshopId == task.WorkshopId)).ToList();
+
         private async Task<ProductionShiftTeam> FindShiftTeamAsync(int id)
         {
             var shiftTeam = await _unitOfWork.ProductionShiftTeams.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
@@ -177,9 +232,10 @@ namespace Attendance.Application.Services
         private async Task<string> ValidateAsync(ProductionCatalogKind kind, SaveProductionCatalogItemDto request, int? id)
         {
             var code = Clean(request.Code) ?? throw new DomainException("Mã không được để trống.");
-            if (kind != ProductionCatalogKind.Line && code.Length > ShortCodeMaxLength)
+            var isLongCode = kind is ProductionCatalogKind.Line or ProductionCatalogKind.Task;
+            if (!isLongCode && code.Length > ShortCodeMaxLength)
                 throw new DomainException($"Mã tối đa {ShortCodeMaxLength} ký tự.");
-            if (kind == ProductionCatalogKind.Line && code.Length > 50)
+            if (isLongCode && code.Length > 50)
                 throw new DomainException("Mã tối đa 50 ký tự.");
 
             if (kind != ProductionCatalogKind.ShiftTeam)
@@ -192,9 +248,17 @@ namespace Attendance.Application.Services
             {
                 ProductionCatalogKind.Line => await _unitOfWork.ProductionLines.FirstOrDefaultAsync(x => x.LineCode == code && x.WorkshopId == request.WorkshopId && !x.IsDeleted && x.Id != id) != null,
                 ProductionCatalogKind.Team => await _unitOfWork.ProductionTeams.FirstOrDefaultAsync(x => x.Code == code && x.WorkshopId == request.WorkshopId && !x.IsDeleted && x.Id != id) != null,
+                ProductionCatalogKind.Task => await _unitOfWork.ProductionTasks.FirstOrDefaultAsync(x => x.Code == code && x.WorkshopId == request.WorkshopId && !x.IsDeleted && x.Id != id) != null,
                 _ => await _unitOfWork.ProductionShiftTeams.FirstOrDefaultAsync(x => x.Code == code && !x.IsDeleted && x.Id != id) != null
             };
             if (isDuplicate) throw new DomainException($"Mã '{code}' đã tồn tại{(kind == ProductionCatalogKind.ShiftTeam ? "" : " trong xưởng này")}.");
+
+            if (kind == ProductionCatalogKind.Task)
+            {
+                request.StaffKind = StaffKinds.Normalize(request.StaffKind);
+                if (request.StaffKind != StaffKinds.Direct && request.StaffKind != StaffKinds.Indirect)
+                    throw new DomainException("Chưa chọn TT/GT.");
+            }
 
             if (kind == ProductionCatalogKind.Line)
             {
@@ -202,18 +266,6 @@ namespace Attendance.Application.Services
                 request.TeamId ??= (await _unitOfWork.ProductionTeams.FirstOrDefaultAsync(x => x.WorkshopId == request.WorkshopId && x.Code == GroupLineDefaults.FallbackCode && !x.IsDeleted))?.Id;
                 if (request.TeamId.HasValue && (await FindTeamAsync(request.TeamId.Value)).WorkshopId != request.WorkshopId)
                     throw new DomainException("Team phải cùng Xưởng với Line.");
-                if (!request.HasDirectStaff && !request.HasIndirectStaff)
-                    throw new DomainException("Line phải có nhân sự TT hoặc GT.");
-                // Turning a kind off would strand people or groups of that kind on a line that no longer has it.
-                if (id.HasValue)
-                {
-                    var removedKinds = new List<string>();
-                    if (!request.HasDirectStaff) removedKinds.Add(StaffKinds.Direct);
-                    if (!request.HasIndirectStaff) removedKinds.Add(StaffKinds.Indirect);
-                    if (await _unitOfWork.Employees.FirstOrDefaultAsync(x => x.ProductionLineId == id && !x.IsDeleted && removedKinds.Contains(x.StaffKind!)) != null
-                        || await _unitOfWork.Groups.FirstOrDefaultAsync(x => !x.IsDeleted && removedKinds.Contains(x.LineKind!) && x.GroupLines.Any(l => l.ProductionLineId == id)) != null)
-                        throw new DomainException($"Line còn nhân viên hoặc Nhóm loại {string.Join("/", removedKinds)}, không thể bỏ loại đó.");
-                }
             }
             return code;
         }
@@ -225,8 +277,6 @@ namespace Attendance.Application.Services
             line.CongDoan = Clean(request.CongDoan);
             line.CdMae = Clean(request.CdMae);
             line.SortCode = Clean(request.SortCode);
-            line.HasDirectStaff = request.HasDirectStaff;
-            line.HasIndirectStaff = request.HasIndirectStaff;
         }
     }
 }

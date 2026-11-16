@@ -11,7 +11,6 @@ namespace Attendance.Application.Dtos.Groups
         public int WorkshopId { get; set; }
         public string WorkshopNameVn { get; set; } = null!;
         public bool AllowEatLater { get; set; }
-        public string? LineKind { get; set; }
         public List<GroupLineDto> Lines { get; set; } = new();
     }
 

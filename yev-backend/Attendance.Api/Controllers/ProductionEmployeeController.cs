@@ -55,6 +55,13 @@ namespace Attendance.Api.Controllers
         }
 
         [RequirePermission("Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
+        [HttpGet("task-options")]
+        public async Task<ActionResult<ApiResponse<List<ProductionOptionDto>>>> GetTaskOptions([FromQuery] int? workshopId)
+        {
+            return Success(await _productionEmployeeService.GetTaskOptionsAsync(workshopId));
+        }
+
+        [RequirePermission("Attendance.Employee.View", "Attendance.ProductionEmployee.View")]
         [HttpGet("cong-doan-options")]
         public async Task<ActionResult<ApiResponse<List<string>>>> GetCongDoanOptions()
         {

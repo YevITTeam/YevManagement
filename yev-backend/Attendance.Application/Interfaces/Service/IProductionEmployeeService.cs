@@ -12,5 +12,6 @@ namespace Attendance.Application.Interfaces.Service
         Task<List<ProductionOptionDto>> GetShiftTeamOptionsAsync(int? productionLineId, int? teamId);
 
         Task<List<string>> GetCongDoanOptionsAsync();
+        Task<List<ProductionOptionDto>> GetTaskOptionsAsync(int? workshopId);
     }
 }

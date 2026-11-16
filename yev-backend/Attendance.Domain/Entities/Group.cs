@@ -25,9 +25,6 @@ public partial class Group
     // Office forms: the edit right climbs with the approvals (creator until the first approval, then the last approved level).
     public bool StepwiseEdit { get; set; }
 
-    // TT/GT of everyone in the group; required once the group covers any Line × Ca (GroupLines).
-    public string? LineKind { get; set; }
-
     public bool IsDeleted { get; set; }
 
     public virtual Department Department { get; set; } = null!;

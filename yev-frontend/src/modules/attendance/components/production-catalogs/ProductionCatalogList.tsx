@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Check, Inbox, Search, Pencil, Trash2 } from "lucide-react";
+import { Inbox, Search, Pencil, Trash2 } from "lucide-react";
 
 import { ProductionCatalogApi } from "@/modules/attendance/api/production-catalog.api";
 import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
@@ -29,8 +29,9 @@ interface ProductionCatalogListProps extends ListToolbarProps {
 const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>(function ProductionCatalogList({ kind, onLoadingChange }, ref) {
     const t = useTranslations("Attendance.ProductionCatalog");
     const tCommon = useTranslations("Common");
-    const kindLabel = { Line: t("kindLine"), Team: t("kindTeam"), ShiftTeam: t("kindShiftTeam") }[kind];
+    const kindLabel = { Line: t("kindLine"), Team: t("kindTeam"), ShiftTeam: t("kindShiftTeam"), Task: t("kindTask") }[kind];
     const isLine = kind === "Line";
+    const isTask = kind === "Task";
     const hasWorkshop = kind !== "ShiftTeam";
 
     const [items, setItems] = useState<ProductionCatalogItemDto[]>([]);
@@ -146,7 +147,7 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
         }
     };
 
-    const columnCount = isLine ? 10 : hasWorkshop ? 5 : 4;
+    const columnCount = isLine ? 8 : hasWorkshop ? 5 : 4;
 
     return (
         <div className="space-y-4">
@@ -209,9 +210,9 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                                         <th className="px-3 py-2">{t("colCongDoan")}</th>
                                         <th className="px-3 py-2">{t("colCdMae")}</th>
                                         <th className="px-3 py-2">{t("colSortCode")}</th>
-                                        <th className="px-3 py-2 text-center">TT</th>
-                                        <th className="px-3 py-2 text-center">GT</th>
                                     </>
+                                ) : isTask ? (
+                                    <th className="px-3 py-2">TT/GT</th>
                                 ) : (
                                     <th className="px-3 py-2">{t("colName")}</th>
                                 )}
@@ -240,11 +241,9 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                                             <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.congDoan || "-"}</td>
                                             <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.cdMae || "-"}</td>
                                             <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.sortCode || "-"}</td>
-                                            <td className="px-3 py-2 text-center text-sm text-[#5e3f3a]">{item.hasDirectStaff && <Check className="mx-auto h-4 w-4" />}</td>
-                                            <td className="px-3 py-2 text-center text-sm text-[#5e3f3a]">{item.hasIndirectStaff && <Check className="mx-auto h-4 w-4" />}</td>
                                         </>
                                     ) : (
-                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.nameVn || "-"}</td>
+                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{(isTask ? item.staffKind : item.nameVn) || "-"}</td>
                                     )}
                                     <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{item.employeeCount}</td>
                                     <td className="px-3 py-2 text-right text-sm">

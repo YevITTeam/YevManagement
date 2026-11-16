@@ -1,4 +1,4 @@
-export type ProductionCatalogKind = "Line" | "Team" | "ShiftTeam";
+export type ProductionCatalogKind = "Line" | "Team" | "ShiftTeam" | "Task";
 
 export interface ProductionCatalogItemDto {
     id: number;
@@ -11,20 +11,19 @@ export interface ProductionCatalogItemDto {
     congDoan: string | null;
     cdMae: string | null;
     sortCode: string | null;
-    hasDirectStaff: boolean;
-    hasIndirectStaff: boolean;
+    // Task only.
+    staffKind: string | null;
     employeeCount: number;
 }
 
 export interface SaveProductionCatalogItemDto {
     code: string;
     nameVn: string | null;
-    // Required for Line and Team; shift teams are shared by every workshop.
+    // Required for Line, Team and Task; shift teams are shared by every workshop.
     workshopId: number | null;
     teamId: number | null;
     congDoan: string | null;
     cdMae: string | null;
     sortCode: string | null;
-    hasDirectStaff: boolean;
-    hasIndirectStaff: boolean;
+    staffKind: string | null;
 }
