@@ -427,19 +427,9 @@ export default function OtFormBatchDetail({ token }: OtFormBatchDetailProps) {
                                                                 <td className="px-3 py-1.5 text-center text-sm text-[#191c1e]">{formatHours(hours)}</td>
                                                                 <td className={`px-3 py-1.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                                     {employee.monthToDate}h
-                                                                    {over.month.ownLimit !== null && (
-                                                                        <div className="text-[11px] font-normal text-[#8a8f94]" title={tDetail("customLimitHint")}>
-                                                                            {tDetail(over.month.withinOwn ? "customLimitWithin" : "customLimitExceeded", { hours: over.month.ownLimit })}
-                                                                        </div>
-                                                                    )}
                                                                 </td>
                                                                 <td className={`px-3 py-1.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                                     {employee.yearToDate}h
-                                                                    {over.year.ownLimit !== null && (
-                                                                        <div className="text-[11px] font-normal text-[#8a8f94]" title={tDetail("customLimitHint")}>
-                                                                            {tDetail(over.year.withinOwn ? "customLimitWithin" : "customLimitExceeded", { hours: over.year.ownLimit })}
-                                                                        </div>
-                                                                    )}
                                                                 </td>
                                                                 <td className="px-3 py-1.5 text-center text-sm">
                                                                     {employee.mealTicketType === MEAL_TICKET_MAIN || employee.mealTicketType === MEAL_TICKET_SECONDARY ? (

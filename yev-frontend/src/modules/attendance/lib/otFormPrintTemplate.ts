@@ -13,16 +13,12 @@ export interface PrintLimits {
     yearlyOtHourLimit: number;
 }
 
-// Shared with the detail/e-mail screens. Red keeps marking anyone past the company limit (or past their own, lower one);
-// a personal limit, as it stood when the person was put on the form, is noted beside it so a raised limit stays visible.
+// Shared with the detail/e-mail screens: red marks anyone past the company limit or past their own (snapshotted) one.
 export function formOverLimit(
     row: Pick<OtFormEmployeeDto, "monthToDate" | "yearToDate" | "customMonthlyOtHourLimitSnapshot" | "customYearlyOtHourLimitSnapshot">,
     limits: PrintLimits
 ) {
-    const check = (hours: number, shared: number, own: number | null) => {
-        const over = hours > shared || (own !== null && hours > own);
-        return { over, ownLimit: over ? own : null, withinOwn: own !== null && hours <= own };
-    };
+    const check = (hours: number, shared: number, own: number | null) => ({ over: hours > shared || (own !== null && hours > own) });
     return {
         month: check(row.monthToDate, limits.monthlyOtHourLimit, row.customMonthlyOtHourLimitSnapshot),
         year: check(row.yearToDate, limits.yearlyOtHourLimit, row.customYearlyOtHourLimitSnapshot),
@@ -599,22 +595,7 @@ export function renderOtFormPages(form: OtFormDto, paperSize: PaperSize, limits:
     const printable = form.employees
         .filter((e) => !e.isRemoved)
         .map((e) => {
-            const over = formOverLimit(e, limits);
-            const owned = [
-                { check: over.month, unit: "tháng" },
-                { check: over.year, unit: "năm" },
-            ].filter((x) => x.check.ownLimit !== null);
-            // Spelled out so an approver doesn't read the red figure as a breach of a limit that was raised for this person.
-            const limitNote = (within: boolean, status: string) => {
-                const items = owned.filter((x) => x.check.withinOwn === within).map((x) => `${x.check.ownLimit}h/${x.unit}`);
-                return items.length > 0 ? `Giới hạn riêng ${items.join(", ")}: ${status}` : null;
-            };
-            const notes = [
-                e.noteVn,
-                !form.isProductionForm && !e.didEat && e.mealTicketType > 0 ? "Ăn sau" : null,
-                limitNote(true, "chưa vượt"),
-                limitNote(false, "đã vượt"),
-            ].filter(Boolean);
+            const notes = [e.noteVn, !form.isProductionForm && !e.didEat && e.mealTicketType > 0 ? "Ăn sau" : null].filter(Boolean);
             return notes.length > 0 ? { ...e, noteVn: notes.join("; ") } : e;
         });
     const chunks = buildEmployeePages(printable, paperSize);

@@ -104,10 +104,10 @@ export default function ServerCheckReportPage() {
         (message) => toast.error(message)
     );
 
-    // A year with no calendar rows imported falls back to Sundays only, same rule as the attendance module.
+    // Di An's calendar (the server room's site); a year with no rows falls back to Sundays only, as in the attendance module.
     const [calendarDays, setCalendarDays] = useState<WorkCalendarDayDto[]>([]);
     useFetchEffect(
-        () => WorkCalendarApi.getByYear(year),
+        () => WorkCalendarApi.getByYearForWorkshopCode("DA", year),
         [year],
         setCalendarDays,
         t("loadReportError"),

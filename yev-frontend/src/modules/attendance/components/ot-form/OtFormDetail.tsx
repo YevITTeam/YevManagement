@@ -831,11 +831,6 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                 </td>
                                                 <td className={`px-3 py-2.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                     {employee.monthToDate}h
-                                                    {over.month.ownLimit !== null && (
-                                                        <div className="text-[11px] font-normal text-[#8a8f94]" title={t("customLimitHint")}>
-                                                            {t(over.month.withinOwn ? "customLimitWithin" : "customLimitExceeded", { hours: over.month.ownLimit })}
-                                                        </div>
-                                                    )}
                                                 </td>
                                                 <td className={`whitespace-nowrap px-3 py-2.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
                                                     <span className="inline-flex items-center gap-1">
@@ -852,11 +847,6 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                             </button>
                                                         )}
                                                     </span>
-                                                    {over.year.ownLimit !== null && (
-                                                        <div className="text-[11px] font-normal text-[#8a8f94]" title={t("customLimitHint")}>
-                                                            {t(over.year.withinOwn ? "customLimitWithin" : "customLimitExceeded", { hours: over.year.ownLimit })}
-                                                        </div>
-                                                    )}
                                                 </td>
                                                 {/* Meal ticket type plus a "didn't eat" label; production-line forms always eat (DidEat true), so no label there. */}
                                                 <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm">

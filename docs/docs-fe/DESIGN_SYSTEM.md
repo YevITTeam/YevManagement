@@ -100,6 +100,7 @@ Hàng tab không `flex-wrap`: `overflow-x-auto` + nút `shrink-0` để cuộn n
 ### 4.7. Modal & form
 Mẫu `BranchForm.tsx`: `fixed inset-0 z-50` + lớp phủ `bg-black/40` + hộp `z-60 mx-4 max-w-md rounded-xl border bg-white p-6 shadow-xl`; header `border-b pb-4` có nút đóng `X` `h-5 w-5`; nhãn overline; nút Huỷ (secondary) + Lưu (primary) căn phải. Một form dùng chung create/edit.
 **Form dài (≥ 10 trường)** — mẫu `DeviceForm.tsx`: modal `flex flex-col max-h-full`, header/footer cố định, chỉ thân cuộn; chia nhóm (`FormSection`: tiêu đề `8rem` bên trái, lưới 4 cột bên phải, `divide-y divide-[#f1f5f9]`); nhãn chữ thường `text-xs font-medium`, ô `h-9`; placeholder chỉ gợi ý định dạng. Danh sách con sửa tại chỗ (email…): khung `rounded-lg border divide-y`, ô "ghost" (viền khi hover/focus), hành động là icon, giải thích dài ở `title`. Chọn nhiều giá trị ngắn (IP): ô gắn thẻ, dropdown bám dưới ô.
+**Màn cấu hình** — mẫu `AttendanceSettingPanel.tsx`: một card, mỗi mục một hàng chia kẻ (`divide-y`; tiêu đề `9rem` bên trái, mô tả ở `title`; field bên phải `flex-wrap`), không mỗi mục một card. Một nút Lưu chung dính chân card (`sticky bottom-0`), khoá khi chưa đổi gì, có đổi thì hiện "Có thay đổi chưa lưu" + Hoàn tác. Thao tác chạy ngay (Gửi ngay, sửa lịch) là nút riêng trong hàng, không đi qua nút Lưu.
 
 ### 4.8. Xác nhận & toast
 Xoá/nguy hiểm **luôn** `common/ConfirmDialog.tsx`. Thông báo **luôn** `react-toastify`; mọi create/update/delete có toast thành công + lỗi (kèm `console.error`).

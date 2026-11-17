@@ -9,8 +9,8 @@ using Shared.Core.Exceptions;
 
 namespace Attendance.Application.Services
 {
-    // Non-working-day calendar (Sunday / public holiday / special holiday). Each year is imported from an
-    // Excel file that is also the template served by BuildTemplateAsync.
+    // Per-workshop non-working-day calendar (Sunday / public holiday / special holiday). A year is imported from an
+    // Excel file (the template served by BuildTemplateAsync) or edited day by day.
     public class WorkCalendarService : BaseService<IAttendanceUnitOfWork>, IWorkCalendarService
     {
         private const string SheetName = "Lịch nghỉ";
@@ -23,18 +23,19 @@ namespace Attendance.Application.Services
         {
         }
 
-        public async Task<IReadOnlyList<WorkCalendarDayDto>> GetByYearAsync(int year)
+        public async Task<IReadOnlyList<WorkCalendarDayDto>> GetByYearAsync(int workshopId, int year)
         {
-            var rows = await FindYearAsync(year);
+            var rows = await FindYearAsync(workshopId, year);
             return rows
                 .OrderBy(x => x.Date)
                 .Select(x => new WorkCalendarDayDto { Date = x.Date, DayType = x.DayType, Note = x.Note })
                 .ToList();
         }
 
-        public async Task<byte[]> BuildTemplateAsync(int year)
+        public async Task<(byte[] Content, string FileName)> BuildTemplateAsync(int workshopId, int year)
         {
-            var stored = (await FindYearAsync(year)).ToDictionary(x => x.Date);
+            var workshop = await GetWorkshopAsync(workshopId);
+            var stored = (await FindYearAsync(workshopId, year)).ToDictionary(x => x.Date);
 
             var days = new List<WorkCalendarDayDto>();
             for (var date = new DateOnly(year, 1, 1); date.Year == year; date = date.AddDays(1))
@@ -73,11 +74,12 @@ namespace Attendance.Application.Services
             sheet.Columns().AdjustToContents();
             using var output = new MemoryStream();
             workbook.SaveAs(output);
-            return output.ToArray();
+            return (output.ToArray(), $"LichNghi_{workshop.WorkshopCode}_{year}.xlsx");
         }
 
-        public async Task<WorkCalendarImportResultDto> ImportAsync(int year, Stream stream)
+        public async Task<WorkCalendarImportResultDto> ImportAsync(int workshopId, int year, Stream stream)
         {
+            await GetWorkshopAsync(workshopId);
             var parsed = ParseFile(year, stream, out var errors);
             if (errors.Count > 0)
             {
@@ -86,7 +88,8 @@ namespace Attendance.Application.Services
                 throw new DomainException(shown + more + ". Chưa import dòng nào, vui lòng sửa file rồi thử lại.");
             }
 
-            var existing = await FindYearAsync(year);
+            parsed.ForEach(x => x.WorkshopId = workshopId);
+            var existing = await FindYearAsync(workshopId, year);
             _unitOfWork.WorkCalendarDays.RemoveRange(existing);
             await _unitOfWork.WorkCalendarDays.AddRangeAsync(parsed);
             await _unitOfWork.SaveChangesAsync();
@@ -94,11 +97,57 @@ namespace Attendance.Application.Services
             return new WorkCalendarImportResultDto { Year = year, ImportedCount = parsed.Count };
         }
 
-        private async Task<IReadOnlyList<WorkCalendarDay>> FindYearAsync(int year)
+        public async Task SaveDayAsync(SaveWorkCalendarDayDto request)
+        {
+            await GetWorkshopAsync(request.WorkshopId);
+            if (request.DayType.HasValue && !Enum.IsDefined(request.DayType.Value))
+                throw new DomainException("Loại ngày không hợp lệ.");
+            var note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+            if (note?.Length > 255) throw new DomainException("Ghi chú tối đa 255 ký tự.");
+
+            var yearRows = await FindYearAsync(request.WorkshopId, request.Date.Year);
+            // An empty year means "Sundays only"; materialise those first, or the first edit would turn every Sunday into a working day.
+            if (yearRows.Count == 0)
+            {
+                var sundays = new List<WorkCalendarDay>();
+                for (var date = new DateOnly(request.Date.Year, 1, 1); date.Year == request.Date.Year; date = date.AddDays(1))
+                {
+                    if (date.DayOfWeek == DayOfWeek.Sunday && date != request.Date)
+                        sundays.Add(new WorkCalendarDay { WorkshopId = request.WorkshopId, Date = date, DayType = WorkCalendarDayType.Sunday });
+                }
+                await _unitOfWork.WorkCalendarDays.AddRangeAsync(sundays);
+            }
+
+            var row = yearRows.FirstOrDefault(x => x.Date == request.Date);
+            if (request.DayType is not { } dayType)
+            {
+                if (row != null) _unitOfWork.WorkCalendarDays.Delete(row);
+            }
+            else if (row == null)
+            {
+                await _unitOfWork.WorkCalendarDays.AddAsync(new WorkCalendarDay { WorkshopId = request.WorkshopId, Date = request.Date, DayType = dayType, Note = note });
+            }
+            else
+            {
+                row.DayType = dayType;
+                row.Note = note;
+            }
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task<int> GetWorkshopIdByCodeAsync(string workshopCode) =>
+            (await _unitOfWork.Workshops.FirstOrDefaultAsync(x => x.WorkshopCode == workshopCode && !x.IsDeleted))?.Id
+                ?? throw new DomainException("Xưởng không tồn tại.");
+
+        private async Task<Workshop> GetWorkshopAsync(int workshopId) =>
+            await _unitOfWork.Workshops.FirstOrDefaultAsync(x => x.Id == workshopId && !x.IsDeleted)
+                ?? throw new DomainException("Xưởng không tồn tại.");
+
+        private async Task<IReadOnlyList<WorkCalendarDay>> FindYearAsync(int workshopId, int year)
         {
             var start = new DateOnly(year, 1, 1);
             var end = new DateOnly(year + 1, 1, 1);
-            return await _unitOfWork.WorkCalendarDays.FindAsync(x => x.Date >= start && x.Date < end);
+            return await _unitOfWork.WorkCalendarDays.FindAsync(x => x.WorkshopId == workshopId && x.Date >= start && x.Date < end);
         }
 
         private static List<WorkCalendarDay> ParseFile(int year, Stream stream, out List<string> errors)

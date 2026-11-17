@@ -664,7 +664,7 @@ namespace Attendance.Application.Services
 
             var validatedEmployees = await ValidateEmployeesAsync(groupId, request.StartTime, request.EndTime, request.Employees);
 
-            await EnsureOtCaseMatchesRulesAsync(request, forceMeal: !group.AllowEatLater, otCase!);
+            await EnsureOtCaseMatchesRulesAsync(request, group.WorkshopId, forceMeal: !group.AllowEatLater, otCase!);
 
             // An employee may not appear in two overlapping non-rejected forms on the same day.
             var employeeTimes = request.Employees.ToDictionary(
@@ -761,7 +761,7 @@ namespace Attendance.Application.Services
             var newHoursByDay = request.Employees.ToDictionary(
                 x => x.EmployeeId,
                 x => SplitHoursByDay(request.Date, request.StartTime, x.StartTime ?? request.StartTime, x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
-            await ValidateOtHourLimitsAsync(request.Date, newHoursByDay, mealSettings, excludeFormId: null);
+            await ValidateOtHourLimitsAsync(request.Date, newOtForm.WorkshopId, newHoursByDay, mealSettings, excludeFormId: null);
 
             var createdRows = new List<OtFormEmployee>();
             foreach (var item in request.Employees)
@@ -1124,7 +1124,7 @@ namespace Attendance.Application.Services
                 x => x.EmployeeId,
                 x => SplitHoursByDay(formDate, formStart, startTimeByEmployeeId[x.EmployeeId], x.EndTime, didEatByEmployeeId[x.EmployeeId], mealSettings));
             var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByDay.Keys, formDate, mealSettings, excludeFormId: otForm.Id);
-            await ValidateOtHourLimitsAsync(formDate, newHoursByDay, mealSettings, excludeFormId: otForm.Id);
+            await ValidateOtHourLimitsAsync(formDate, otForm.WorkshopId, newHoursByDay, mealSettings, excludeFormId: otForm.Id);
 
             // Office forms re-derive the OT case from date + hours (as at creation); production forms keep
             // theirs and may not be pushed past the month/year limit unless already TH3.
@@ -1132,7 +1132,7 @@ namespace Attendance.Application.Services
             if (isOfficeForm)
             {
                 var exceedsTh3 = await ExceedsMonthYearLimitAsync(formDate, newHoursByDay, mealSettings, accumulated);
-                var expectedCode = exceedsTh3 ? "TH3" : (await TouchesNonWorkingDayAsync(formDate, formStart, formEnd) ? "TH2" : "TH1");
+                var expectedCode = exceedsTh3 ? "TH3" : (await TouchesNonWorkingDayAsync(otForm.WorkshopId, formDate, formStart, formEnd) ? "TH2" : "TH1");
                 newOtCase = await _unitOfWork.OtCases.FirstOrDefaultAsync(x => x.Code == expectedCode && !x.IsDeleted);
                 if (newOtCase == null)
                     throw new DomainException($"Chưa cấu hình Trường hợp OT '{expectedCode}'.");
@@ -2289,12 +2289,12 @@ namespace Attendance.Application.Services
 
         // Hard-blocks create/update when an employee's total OT hours in the day, including this form's hours,
         // exceed the daily limit. The day total adds up every OT shift of that employee on that date (several
-        // forms count together). Non-working days (WorkCalendarDay) use DailyOtHourLimitHoliday, working days
+        // forms count together). Non-working days (the form workshop's WorkCalendarDay) use DailyOtHourLimitHoliday, working days
         // DailyOtHourLimit; there is no per-employee override. Month/year accumulation never blocks: passing
         // MonthlyOtHourLimit/YearlyOtHourLimit (or the employee's own custom limit) forces the form to TH3 instead,
         // see EnsureOtCaseMatchesRulesAsync. Message wording is mirrored in CreateOtFormPage.tsx.
         private async Task ValidateOtHourLimitsAsync(
-            DateOnly date, HoursByDay newHoursByDay, AttendanceSettingDto settings, int? excludeFormId)
+            DateOnly date, int workshopId, HoursByDay newHoursByDay, AttendanceSettingDto settings, int? excludeFormId)
         {
             if (newHoursByDay.Count == 0) return;
 
@@ -2304,7 +2304,7 @@ namespace Attendance.Application.Services
             var violations = new List<string>();
             foreach (var day in newHoursByDay.Values.SelectMany(p => p).Select(p => p.Date).Distinct().Order())
             {
-                var dailyLimit = await IsNonWorkingDayAsync(day) ? settings.DailyOtHourLimitHoliday : settings.DailyOtHourLimit;
+                var dailyLimit = await IsNonWorkingDayAsync(workshopId, day) ? settings.DailyOtHourLimitHoliday : settings.DailyOtHourLimit;
                 var dayBefore = await ComputeDayHoursAsync(newHoursByDay.Keys, day, settings, excludeFormId);
                 var dayLabel = day == date ? "" : $" {day:dd/MM}";
 
@@ -2325,19 +2325,19 @@ namespace Attendance.Application.Services
         }
 
         // 22:00-00:00 ends exactly at midnight and has no hours on the next day.
-        private async Task<bool> TouchesNonWorkingDayAsync(DateOnly date, TimeOnly start, TimeOnly end) =>
-            await IsNonWorkingDayAsync(date) || (end < start && end != TimeOnly.MinValue && await IsNonWorkingDayAsync(date.AddDays(1)));
+        private async Task<bool> TouchesNonWorkingDayAsync(int workshopId, DateOnly date, TimeOnly start, TimeOnly end) =>
+            await IsNonWorkingDayAsync(workshopId, date) || (end < start && end != TimeOnly.MinValue && await IsNonWorkingDayAsync(workshopId, date.AddDays(1)));
 
-        // A year with no calendar rows yet falls back to Sundays only, mirroring WorkCalendarService.GetByYearAsync.
-        private async Task<bool> IsNonWorkingDayAsync(DateOnly date)
+        // A workshop year with no calendar rows yet falls back to Sundays only, mirroring CreateOtFormPage.
+        private async Task<bool> IsNonWorkingDayAsync(int workshopId, DateOnly date)
         {
-            if ((await _unitOfWork.WorkCalendarDays.FindAsync(x => x.Date == date)).Count > 0) return true;
+            if ((await _unitOfWork.WorkCalendarDays.FindAsync(x => x.WorkshopId == workshopId && x.Date == date)).Count > 0) return true;
             if (date.DayOfWeek != DayOfWeek.Sunday) return false;
 
             var yearStart = new DateOnly(date.Year, 1, 1);
             var nextYearStart = yearStart.AddYears(1);
             var calendarImported = (await _unitOfWork.WorkCalendarDays.SelectAsync(
-                x => x.Date >= yearStart && x.Date < nextYearStart, x => x.Id)).Count > 0;
+                x => x.WorkshopId == workshopId && x.Date >= yearStart && x.Date < nextYearStart, x => x.Id)).Count > 0;
             return !calendarImported;
         }
 
@@ -2366,7 +2366,7 @@ namespace Attendance.Application.Services
 
         // The OT case is derived, not chosen: TH3 when ExceedsMonthYearLimitAsync, otherwise TH2 when the form touches a
         // non-working day and TH1 if not. The daily total never forces TH3. Rejects a request whose OtCaseId differs.
-        private async Task EnsureOtCaseMatchesRulesAsync(CreateOtFormDto request, bool forceMeal, OtCase requestedCase)
+        private async Task EnsureOtCaseMatchesRulesAsync(CreateOtFormDto request, int workshopId, bool forceMeal, OtCase requestedCase)
         {
             var settings = await _attendanceSettingService.GetAsync();
 
@@ -2376,7 +2376,7 @@ namespace Attendance.Application.Services
             var accumulated = await ComputeAccumulatedHoursBatchAsync(newHoursByDay.Keys, request.Date, settings);
             var exceedsTh3 = await ExceedsMonthYearLimitAsync(request.Date, newHoursByDay, settings, accumulated);
 
-            var expectedCode = exceedsTh3 ? "TH3" : (await TouchesNonWorkingDayAsync(request.Date, request.StartTime, request.EndTime) ? "TH2" : "TH1");
+            var expectedCode = exceedsTh3 ? "TH3" : (await TouchesNonWorkingDayAsync(workshopId, request.Date, request.StartTime, request.EndTime) ? "TH2" : "TH1");
             if (!string.Equals(requestedCase.Code, expectedCode, StringComparison.OrdinalIgnoreCase))
             {
                 var reason = exceedsTh3

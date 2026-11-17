@@ -36,7 +36,5 @@ namespace Attendance.Application.Dtos.Employees
         public string? CongDoan { get; set; }
         [MaxLength(255, ErrorMessage = "Công việc tối đa 255 ký tự")]
         public string? TaskName { get; set; }
-        // TT/GT for people without a task; a task's own kind wins.
-        public string? StaffKind { get; set; }
     }
 }

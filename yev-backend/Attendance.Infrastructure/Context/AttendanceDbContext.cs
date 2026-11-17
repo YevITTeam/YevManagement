@@ -77,7 +77,8 @@ public partial class AttendanceDbContext : DbContext
         modelBuilder.Entity<WorkCalendarDay>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_WorkCalendarDays");
-            entity.HasIndex(e => e.Date, "IX_WorkCalendarDays_Date").IsUnique();
+            entity.HasIndex(e => new { e.WorkshopId, e.Date }, "IX_WorkCalendarDays_WorkshopId_Date").IsUnique();
+            entity.HasOne(e => e.Workshop).WithMany().HasForeignKey(e => e.WorkshopId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(e => e.Note).HasMaxLength(255);
         });
 

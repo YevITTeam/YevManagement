@@ -22,9 +22,8 @@ const LEGEND_ORDER = [WorkCalendarDayType.PublicHoliday, WorkCalendarDayType.Spe
 const pad = (value: number) => String(value).padStart(2, "0");
 const toDateKey = (year: number, month: number, day: number) => `${year}-${pad(month)}-${pad(day)}`;
 
-// Read-only 12-month view of the company calendar. A day with a row is a non-working day; hovering a day
-// shows its type and note.
-export default function WorkCalendarView({ year, days }: { year: number; days: WorkCalendarDayDto[] }) {
+// 12-month view of one workshop's calendar. A day with a row is a non-working day; hovering shows its type and note.
+export default function WorkCalendarView({ year, days, onDayClick }: { year: number; days: WorkCalendarDayDto[]; onDayClick?: (date: string) => void }) {
     const t = useTranslations("Attendance.AttendanceSetting");
     const locale = useLocale();
 
@@ -92,12 +91,13 @@ export default function WorkCalendarView({ year, days }: { year: number; days: W
                                     const key = toDateKey(year, month, day);
                                     const entry = dayByDate.get(key);
                                     const title = entry ? `${dayTypeLabel[entry.dayType]}${entry.note ? ` — ${entry.note}` : ""}` : undefined;
-                                    return (
-                                        <span
-                                            key={key}
-                                            title={title}
-                                            className={`rounded py-0.5 ${entry ? DAY_TYPE_CELL_CLASS[entry.dayType] : "text-[#191c1e]"} ${key === todayKey ? "ring-2 ring-[#e3000f]" : ""}`}
-                                        >
+                                    const className = `rounded py-0.5 ${entry ? DAY_TYPE_CELL_CLASS[entry.dayType] : "text-[#191c1e]"} ${key === todayKey ? "ring-2 ring-[#e3000f]" : ""}`;
+                                    return onDayClick ? (
+                                        <button key={key} type="button" title={title} onClick={() => onDayClick(key)} className={`${className} cursor-pointer hover:ring-1 hover:ring-[#5e3f3a]`}>
+                                            {day}
+                                        </button>
+                                    ) : (
+                                        <span key={key} title={title} className={className}>
                                             {day}
                                         </span>
                                     );

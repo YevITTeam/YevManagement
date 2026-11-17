@@ -1832,10 +1832,13 @@ namespace Attendance.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<int>("WorkshopId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id")
                         .HasName("PK_WorkCalendarDays");
 
-                    b.HasIndex(new[] { "Date" }, "IX_WorkCalendarDays_Date")
+                    b.HasIndex(new[] { "WorkshopId", "Date" }, "IX_WorkCalendarDays_WorkshopId_Date")
                         .IsUnique();
 
                     b.ToTable("WorkCalendarDays");
@@ -2450,6 +2453,17 @@ namespace Attendance.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_ProductionTeams_Workshops_WorkshopId");
+
+                    b.Navigation("Workshop");
+                });
+
+            modelBuilder.Entity("Attendance.Domain.Entities.WorkCalendarDay", b =>
+                {
+                    b.HasOne("Attendance.Domain.Entities.Workshop", "Workshop")
+                        .WithMany()
+                        .HasForeignKey("WorkshopId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Workshop");
                 });

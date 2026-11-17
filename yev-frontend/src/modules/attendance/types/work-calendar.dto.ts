@@ -16,3 +16,12 @@ export interface WorkCalendarImportResultDto {
     year: number;
     importedCount: number;
 }
+
+export interface SaveWorkCalendarDayDto {
+    workshopId: number;
+    // "yyyy-MM-dd"
+    date: string;
+    // null = working day (removes the day from the calendar).
+    dayType: WorkCalendarDayType | null;
+    note: string | null;
+}

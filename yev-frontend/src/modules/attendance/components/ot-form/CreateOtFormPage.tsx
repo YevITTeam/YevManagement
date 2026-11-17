@@ -252,32 +252,44 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [endTime, setEndTime] = useState("");
     const [subReason, setSubReason] = useState("");
 
-    // Company non-working-day calendar for the year of the form date. A date in it is a non-working day:
-    // the OT case becomes TH2 and the daily OT limit switches to the holiday limit.
+    // Each workshop has its own non-working-day calendar; a form follows its group's workshop. A date in it is a
+    // non-working day: the OT case becomes TH2 and the daily OT limit switches to the holiday limit.
     const calendarYear = date ? Number(date.slice(0, 4)) : null;
-    const [calendarDays, setCalendarDays] = useState<WorkCalendarDayDto[]>([]);
+    const workshopIdOfGroup = (id: number | null) => groups.find((g) => g.id === id)?.workshopId ?? 0;
+    const workshopKey = [...new Set(groupIds.map(workshopIdOfGroup).filter(Boolean))].sort().join(",");
+    const [calendarDays, setCalendarDays] = useState<(WorkCalendarDayDto & { workshopId: number })[]>([]);
     const isOvernightForm = isOvernight(startTime, endTime);
     const nextDate = date ? addOneDay(date) : "";
     const spansNewYear = isOvernightForm && Boolean(date) && nextDate.slice(0, 4) !== date.slice(0, 4);
     useFetchEffect(
         async () => {
-            if (!calendarYear) return [];
-            const years = await Promise.all((spansNewYear ? [calendarYear, calendarYear + 1] : [calendarYear]).map((year) => WorkCalendarApi.getByYear(year)));
-            return years.flat();
+            if (!calendarYear || !workshopKey) return [];
+            const years = spansNewYear ? [calendarYear, calendarYear + 1] : [calendarYear];
+            const lists = await Promise.all(
+                workshopKey.split(",").map(Number).flatMap((workshopId) =>
+                    years.map(async (year) => (await WorkCalendarApi.getByYear(workshopId, year)).map((day) => ({ ...day, workshopId })))
+                )
+            );
+            return lists.flat();
         },
-        [calendarYear, spansNewYear],
+        [calendarYear, spansNewYear, workshopKey],
         setCalendarDays,
         t("workCalendarLoadError")
     );
-    // A year with no calendar rows falls back to Sundays, same as the BE.
-    const isNonWorkingDate = (value: string) =>
-        calendarDays.some((day) => day.date.slice(0, 4) === value.slice(0, 4))
-            ? calendarDays.some((day) => day.date === value)
+    // A workshop year with no calendar rows falls back to Sundays, same as the BE.
+    const isNonWorkingDate = (value: string, workshopId: number) => {
+        const ownDays = calendarDays.filter((day) => day.workshopId === workshopId);
+        return ownDays.some((day) => day.date.slice(0, 4) === value.slice(0, 4))
+            ? ownDays.some((day) => day.date === value)
             : new Date(`${value}T00:00:00Z`).getUTCDay() === 0;
-    const isNonWorkingDay = Boolean(date) && isNonWorkingDate(date);
+    };
     // 22:00-00:00 ends exactly at midnight and has no hours on the next day.
-    const touchesNonWorkingDay = isNonWorkingDay || (isOvernightForm && endTime !== "00:00" && isNonWorkingDate(nextDate));
-    const baseOtCaseCode = date ? (touchesNonWorkingDay ? "TH2" : "TH1") : null;
+    const touchesNonWorkingDayOf = (workshopId: number) =>
+        isNonWorkingDate(date, workshopId) || (isOvernightForm && endTime !== "00:00" && isNonWorkingDate(nextDate, workshopId));
+    const baseOtCaseCodeOf = (formGroupId: number | null) => (date ? (touchesNonWorkingDayOf(workshopIdOfGroup(formGroupId)) ? "TH2" : "TH1") : null);
+    const isNonWorkingDay = Boolean(date) && isNonWorkingDate(date, workshopIdOfGroup(groupId));
+    const touchesNonWorkingDay = Boolean(date) && touchesNonWorkingDayOf(workshopIdOfGroup(groupId));
+    const baseOtCaseCode = baseOtCaseCodeOf(groupId);
     const baseOtCaseId = isEditMode ? loadedOtCaseId : (otCases.find((c) => c.code === baseOtCaseCode)?.id ?? null);
 
     // Hide the employee list until the core fields are filled so users fill the form top-down. groupId is
@@ -354,7 +366,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             return accumulation.month + monthHours > accumulation.monthLimit || accumulation.year + yearHours > accumulation.yearLimit;
         });
     };
-    const otCaseCodeFor = (employeeIds: number[]) => (exceedsTh3For(employeeIds) ? "TH3" : baseOtCaseCode);
+    const otCaseCodeFor = (employeeIds: number[], formGroupId: number | null = groupId) => (exceedsTh3For(employeeIds) ? "TH3" : baseOtCaseCodeOf(formGroupId));
     const exceedsTh3 = exceedsTh3For(selectedEmployeeIds);
     const otCaseCode = exceedsTh3 ? "TH3" : baseOtCaseCode;
     const otCaseId = isEditMode ? loadedOtCaseId : (otCases.find((c) => c.code === otCaseCode)?.id ?? null);
@@ -869,7 +881,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             groupId: formGroupId,
             departmentId: departmentId!,
             reasonId: reasonId!,
-            otCaseId: otCases.find((c) => c.code === otCaseCodeFor(employeeIds))?.id ?? otCaseId!,
+            otCaseId: otCases.find((c) => c.code === otCaseCodeFor(employeeIds, formGroupId))?.id ?? otCaseId!,
             startTime: `${startTime}:00`,
             endTime: `${endTime}:00`,
             subReason: subReason.trim() || null,
@@ -1548,7 +1560,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 </thead>
                                 <tbody>
                                     {groupSections.map((section) => {
-                                        const caseCode = otCaseCodeFor(section.selectedIds);
+                                        const caseCode = otCaseCodeFor(section.selectedIds, section.groupId);
                                         const allSelected =
                                             section.visibleEmployees.length > 0 &&
                                             section.visibleEmployees.every((employee) => selectedEmployeeIds.includes(employee.id));

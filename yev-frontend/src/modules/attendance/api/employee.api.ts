@@ -96,8 +96,6 @@ export interface CreateUpdateEmployeeDto {
     shiftTeamId?: number | null;
     congDoan?: string | null;
     taskName?: string | null;
-    // Only counts without a task.
-    staffKind?: string | null;
 }
 
 // Separate narrow permission (Attendance.Employee.UpdateOtLimit) so department coordinators can edit OT

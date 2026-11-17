@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { Building2, CalendarDays, Download, History, Mail, Save, Send, Ticket, TrendingUp, Upload } from "lucide-react";
+import { CalendarDays, Download, Mail, Save, Send, Undo2, Upload } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -49,6 +49,7 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
 ) {
     const t = useTranslations("Attendance.AttendanceSetting");
     const [values, setValues] = useState<AttendanceSettingDto | null>(null);
+    const [saved, setSaved] = useState<AttendanceSettingDto | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isRunningNow, setIsRunningNow] = useState(false);
     const [isSendingGeneralAffairs, setIsSendingGeneralAffairs] = useState(false);
@@ -59,7 +60,10 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
     const { isLoading, refetch: fetchSetting } = useFetchEffect(
         () => AttendanceSettingApi.getSetting(),
         [],
-        (data) => setValues(data),
+        (data) => {
+            setValues(data);
+            setSaved(data);
+        },
         t("loadError"),
         (message) => toast.error(message),
         "attendance-setting-panel"
@@ -98,6 +102,7 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
         try {
             const updated = await AttendanceSettingApi.updateSetting(values);
             setValues(updated);
+            setSaved(updated);
             // Drop the shared cache so every other screen picks up the new thresholds on its next
             // mount instead of needing a full page reload.
             invalidateAttendanceSettingCache();
@@ -173,119 +178,98 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
     );
     const selectedGaWorkshopId = gaWorkshops.some((w) => w.workshopId === gaWorkshopId) ? gaWorkshopId : (gaWorkshops[0]?.workshopId ?? 0);
 
+    const isDirty = JSON.stringify(values) !== JSON.stringify(saved);
+
     return (
-        <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="grid gap-3 lg:grid-cols-2">
-                <SettingCard icon={<Ticket size={15} />} title={t("mealTicketSectionTitle")} desc={t("mealTicketSectionDesc")}>
-                    <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
-                        <Field label={t("fieldNoMealTicketMaxHours")} hint={t("fieldMainMealTicketMinHoursHint")}>
-                            <HourInput step="0.5" min={0} max={24} value={values.noMealTicketMaxHours} onChange={setNumber("noMealTicketMaxHours")} disabled={isSaving} unit={t("unitHour")} />
-                        </Field>
-                        <Field label={t("fieldMainMealTicketMinHours")} hint={t("fieldMainMealTicketMinHoursHint")}>
-                            <HourInput step="0.5" min={0.5} max={24} value={values.mainMealTicketMinHours} onChange={setNumber("mainMealTicketMinHours")} disabled={isSaving} unit={t("unitHour")} />
-                        </Field>
-                        <Field label={t("fieldMealBreakDeductionHours")}>
-                            <HourInput step="0.25" min={0} max={4} value={values.mealBreakDeductionHours} onChange={setNumber("mealBreakDeductionHours")} disabled={isSaving} unit={t("unitHour")} />
-                        </Field>
-                        {/* One label over both bounds — two separate labels read as unrelated fields. */}
-                        <div className="block">
-                            <span className={`${fieldLabelClassName} cursor-help`} title={t("fieldEarlyMealWindowHint")}>
-                                {t("fieldEarlyMealWindow")}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                                <TimePicker24h value={toTimeInputValue(values.earlyMealWindowStartTime)} onChange={setTime("earlyMealWindowStartTime")} disabled={isSaving} hourLabel={t("fieldEarlyMealWindowStartTime")} />
-                                <span className={unitSuffixClassName}>&ndash;</span>
-                                <TimePicker24h value={toTimeInputValue(values.earlyMealWindowEndTime)} onChange={setTime("earlyMealWindowEndTime")} disabled={isSaving} hourLabel={t("fieldEarlyMealWindowEndTime")} />
-                            </div>
+        <form onSubmit={handleSubmit} className="rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+            <div className="divide-y divide-[#f1f5f9]">
+                <SettingRow title={t("mealTicketSectionTitle")} desc={t("mealTicketSectionDesc")}>
+                    <Field label={t("fieldNoMealTicketMaxHours")} hint={t("fieldMainMealTicketMinHoursHint")}>
+                        <HourInput step="0.5" min={0} max={24} value={values.noMealTicketMaxHours} onChange={setNumber("noMealTicketMaxHours")} disabled={isSaving} unit={t("unitHour")} />
+                    </Field>
+                    <Field label={t("fieldMainMealTicketMinHours")} hint={t("fieldMainMealTicketMinHoursHint")}>
+                        <HourInput step="0.5" min={0.5} max={24} value={values.mainMealTicketMinHours} onChange={setNumber("mainMealTicketMinHours")} disabled={isSaving} unit={t("unitHour")} />
+                    </Field>
+                    <Field label={t("fieldMealBreakDeductionHours")}>
+                        <HourInput step="0.25" min={0} max={4} value={values.mealBreakDeductionHours} onChange={setNumber("mealBreakDeductionHours")} disabled={isSaving} unit={t("unitHour")} />
+                    </Field>
+                    {/* One label over both bounds — two separate labels read as unrelated fields. */}
+                    <div className="block">
+                        <span className={`${fieldLabelClassName} cursor-help`} title={t("fieldEarlyMealWindowHint")}>
+                            {t("fieldEarlyMealWindow")}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                            <TimePicker24h value={toTimeInputValue(values.earlyMealWindowStartTime)} onChange={setTime("earlyMealWindowStartTime")} disabled={isSaving} hourLabel={t("fieldEarlyMealWindowStartTime")} />
+                            <span className={unitSuffixClassName}>&ndash;</span>
+                            <TimePicker24h value={toTimeInputValue(values.earlyMealWindowEndTime)} onChange={setTime("earlyMealWindowEndTime")} disabled={isSaving} hourLabel={t("fieldEarlyMealWindowEndTime")} />
                         </div>
                     </div>
-                </SettingCard>
+                </SettingRow>
 
-                <SettingCard icon={<TrendingUp size={15} />} title={t("accumulationSectionTitle")} desc={t("accumulationSectionDesc")}>
-                    <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
-                        <Field label={t("fieldDailyOtHourLimit")} hint={t("accumulationHint")}>
-                            <HourInput step="0.5" min={0.5} max={24} value={values.dailyOtHourLimit} onChange={setNumber("dailyOtHourLimit")} disabled={isSaving} unit={t("unitHour")} />
-                        </Field>
-                        <Field label={t("fieldDailyOtHourLimitHoliday")} hint={t("fieldDailyOtHourLimitHolidayHint")}>
-                            <HourInput step="0.5" min={0.5} max={24} value={values.dailyOtHourLimitHoliday} onChange={setNumber("dailyOtHourLimitHoliday")} disabled={isSaving} unit={t("unitHour")} />
-                        </Field>
-                        <Field label={t("fieldMonthlyOtHourLimit")} hint={t("accumulationHint")}>
-                            <HourInput step="1" min={1} value={values.monthlyOtHourLimit} onChange={setNumber("monthlyOtHourLimit")} disabled={isSaving} unit={t("unitHour")} />
-                        </Field>
-                        <Field label={t("fieldYearlyOtHourLimit")} hint={t("accumulationHint")}>
-                            <HourInput step="1" min={1} value={values.yearlyOtHourLimit} onChange={setNumber("yearlyOtHourLimit")} disabled={isSaving} unit={t("unitHour")} />
-                        </Field>
+                <SettingRow title={t("accumulationSectionTitle")} desc={t("accumulationSectionDesc")}>
+                    <Field label={t("fieldDailyOtHourLimit")} hint={t("accumulationHint")}>
+                        <HourInput step="0.5" min={0.5} max={24} value={values.dailyOtHourLimit} onChange={setNumber("dailyOtHourLimit")} disabled={isSaving} unit={t("unitHour")} />
+                    </Field>
+                    <Field label={t("fieldDailyOtHourLimitHoliday")} hint={t("fieldDailyOtHourLimitHolidayHint")}>
+                        <HourInput step="0.5" min={0.5} max={24} value={values.dailyOtHourLimitHoliday} onChange={setNumber("dailyOtHourLimitHoliday")} disabled={isSaving} unit={t("unitHour")} />
+                    </Field>
+                    <Field label={t("fieldMonthlyOtHourLimit")} hint={t("accumulationHint")}>
+                        <HourInput step="1" min={1} value={values.monthlyOtHourLimit} onChange={setNumber("monthlyOtHourLimit")} disabled={isSaving} unit={t("unitHour")} />
+                    </Field>
+                    <Field label={t("fieldYearlyOtHourLimit")} hint={t("accumulationHint")}>
+                        <HourInput step="1" min={1} value={values.yearlyOtHourLimit} onChange={setNumber("yearlyOtHourLimit")} disabled={isSaving} unit={t("unitHour")} />
+                    </Field>
+                </SettingRow>
+
+                <SettingRow title={t("formTimingSectionTitle")} desc={t("formTimingSectionDesc")}>
+                    <Field label={t("fieldBackdateDays")}>
+                        <HourInput step="1" min={0} max={31} value={values.backdateDays} onChange={setNumber("backdateDays")} disabled={isSaving} unit={t("unitDay")} />
+                    </Field>
+                    <Field label={t("fieldResubmitWindowDays")} hint={t("fieldResubmitWindowDaysHint")}>
+                        <HourInput step="1" min={0} max={31} value={values.resubmitWindowDays} onChange={setNumber("resubmitWindowDays")} disabled={isSaving} unit={t("unitDay")} />
+                    </Field>
+                </SettingRow>
+
+                <WorkCalendarRow workshops={gaWorkshops} />
+
+                <SettingRow title={t("batchSectionTitle")} desc={t("batchSectionDesc")}>
+                    <Field label={t("fieldBatchAutoSendTime")} hint={t("batchSectionHint")}>
+                        <TimePicker24h value={toTimeInputValue(values.batchAutoSendTime)} onChange={setTime("batchAutoSendTime")} disabled={isSaving} />
+                    </Field>
+                    <button type="button" onClick={handleRunNow} disabled={isRunningNow} className={secondaryButtonClassName}>
+                        <Send className="h-3.5 w-3.5" />
+                        {isRunningNow ? t("runNowRunning") : t("runNowButton")}
+                    </button>
+                </SettingRow>
+
+                <SettingRow title={t("generalAffairsSectionTitle")} desc={t("generalAffairsSectionDesc")}>
+                    <Field label={t("fieldGeneralAffairsSendTime")}>
+                        <TimePicker24h value={toTimeInputValue(values.generalAffairsSendTime)} onChange={setTime("generalAffairsSendTime")} disabled={isSaving} />
+                    </Field>
+                    <div className="block">
+                        <span className={fieldLabelClassName}>{t("fieldGeneralAffairsWorkshop")}</span>
+                        <StyledSelect
+                            value={selectedGaWorkshopId}
+                            onChange={setGaWorkshopId}
+                            options={gaWorkshops.map((w) => ({
+                                value: w.workshopId,
+                                label: w.missing > 0 ? t("generalAffairsWorkshopMissing", { workshop: w.workshopName, count: w.missing }) : w.workshopName,
+                            }))}
+                            triggerClassName={`${fieldClassName} w-52 pr-8`}
+                        />
                     </div>
-                </SettingCard>
-
-                <SettingCard icon={<History size={15} />} title={t("formTimingSectionTitle")} desc={t("formTimingSectionDesc")}>
-                    <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
-                        <Field label={t("fieldBackdateDays")}>
-                            <HourInput step="1" min={0} max={31} value={values.backdateDays} onChange={setNumber("backdateDays")} disabled={isSaving} unit={t("unitDay")} />
-                        </Field>
-                        <Field label={t("fieldResubmitWindowDays")} hint={t("fieldResubmitWindowDaysHint")}>
-                            <HourInput step="1" min={0} max={31} value={values.resubmitWindowDays} onChange={setNumber("resubmitWindowDays")} disabled={isSaving} unit={t("unitDay")} />
-                        </Field>
-                    </div>
-                </SettingCard>
-
-                <WorkCalendarCard />
-
-                <SettingCard icon={<Send size={15} />} title={t("batchSectionTitle")} desc={t("batchSectionDesc")}>
-                    <div className="flex flex-wrap items-end gap-3">
-                        <Field label={t("fieldBatchAutoSendTime")} hint={t("batchSectionHint")}>
-                            <TimePicker24h value={toTimeInputValue(values.batchAutoSendTime)} onChange={setTime("batchAutoSendTime")} disabled={isSaving} />
-                        </Field>
-                        <button type="button" onClick={handleRunNow} disabled={isRunningNow} className={secondaryButtonClassName}>
-                            <Send className="h-3.5 w-3.5" />
-                            {isRunningNow ? t("runNowRunning") : t("runNowButton")}
-                        </button>
-                    </div>
-                </SettingCard>
-
-                <SettingCard icon={<Mail size={15} />} title={t("testEmailSectionTitle")} desc={t("testEmailSectionDesc")}>
-                    <div className="flex flex-wrap items-end gap-3">
-                        {/* Free-text address — the one field here that legitimately takes the remaining width. */}
-                        <Field label={t("fieldTestEmail")} className="min-w-0 flex-1">
-                            <input type="email" value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder={t("fieldTestEmailPlaceholder")} disabled={isSendingTestEmail} className={`${fieldClassName} w-full`} />
-                        </Field>
-                        <button type="button" onClick={handleSendTestEmail} disabled={isSendingTestEmail} className={secondaryButtonClassName}>
-                            <Mail className="h-3.5 w-3.5" />
-                            {isSendingTestEmail ? t("testEmailSending") : t("testEmailButton")}
-                        </button>
-                    </div>
-                </SettingCard>
-
-                <SettingCard icon={<Building2 size={15} />} title={t("generalAffairsSectionTitle")} desc={t("generalAffairsSectionDesc")} className="lg:col-span-2">
-                    <div className="flex flex-wrap items-end gap-3">
-                        <Field label={t("fieldGeneralAffairsSendTime")}>
-                            <TimePicker24h value={toTimeInputValue(values.generalAffairsSendTime)} onChange={setTime("generalAffairsSendTime")} disabled={isSaving} />
-                        </Field>
-                        <div className="block">
-                            <span className={fieldLabelClassName}>{t("fieldGeneralAffairsWorkshop")}</span>
-                            <StyledSelect
-                                value={selectedGaWorkshopId}
-                                onChange={setGaWorkshopId}
-                                options={gaWorkshops.map((w) => ({
-                                    value: w.workshopId,
-                                    label: w.missing > 0 ? t("generalAffairsWorkshopMissing", { workshop: w.workshopName, count: w.missing }) : w.workshopName,
-                                }))}
-                                triggerClassName={`${fieldClassName} w-52 pr-8`}
-                            />
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleSendGeneralAffairsNow}
-                            disabled={isSendingGeneralAffairs}
-                            title={t("generalAffairsSendNowHint")}
-                            className={secondaryButtonClassName}
-                        >
-                            <Send className="h-3.5 w-3.5" />
-                            {isSendingGeneralAffairs ? t("runNowRunning") : t("runNowButton")}
-                        </button>
-                    </div>
-                    {/* Two columns of "department | emails" rows: 8 departments stacked one per line made the card twice as tall. */}
-                    <div className="mt-3 grid gap-x-6 gap-y-2 md:grid-cols-2">
+                    <button
+                        type="button"
+                        onClick={handleSendGeneralAffairsNow}
+                        disabled={isSendingGeneralAffairs}
+                        title={t("generalAffairsSendNowHint")}
+                        className={secondaryButtonClassName}
+                    >
+                        <Send className="h-3.5 w-3.5" />
+                        {isSendingGeneralAffairs ? t("runNowRunning") : t("runNowButton")}
+                    </button>
+                    {/* Two columns of "department | emails" rows: one per line made the section twice as tall. */}
+                    <div className="grid w-full gap-x-6 gap-y-2 md:grid-cols-2">
                         {values.generalAffairsRecipients
                             .filter((item) => item.workshopId === selectedGaWorkshopId)
                             .map((recipient) => (
@@ -314,13 +298,33 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                                 </label>
                             ))}
                     </div>
-                </SettingCard>
+                </SettingRow>
+
+                <SettingRow title={t("testEmailSectionTitle")} desc={t("testEmailSectionDesc")}>
+                    <Field label={t("fieldTestEmail")}>
+                        <input type="email" value={testEmail} onChange={(event) => setTestEmail(event.target.value)} placeholder={t("fieldTestEmailPlaceholder")} disabled={isSendingTestEmail} className={`${fieldClassName} w-72 max-w-full`} />
+                    </Field>
+                    <button type="button" onClick={handleSendTestEmail} disabled={isSendingTestEmail} className={secondaryButtonClassName}>
+                        <Mail className="h-3.5 w-3.5" />
+                        {isSendingTestEmail ? t("testEmailSending") : t("testEmailButton")}
+                    </button>
+                </SettingRow>
             </div>
 
-            <div className="flex justify-end">
+            {/* Sticky so the single Save stays in reach from any row; disabled until something changed. */}
+            <div className="sticky bottom-0 flex items-center justify-end gap-3 rounded-b-xl border-t border-[#e0e3e5] bg-white px-4 py-2.5">
+                {isDirty && (
+                    <>
+                        <span className="text-xs text-[#9a5b00]">{t("unsavedChanges")}</span>
+                        <button type="button" onClick={() => setValues(saved)} disabled={isSaving} className={secondaryButtonClassName}>
+                            <Undo2 className="h-3.5 w-3.5" />
+                            {t("discardChanges")}
+                        </button>
+                    </>
+                )}
                 <button
                     type="submit"
-                    disabled={isSaving}
+                    disabled={isSaving || !isDirty}
                     className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md bg-[#e3000f] px-4 text-xs! font-semibold! text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <Save className="h-3.5 w-3.5" />
@@ -331,19 +335,21 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
     );
 });
 
-// Company non-working-day calendar: pick a year, download its Excel template, re-import to replace the
-// whole year. Days in the calendar use the holiday daily limit and make the OT case TH2.
-function WorkCalendarCard() {
+// Per-workshop non-working-day calendar: days in it use the holiday daily limit and make that workshop's forms TH2.
+function WorkCalendarRow({ workshops }: { workshops: { workshopId: number; workshopName: string }[] }) {
     const t = useTranslations("Attendance.AttendanceSetting");
     const [year, setYear] = useState(() => new Date().getFullYear());
+    const [pickedWorkshopId, setPickedWorkshopId] = useState(0);
+    const workshop = workshops.find((w) => w.workshopId === pickedWorkshopId) ?? workshops[0];
+    const workshopId = workshop?.workshopId ?? 0;
     const [days, setDays] = useState<WorkCalendarDayDto[]>([]);
     const [isBusy, setIsBusy] = useState(false);
     const [isViewOpen, setIsViewOpen] = useState(false);
     const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
 
     const { refetch } = useFetchEffect(
-        () => WorkCalendarApi.getByYear(year),
-        [year],
+        async () => (workshopId ? WorkCalendarApi.getByYear(workshopId, year) : []),
+        [workshopId, year],
         setDays,
         t("calendarLoadError"),
         (message) => toast.error(message)
@@ -352,7 +358,7 @@ function WorkCalendarCard() {
     const handleDownload = async () => {
         setIsBusy(true);
         try {
-            const { blob, fileName } = await WorkCalendarApi.downloadTemplate(year);
+            const { blob, fileName } = await WorkCalendarApi.downloadTemplate(workshopId, year);
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -378,7 +384,7 @@ function WorkCalendarCard() {
         setPendingImportFile(null);
         setIsBusy(true);
         try {
-            const result = await WorkCalendarApi.importYear(year, file);
+            const result = await WorkCalendarApi.importYear(workshopId, year, file);
             toast.success(t("calendarImportSuccess", { count: result.importedCount, year: result.year }));
             refetch();
         } catch (err) {
@@ -389,72 +395,76 @@ function WorkCalendarCard() {
     };
 
     return (
-        <SettingCard icon={<CalendarDays size={15} />} title={t("calendarSectionTitle")} desc={t("calendarSectionDesc")}>
-            <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
-                <Field label={t("calendarYear")}>
-                    <input
-                        type="number"
-                        min={2000}
-                        max={2100}
-                        value={year}
-                        onChange={(event) => setYear(Number(event.target.value) || year)}
-                        disabled={isBusy}
-                        className={`${fieldClassName} w-24`}
-                    />
-                </Field>
-                <button type="button" onClick={() => setIsViewOpen(true)} className={secondaryButtonClassName}>
-                    <CalendarDays className="h-3.5 w-3.5" />
-                    {t("calendarView")}
-                </button>
-                <button type="button" onClick={handleDownload} disabled={isBusy} className={secondaryButtonClassName}>
-                    <Download className="h-3.5 w-3.5" />
-                    {t("calendarDownloadTemplate")}
-                </button>
-                <label className={`${secondaryButtonClassName} ${isBusy ? "pointer-events-none opacity-50" : ""}`}>
-                    <Upload className="h-3.5 w-3.5" />
-                    {t("calendarImport")}
-                    <input type="file" accept=".xlsx" className="hidden" onChange={handlePickImportFile} disabled={isBusy} />
-                </label>
+        <SettingRow title={t("calendarSectionTitle")} desc={t("calendarSectionDesc")}>
+            <div className="block">
+                <span className={fieldLabelClassName}>{t("calendarWorkshop")}</span>
+                <StyledSelect
+                    value={workshopId}
+                    onChange={setPickedWorkshopId}
+                    options={workshops.map((w) => ({ value: w.workshopId, label: w.workshopName }))}
+                    triggerClassName={`${fieldClassName} w-40 pr-8`}
+                />
             </div>
-            {isViewOpen && <WorkCalendarDialog year={year} days={days} onClose={() => setIsViewOpen(false)} />}
+            <Field label={t("calendarYear")}>
+                <input
+                    type="number"
+                    min={2000}
+                    max={2100}
+                    value={year}
+                    onChange={(event) => setYear(Number(event.target.value) || year)}
+                    disabled={isBusy}
+                    className={`${fieldClassName} w-24`}
+                />
+            </Field>
+            {/* An empty year silently falls back to Sundays only, so flag it without opening the dialog. */}
+            <span className={`flex h-9 items-center text-sm ${days.length ? "text-[#5e3f3a]" : "text-[#9a5b00]"}`}>
+                {days.length ? t("calendarDayCount", { count: days.length }) : t("calendarEmpty", { year })}
+            </span>
+            <button type="button" onClick={() => setIsViewOpen(true)} disabled={!workshopId} className={secondaryButtonClassName}>
+                <CalendarDays className="h-3.5 w-3.5" />
+                {t("calendarView")}
+            </button>
+            <button type="button" onClick={handleDownload} disabled={isBusy || !workshopId} className={secondaryButtonClassName}>
+                <Download className="h-3.5 w-3.5" />
+                {t("calendarDownloadTemplate")}
+            </button>
+            <label className={`${secondaryButtonClassName} ${isBusy ? "pointer-events-none opacity-50" : ""}`}>
+                <Upload className="h-3.5 w-3.5" />
+                {t("calendarImport")}
+                <input type="file" accept=".xlsx" className="hidden" onChange={handlePickImportFile} disabled={isBusy} />
+            </label>
+            {isViewOpen && workshop && (
+                <WorkCalendarDialog
+                    workshopId={workshop.workshopId}
+                    workshopName={workshop.workshopName}
+                    year={year}
+                    days={days}
+                    onChanged={refetch}
+                    onClose={() => setIsViewOpen(false)}
+                />
+            )}
             <ConfirmDialog
                 isOpen={pendingImportFile !== null}
                 title={t("calendarImport")}
-                message={t("calendarImportConfirm", { year })}
+                message={t("calendarImportConfirm", { year, workshop: workshop?.workshopName ?? "" })}
                 onApprove={handleImport}
                 onDenied={() => setPendingImportFile(null)}
             />
-        </SettingCard>
+        </SettingRow>
     );
 }
 
-// `desc` explains the whole section; it rides the title as a tooltip instead of a permanent paragraph
-// (DESIGN_SYSTEM.md §4.10). The dotted underline is the affordance telling the user to hover.
-function SettingCard({
-    icon,
-    title,
-    desc,
-    className = "",
-    children,
-}: {
-    icon: React.ReactNode;
-    title: string;
-    desc?: string;
-    className?: string;
-    children: React.ReactNode;
-}) {
+// Section title on the left, its fields on the right; `desc` rides the title as a tooltip (DESIGN_SYSTEM.md §4.10).
+function SettingRow({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
     return (
-        <section className={`rounded-xl border border-[#e0e3e5] bg-white shadow-sm ${className}`}>
-            <header className="flex items-center gap-2 border-b border-[#f1f5f9] px-4 py-2.5">
-                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#fff4f2] text-[#e3000f]">{icon}</span>
-                <h2
-                    className={`text-sm font-semibold text-[#191c1e] ${desc ? "cursor-help decoration-dotted underline-offset-4 hover:underline" : ""}`}
-                    title={desc}
-                >
-                    {title}
-                </h2>
-            </header>
-            <div className="px-4 py-3">{children}</div>
+        <section className="grid gap-x-6 gap-y-2 px-4 py-3 lg:grid-cols-[9rem_minmax(0,1fr)]">
+            <h2
+                className={`text-sm font-semibold text-[#191c1e] lg:pt-6 ${desc ? "cursor-help decoration-dotted underline-offset-4 hover:underline" : ""}`}
+                title={desc}
+            >
+                {title}
+            </h2>
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">{children}</div>
         </section>
     );
 }

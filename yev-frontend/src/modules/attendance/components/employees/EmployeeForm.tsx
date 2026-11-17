@@ -45,7 +45,6 @@ export interface EmployeeFormValues {
     // Line × Ca × TT/GT of one of the department's groups; picking it also picks that group.
     productionLineId: number | null;
     shiftTeamId: number | null;
-    staffKind: string | null;
     congDoan: string | null;
     taskName: string | null;
 }
@@ -78,7 +77,6 @@ const emptyValues: EmployeeFormValues = {
     customYearlyOtHourLimit: null,
     productionLineId: null,
     shiftTeamId: null,
-    staffKind: null,
     congDoan: null,
     taskName: null,
 };
@@ -170,7 +168,6 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                       customYearlyOtHourLimit: current.customYearlyOtHourLimit,
                       productionLineId: current.productionLineId ?? null,
                       shiftTeamId: current.shiftTeamId ?? null,
-                      staffKind: current.staffKind ?? null,
                       congDoan: current.congDoan ?? null,
                       taskName: current.taskName ?? null,
                   }
@@ -218,9 +215,8 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
         .map((p) => ({ value: p.productionLineId, label: p.lineCode, searchText: p.lineCode.toLowerCase() }));
     const shiftOptions = uniqueBy(linePairs.filter((p) => p.productionLineId === values.productionLineId), (p) => p.shiftTeamId)
         .map((p) => ({ value: p.shiftTeamId, label: shiftTeamNames[p.shiftTeamCode] ?? p.shiftTeamCode }));
-    const kindOptions = ["", "TT", "GT"].map((k) => ({ value: k, label: k }));
 
-    // The task decides TT/GT; without one the user picks it.
+    // The task decides TT/GT, so its label carries the kind.
     const workshopTasks = selectedGroup ? tasks.filter((x) => x.workshopId === selectedGroup.workshopId) : [];
     const taskOptions: SelectOption[] = workshopTasks.map((x) => ({ value: x.id, label: `${x.code} · ${x.staffKind}`, searchText: x.code.toLowerCase() }));
     const selectedTask = workshopTasks.find((x) => x.code.toLowerCase() === (values.taskName ?? "").toLowerCase());
@@ -563,7 +559,7 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                                     value={selectedTask?.id ?? ""}
                                     onChange={(v) => {
                                         const task = workshopTasks.find((x) => x.id === v);
-                                        setValues((current) => ({ ...current, taskName: task?.code ?? null, staffKind: task?.staffKind ?? current.staffKind }));
+                                        setValues((current) => ({ ...current, taskName: task?.code ?? null }));
                                     }}
                                     placeholder={values.taskName && !selectedTask ? values.taskName : ""}
                                     disabled={loading}
@@ -571,20 +567,6 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             </label>
                         )}
 
-                        {/* The task label already shows its TT/GT; only a person without a task needs it picked. */}
-                        {needsGroup && selectedGroup && !selectedTask && (
-                            <div className="w-24">
-                                <span className={fieldLabelClassName}>{tProduction("fieldStaffKind")}</span>
-                                <StyledSelect
-                                    options={kindOptions}
-                                    value={values.staffKind ?? ""}
-                                    onChange={(v) => setValues((current) => ({ ...current, staffKind: v || null }))}
-                                    disabled={loading}
-                                    triggerClassName={`${fieldClassName} pr-8 text-left`}
-                                    ariaLabel={tProduction("fieldStaffKind")}
-                                />
-                            </div>
-                        )}
 
                         {/* Saved apart from the main PUT: POST carries them on create, edit goes through PUT /{id}/ot-limit. */}
                         {(mode === "create" || canEditOtLimit) && (
