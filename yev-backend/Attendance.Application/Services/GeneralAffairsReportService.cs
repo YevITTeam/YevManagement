@@ -247,9 +247,10 @@ namespace Attendance.Application.Services
             return true;
         }
 
-        // OtFormId is 0 and Note null in snapshots written before mails became incremental.
+        // OtFormId is 0 and Note null in snapshots written before mails became incremental; older snapshots have no times.
         private record ReportRow(int OtFormId, string Code, string? GroupName, string LastName, string FirstName, DateOnly Date,
-            decimal Hours, string DepartmentCode, bool HasMeal, bool EatLater, string? Note = null);
+            decimal Hours, string DepartmentCode, bool HasMeal, bool EatLater, string? Note = null,
+            TimeOnly StartTime = default, TimeOnly EndTime = default);
 
         private record SentCopy(DateOnly OtDate, DateTime SentAt, List<ReportRow> Rows);
 
@@ -280,7 +281,7 @@ namespace Attendance.Application.Services
                 // "Eat later" only applies to someone who gets a meal ticket.
                 return new ReportRow(row.OtFormId, row.Code, row.GroupName, row.LastName, row.FirstName, row.Date,
                     MealTicketCalculator.CalculateOtHours(row.StartTime, row.EndTime, row.DidEat, settings),
-                    row.DepartmentCode, hasMeal, hasMeal && !row.DidEat);
+                    row.DepartmentCode, hasMeal, hasMeal && !row.DidEat, StartTime: row.StartTime, EndTime: row.EndTime);
             }).ToList();
         }
 
@@ -383,7 +384,7 @@ namespace Attendance.Application.Services
         {
             using var workbook = new XLWorkbook();
             var sheet = workbook.Worksheets.Add("Du lieu tang ca");
-            string[] headers = ["MNV", "BOPHAN", "HO", "TEN", "Ngay_TC", "Gio_tang_ca", "BP", "Co_an", "An_sau", .. showNote ? new[] { "Ghi_chu" } : []];
+            string[] headers = ["MNV", "BOPHAN", "HO", "TEN", "Ngay_TC", "Gio_BD", "Gio_KT", "Gio_tang_ca", "BP", "Co_an", "An_sau", .. showNote ? new[] { "Ghi_chu" } : []];
             for (var col = 0; col < headers.Length; col++)
                 sheet.Cell(1, col + 1).Value = headers[col];
             sheet.Row(1).Style.Font.Bold = true;
@@ -396,6 +397,8 @@ namespace Attendance.Application.Services
                 Hours = x.Sum(y => y.Hours),
                 HasMeal = x.Any(y => y.HasMeal),
                 EatLater = x.Any(y => y.EatLater),
+                StartTime = x.Min(y => y.StartTime),
+                EndTime = MealTicketCalculator.LatestEnd(x.Select(y => (y.StartTime, y.EndTime))),
             }).ToList();
 
             var rowIndex = 2;
@@ -407,14 +410,18 @@ namespace Attendance.Application.Services
                 sheet.Cell(rowIndex, 4).Value = row.FirstName;
                 sheet.Cell(rowIndex, 5).Value = row.Date.ToDateTime(TimeOnly.MinValue);
                 sheet.Cell(rowIndex, 5).Style.DateFormat.Format = "dd-MMM-yy";
-                sheet.Cell(rowIndex, 6).Value = row.Hours;
-                sheet.Cell(rowIndex, 7).Value = row.DepartmentCode;
-                sheet.Cell(rowIndex, 8).Value = row.HasMeal ? "x" : "";
-                sheet.Cell(rowIndex, 9).Value = row.EatLater ? "x" : "";
-                if (showNote) sheet.Cell(rowIndex, 10).Value = row.Note;
+                sheet.Cell(rowIndex, 6).Value = row.StartTime.ToTimeSpan();
+                sheet.Cell(rowIndex, 7).Value = row.EndTime.ToTimeSpan();
+                sheet.Range(rowIndex, 6, rowIndex, 7).Style.DateFormat.Format = "hh:mm";
+                sheet.Cell(rowIndex, 8).Value = row.Hours;
+                sheet.Cell(rowIndex, 9).Value = row.DepartmentCode;
+                sheet.Cell(rowIndex, 10).Value = row.HasMeal ? "x" : "";
+                sheet.Cell(rowIndex, 11).Value = row.EatLater ? "x" : "";
+                if (showNote) sheet.Cell(rowIndex, 12).Value = row.Note;
                 rowIndex++;
             }
-            sheet.Range(1, 8, rowIndex - 1, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            sheet.Range(1, 6, rowIndex - 1, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            sheet.Range(1, 10, rowIndex - 1, 11).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             sheet.Columns().AdjustToContents();
 
             using var stream = new MemoryStream();
