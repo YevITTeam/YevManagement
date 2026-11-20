@@ -202,7 +202,13 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                     <tr className="border-b border-[#f1f5f9] align-top">
                                         <td className="px-3 py-2 text-sm text-[#191c1e] lg:whitespace-nowrap">{formatDateTime(row.connectedAt)}</td>
                                         <td className="hidden lg:table-cell whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">
-                                            {row.disconnectedAt ? formatDateTime(row.disconnectedAt) : "Đang cắm"}
+                                            {row.disconnectedAt ? (
+                                                formatDateTime(row.disconnectedAt)
+                                            ) : row.agentOnline ? (
+                                                "Đang cắm"
+                                            ) : (
+                                                <span title="Agent trên máy không còn báo về (máy tắt, agent bị dừng hoặc gỡ) nên không biết lúc rút">Không rõ</span>
+                                            )}
                                         </td>
                                         {showMachine && (
                                             <td className="px-3 py-2 text-sm text-[#191c1e]">

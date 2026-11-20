@@ -15,6 +15,10 @@ namespace Asset.Application.Services
         private const int MaxEventsPerBatch = 1000;
         private const int MaxPathLength = 1000;
 
+        // Heartbeat rows are written every 5 minutes; 15 minutes of silence means the PC is off or the agent is gone,
+        // so its open sessions can no longer be trusted as "plugged in".
+        private static readonly TimeSpan AgentLiveWindow = TimeSpan.FromMinutes(15);
+
         public UsbLogService(IAssetUnitOfWork unitOfWork) : base(unitOfWork) { }
 
         public async Task<UsbIngestResultDto> IngestAsync(UsbIngestRequest request)
@@ -212,6 +216,9 @@ namespace Asset.Application.Services
                     BlockedCount = g.Count(s => s.PolicyResult == (int)UsbPolicyResult.Blocked && !s.UsbDevice.IsApproved)
                 });
 
+            var live = await GetLiveMachinesAsync();
+            foreach (var m in groups) m.IsConnectedNow &= live.Contains(m.MachineName);
+
             var machines = SortMachines(groups.Where(m => !filter.ConnectedNowOnly || m.IsConnectedNow), filter.SortBy, filter.SortDesc);
 
             var page = machines.Skip((filter.PageIndex - 1) * filter.PageSize).Take(filter.PageSize).ToList();
@@ -267,6 +274,8 @@ namespace Asset.Application.Services
             if (filter.UsbDeviceId.HasValue)
                 query = query.Where(s => s.UsbDeviceId == filter.UsbDeviceId.Value);
 
+            var live = (await GetLiveMachinesAsync()).ToList();
+
             return await _unitOfWork.UsbSessions.ToPagedResponseAsync(
                 UsbSort.Apply(query, filter.SortBy, filter.SortDesc, SessionColumns, q => q.OrderByDescending(s => s.ConnectedAt), s => s.Id),
                 filter.PageIndex,
@@ -292,6 +301,7 @@ namespace Asset.Application.Services
                     UsbDeviceId = s.UsbDeviceId,
                     DeviceClass = s.UsbDevice.DeviceClass,
                     IsApproved = s.UsbDevice.IsApproved,
+                    AgentOnline = live.Contains(s.MachineName),
                     FileEventCount = s.FileEvents.Count
                 });
         }
@@ -314,6 +324,7 @@ namespace Asset.Application.Services
                     LastPolicyResult = g.OrderByDescending(s => s.ConnectedAt).Select(s => s.PolicyResult).FirstOrDefault()
                 });
 
+            var agentLive = (await GetLiveMachinesAsync()).Contains(name);
             var ids = rows.Select(r => r.UsbDeviceId).ToList();
             var devices = (await _unitOfWork.UsbDevices.FindAsync(d => ids.Contains(d.Id))).ToDictionary(d => d.Id);
             var letters = await _unitOfWork.UsbSessions.GroupCountAsync(
@@ -329,6 +340,7 @@ namespace Asset.Application.Services
                 row.CapacityBytes = device.CapacityBytes;
                 row.DeviceClass = device.DeviceClass;
                 row.IsApproved = device.IsApproved;
+                row.IsConnectedNow &= agentLive;
                 row.DriveLetters = letters.Where(l => l.UsbDeviceId == row.UsbDeviceId).Select(l => l.DriveLetter!).Order().ToList();
             }
 
@@ -395,6 +407,13 @@ namespace Asset.Application.Services
 
             var ordered = sortDesc ? machines.OrderByDescending(key) : machines.OrderBy(key);
             return ordered.ThenBy(m => m.MachineName).ToList();
+        }
+
+        private async Task<HashSet<string>> GetLiveMachinesAsync()
+        {
+            var cutoff = DateTime.UtcNow.AddHours(7) - AgentLiveWindow;
+            var names = await _unitOfWork.UsbAgents.SelectAsync(a => a.LastSeenAt >= cutoff, a => a.MachineName);
+            return names.ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
         public static string NormalizeMachineName(string machineName)

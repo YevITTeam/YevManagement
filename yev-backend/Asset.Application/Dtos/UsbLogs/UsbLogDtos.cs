@@ -86,6 +86,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public int UsbDeviceId { get; set; }
         public string DeviceClass { get; set; } = null!;
         public bool IsApproved { get; set; }
+        // False = the PC's agent has gone silent, so an open session's real unplug time is unknown.
+        public bool AgentOnline { get; set; }
         public int FileEventCount { get; set; }
     }
 

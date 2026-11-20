@@ -35,6 +35,8 @@ export interface UsbSessionDto {
     usbDeviceId: number;
     deviceClass: string;
     isApproved: boolean;
+    // False = the PC's agent went silent, so an open session's unplug time is unknown.
+    agentOnline: boolean;
     fileEventCount: number;
 }
 
