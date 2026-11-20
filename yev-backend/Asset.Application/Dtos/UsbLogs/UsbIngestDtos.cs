@@ -7,6 +7,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public const string Connected = "Connected";
         public const string Disconnected = "Disconnected";
         public const string File = "File";
+        // Re-evaluation of an open session after the policy changed (approved, revoked, mode switched).
+        public const string Policy = "Policy";
     }
 
     // Batch sent by the PC agent. Only the fields of the event's Type are read.
@@ -35,6 +37,10 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? WindowsUser { get; set; }
         public string? DriveLetter { get; set; }
         public string? VolumeLabel { get; set; }
+        public string? DeviceClass { get; set; }
+
+        // Connected + Policy
+        public int? PolicyResult { get; set; }
 
         // File
         public Guid EventId { get; set; }

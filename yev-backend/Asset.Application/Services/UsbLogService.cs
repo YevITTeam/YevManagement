@@ -21,9 +21,7 @@ namespace Asset.Application.Services
             if (request.Events.Count > MaxEventsPerBatch)
                 throw new DomainException($"Mỗi lần gửi tối đa {MaxEventsPerBatch} sự kiện.");
 
-            var machineName = request.MachineName.Trim();
-            if (machineName.EndsWith(DomainSuffix, StringComparison.OrdinalIgnoreCase))
-                machineName = machineName[..^DomainSuffix.Length];
+            var machineName = NormalizeMachineName(request.MachineName);
 
             // The device code comes from the Computer Name naming rule, same as the Tanium import; names outside
             // the managed families fall back to DeviceName (old rows may still carry the ".yev.vn" suffix).
@@ -64,6 +62,13 @@ namespace Asset.Application.Services
                     case UsbEventTypes.File:
                         ok = await ApplyFileAsync(ev, occurredAt, sessions, knownEventIds);
                         break;
+                    case UsbEventTypes.Policy:
+                        if (sessions.TryGetValue(ev.SessionId, out var reevaluated) && IsPolicyResult(ev.PolicyResult))
+                        {
+                            reevaluated.PolicyResult = ev.PolicyResult;
+                            ok = true;
+                        }
+                        break;
                 }
 
                 if (ok) processed++; else skipped++;
@@ -89,6 +94,8 @@ namespace Asset.Application.Services
             var vendorId = Trunc(ev.VendorId.Trim().ToUpperInvariant(), 8)!;
             var productId = Trunc(ev.ProductId.Trim().ToUpperInvariant(), 8)!;
             var serial = Trunc(ev.SerialNumber?.Trim(), 100) ?? "";
+            var deviceClass = Trunc(ev.DeviceClass?.Trim(), 50) ?? UsbDeviceClasses.DiskDrive;
+            var isDisk = deviceClass == UsbDeviceClasses.DiskDrive;
 
             var key = $"{vendorId}|{productId}|{serial}";
             if (!usbDevices.TryGetValue(key, out var usbDevice))
@@ -103,6 +110,7 @@ namespace Asset.Application.Services
                         VendorId = vendorId,
                         ProductId = productId,
                         SerialNumber = serial,
+                        DeviceClass = deviceClass,
                         FirstSeenAt = occurredAt
                     };
                     await _unitOfWork.UsbDevices.AddAsync(usbDevice);
@@ -114,9 +122,9 @@ namespace Asset.Application.Services
             usbDevice.CapacityBytes = ev.CapacityBytes ?? usbDevice.CapacityBytes;
             if (occurredAt > usbDevice.LastSeenAt) usbDevice.LastSeenAt = occurredAt;
 
-            // The PC is the source of truth for actual use: a PC without permission gets it switched on.
-            bool? wasPermitted = device?.IsUseUsb;
-            if (device != null && !device.IsUseUsb)
+            // The PC is the source of truth for actual use: a PC without permission gets it switched on. Phones do not count.
+            bool? wasPermitted = isDisk ? device?.IsUseUsb : null;
+            if (isDisk && device != null && !device.IsUseUsb)
             {
                 device.IsUseUsb = true;
                 _unitOfWork.Devices.Update(device);
@@ -132,7 +140,8 @@ namespace Asset.Application.Services
                 DriveLetter = Trunc(ev.DriveLetter?.Trim(), 10),
                 VolumeLabel = Trunc(ev.VolumeLabel?.Trim(), 100),
                 ConnectedAt = occurredAt,
-                WasPermitted = wasPermitted
+                WasPermitted = wasPermitted,
+                PolicyResult = IsPolicyResult(ev.PolicyResult) ? ev.PolicyResult : null
             };
             await _unitOfWork.UsbSessions.AddAsync(session);
             sessions[session.Id] = session;
@@ -197,7 +206,8 @@ namespace Asset.Application.Services
                     FileEventCount = g.Sum(s => s.FileEvents.Count),
                     LastConnectedAt = g.Max(s => s.ConnectedAt),
                     IsConnectedNow = g.Any(s => s.DisconnectedAt == null),
-                    UnpermittedCount = g.Count(s => s.WasPermitted == false)
+                    UnpermittedCount = g.Count(s => s.WasPermitted == false),
+                    BlockedCount = g.Count(s => s.PolicyResult == (int)UsbPolicyResult.Blocked)
                 });
 
             var machines = groups.Where(m => !filter.ConnectedNowOnly || m.IsConnectedNow)
@@ -252,6 +262,9 @@ namespace Asset.Application.Services
             if (filter.UnpermittedOnly)
                 query = query.Where(s => s.WasPermitted == false);
 
+            if (filter.PolicyResult.HasValue)
+                query = query.Where(s => s.PolicyResult == filter.PolicyResult.Value);
+
             return await _unitOfWork.UsbSessions.ToPagedResponseAsync(
                 query.OrderByDescending(s => s.ConnectedAt),
                 filter.PageIndex,
@@ -273,6 +286,10 @@ namespace Asset.Application.Services
                     ConnectedAt = s.ConnectedAt,
                     DisconnectedAt = s.DisconnectedAt,
                     WasPermitted = s.WasPermitted,
+                    PolicyResult = s.PolicyResult,
+                    UsbDeviceId = s.UsbDeviceId,
+                    DeviceClass = s.UsbDevice.DeviceClass,
+                    IsApproved = s.UsbDevice.IsApproved,
                     FileEventCount = s.FileEvents.Count
                 });
         }
@@ -304,6 +321,14 @@ namespace Asset.Application.Services
                     OccurredAt = e.OccurredAt
                 });
         }
+
+        public static string NormalizeMachineName(string machineName)
+        {
+            var name = machineName.Trim();
+            return name.EndsWith(DomainSuffix, StringComparison.OrdinalIgnoreCase) ? name[..^DomainSuffix.Length] : name;
+        }
+
+        private static bool IsPolicyResult(int? value) => value.HasValue && Enum.IsDefined(typeof(UsbPolicyResult), value.Value);
 
         private static string? Trunc(string? value, int max)
             => string.IsNullOrEmpty(value) ? null : (value.Length <= max ? value : value[..max]);

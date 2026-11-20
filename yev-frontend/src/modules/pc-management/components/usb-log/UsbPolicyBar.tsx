@@ -1,0 +1,96 @@
+"use client";
+
+import { useState } from "react";
+import { toast } from "react-toastify";
+
+import { StyledSelect } from "@/components/ui/StyledSelect";
+import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
+import type { UsbPolicySettingDto } from "@/modules/pc-management/types/usb-log.dto";
+
+const fieldClassName =
+    "h-9 rounded-md border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:bg-[#f8fafc]";
+
+const MODE_OPTIONS = [
+    { value: 0, label: "Tắt", dotClassName: "bg-[#8a8f94]" },
+    { value: 1, label: "Thử", dotClassName: "bg-[#9a5b00]" },
+    { value: 2, label: "Chặn", dotClassName: "bg-[#e3000f]" },
+];
+
+const MODE_TITLE =
+    "Tắt: chỉ ghi log. Thử: ghi lại USB nào sẽ bị chặn, không khoá. Chặn: USB chưa cấp phép bị chuyển sang chỉ đọc; agent áp dụng trong khoảng 1 phút.";
+
+// Block mode of the whole fleet; Enforce applies only to the listed machines (empty = every machine), the rest run as Audit.
+export default function UsbPolicyBar({ canEdit }: { canEdit: boolean }) {
+    const [saved, setSaved] = useState<UsbPolicySettingDto | null>(null);
+    const [mode, setMode] = useState(0);
+    const [machines, setMachines] = useState("");
+    const [saving, setSaving] = useState(false);
+
+    useFetchEffect(
+        () => UsbLogApi.getPolicy(),
+        [],
+        (result) => {
+            setSaved(result);
+            setMode(result.mode);
+            setMachines(result.enforceMachines ?? "");
+        },
+        "Không thể tải chế độ chặn USB.",
+        (message) => toast.error(message)
+    );
+
+    const dirty = saved !== null && (mode !== saved.mode || machines.trim() !== (saved.enforceMachines ?? ""));
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const result = await UsbLogApi.updatePolicy({ mode, enforceMachines: machines.trim() || null });
+            setSaved(result);
+            setMachines(result.enforceMachines ?? "");
+            toast.success("Đã lưu chế độ chặn USB.");
+        } catch (error) {
+            console.error(error);
+            toast.error("Lưu chế độ chặn USB thất bại.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <section className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
+            <span className="text-sm font-semibold text-[#191c1e]" title={MODE_TITLE}>
+                Chặn ghi USB
+            </span>
+            <div className="w-28">
+                <StyledSelect
+                    value={mode}
+                    onChange={setMode}
+                    options={MODE_OPTIONS}
+                    disabled={!canEdit || saved === null}
+                    ariaLabel="Chế độ chặn ghi USB"
+                    triggerClassName={`${fieldClassName} w-full pr-8`}
+                />
+            </div>
+            {mode === 2 && (
+                <input
+                    value={machines}
+                    onChange={(event) => setMachines(event.target.value)}
+                    disabled={!canEdit}
+                    placeholder="Máy chạy thử, để trống = mọi máy"
+                    title="Tên máy hoặc mã máy, cách nhau dấu phẩy. Máy không có trong danh sách chạy ở chế độ Thử."
+                    aria-label="Máy áp dụng chặn"
+                    className={`${fieldClassName} w-full sm:w-96`}
+                />
+            )}
+            {canEdit && dirty && (
+                <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-[#e3000f] px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    Lưu
+                </button>
+            )}
+        </section>
+    );
+}

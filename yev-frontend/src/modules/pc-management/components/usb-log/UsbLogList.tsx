@@ -8,8 +8,9 @@ import { toast } from "react-toastify";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbSessionDto } from "@/modules/pc-management/types/usb-log.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Badge } from "@/components/ui/Badge";
 import UsbSessionFiles from "./UsbSessionFiles";
-import { formatBytes, formatDateTime } from "./usb-log-format";
+import { DEVICE_CLASS_LABELS, POLICY_META, formatBytes, formatDateTime } from "./usb-log-format";
 
 const PAGE_SIZE = 20;
 
@@ -193,8 +194,11 @@ export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-semibold">{row.deviceCode ?? row.machineName}</span>
                                                     {row.wasPermitted === false && (
-                                                        <span className="shrink-0 rounded-full border border-[#e9bcb6] bg-[#fff4f2] px-2 py-0.5 text-[10px] font-semibold text-[#930006]">
-                                                            Chưa cấp phép
+                                                        <span
+                                                            title="Máy chưa bật Dùng USB trong Quản lý thiết bị khi cắm"
+                                                            className="shrink-0 rounded-full border border-[#f3d9b1] bg-[#fff8ee] px-2 py-0.5 text-[10px] font-semibold text-[#8a5a00]"
+                                                        >
+                                                            Máy chưa bật USB
                                                         </span>
                                                     )}
                                                 </div>
@@ -203,9 +207,23 @@ export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
                                         )}
                                         <td className="hidden lg:table-cell px-3 py-2 text-sm text-[#5e3f3a]">{row.windowsUser || "-"}</td>
                                         <td className="px-3 py-2 text-sm text-[#191c1e]">
-                                            <div>{row.friendlyName || `${row.vendorId}:${row.productId}`}</div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span>{row.friendlyName || `${row.vendorId}:${row.productId}`}</span>
+                                                {row.policyResult !== null && POLICY_META[row.policyResult] && (
+                                                    <span title={POLICY_META[row.policyResult].title}>
+                                                        <Badge variant={POLICY_META[row.policyResult].variant}>{POLICY_META[row.policyResult].label}</Badge>
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="text-xs text-[#5e3f3a]">
-                                                {[row.driveLetter, row.serialNumber, formatBytes(row.capacityBytes)].filter((v) => v && v !== "-").join(" · ")}
+                                                {[
+                                                    row.deviceClass === "DiskDrive" ? null : DEVICE_CLASS_LABELS[row.deviceClass] ?? row.deviceClass,
+                                                    row.driveLetter,
+                                                    row.serialNumber,
+                                                    formatBytes(row.capacityBytes),
+                                                ]
+                                                    .filter((v) => v && v !== "-")
+                                                    .join(" · ")}
                                             </div>
                                         </td>
                                         <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.fileEventCount}</td>

@@ -15,5 +15,11 @@ public partial class AssetSetting
     // get snapshotted. Null = no branch filter (escape hatch only).
     public int? ServerCheckBranchId { get; set; }
 
+    // UsbBlockMode. Enforce only locks the machines in UsbEnforceMachines (empty = all); the rest run as Audit.
+    public int UsbBlockMode { get; set; }
+
+    // Machine names or device codes, one per line or comma separated.
+    public string? UsbEnforceMachines { get; set; }
+
     public virtual Branch? ServerCheckBranch { get; set; }
 }

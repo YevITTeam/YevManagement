@@ -13,6 +13,8 @@ $sys = "$env:SystemRoot\System32"
 
 $dataDir = "$env:ProgramData\YevUsbAgent"
 New-Item -ItemType Directory -Force $dataDir | Out-Null
+# policy.json and locked-disks.txt drive write-blocking offline: ordinary users must not be able to plant or edit them.
+& "$env:SystemRoot\System32\icacls.exe" $dataDir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
 Start-Transcript -Path "$dataDir\install.log" -Append | Out-Null
 try {
     $preset = $null

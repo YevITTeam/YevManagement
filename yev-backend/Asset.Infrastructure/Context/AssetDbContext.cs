@@ -45,6 +45,7 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<UsbDevice> UsbDevices { get; set; }
     public virtual DbSet<UsbSession> UsbSessions { get; set; }
     public virtual DbSet<UsbFileEvent> UsbFileEvents { get; set; }
+    public virtual DbSet<UsbAgent> UsbAgents { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,6 +63,7 @@ public partial class AssetDbContext : DbContext
         modelBuilder.Entity<AssetSetting>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK_AssetSettings");
+            entity.Property(e => e.UsbEnforceMachines).HasMaxLength(4000);
 
             entity.HasOne(d => d.ServerCheckBranch).WithMany()
                 .HasForeignKey(d => d.ServerCheckBranchId)
@@ -375,6 +377,18 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.ProductId).HasMaxLength(8);
             entity.Property(e => e.SerialNumber).HasMaxLength(100);
             entity.Property(e => e.FriendlyName).HasMaxLength(255);
+            entity.Property(e => e.DeviceClass).HasMaxLength(50).HasDefaultValue(UsbDeviceClasses.DiskDrive);
+            entity.Property(e => e.ApprovedBy).HasMaxLength(150);
+            entity.Property(e => e.ApprovalNote).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<UsbAgent>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_UsbAgents");
+            entity.HasIndex(e => e.MachineName, "IX_UsbAgents_MachineName").IsUnique();
+            entity.Property(e => e.MachineName).HasMaxLength(100);
+            entity.Property(e => e.AgentVersion).HasMaxLength(20);
+            entity.Property(e => e.WindowsUser).HasMaxLength(150);
         });
 
         modelBuilder.Entity<UsbSession>(entity =>

@@ -2,9 +2,12 @@ using System.Text.Json;
 
 namespace YevUsbAgent;
 
-// Append-only JSON-lines file: survives restarts and server downtime. ponytail: no size cap, add one if a PC stays offline for weeks.
+// Append-only JSON-lines file: survives restarts and server downtime.
 public sealed class EventQueue
 {
+    // ponytail: past this size file events are dropped (connect/disconnect still kept) until the server is reachable again.
+    private const long MaxFileEventBytes = 50L * 1024 * 1024;
+
     private readonly string _path;
     private readonly object _lock = new();
 
@@ -17,7 +20,11 @@ public sealed class EventQueue
     public void Enqueue(AgentEvent ev)
     {
         var line = JsonSerializer.Serialize(ev, AgentJson.Default.AgentEvent);
-        lock (_lock) File.AppendAllText(_path, line + "\n");
+        lock (_lock)
+        {
+            if (ev.Type == EventTypes.File && File.Exists(_path) && new FileInfo(_path).Length > MaxFileEventBytes) return;
+            File.AppendAllText(_path, line + "\n");
+        }
     }
 
     // LineCount includes unreadable lines so Remove drops exactly what Peek consumed.

@@ -38,7 +38,8 @@ namespace Asset.Infrastructure.Repositories
             IAppReleaseRepository appReleases,
             IUsbDeviceRepository usbDevices,
             IUsbSessionRepository usbSessions,
-            IUsbFileEventRepository usbFileEvents) : base(dbContext)
+            IUsbFileEventRepository usbFileEvents,
+            IUsbAgentRepository usbAgents) : base(dbContext)
         {
             Devices = devices;
             Branches = branches;
@@ -70,6 +71,7 @@ namespace Asset.Infrastructure.Repositories
             UsbDevices = usbDevices;
             UsbSessions = usbSessions;
             UsbFileEvents = usbFileEvents;
+            UsbAgents = usbAgents;
         }
 
         public IDeviceRepository Devices { get; }
@@ -102,5 +104,6 @@ namespace Asset.Infrastructure.Repositories
         public IUsbDeviceRepository UsbDevices { get; }
         public IUsbSessionRepository UsbSessions { get; }
         public IUsbFileEventRepository UsbFileEvents { get; }
+        public IUsbAgentRepository UsbAgents { get; }
     }
 }

@@ -78,6 +78,13 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<int?>("ServerCheckBranchId")
                         .HasColumnType("int");
 
+                    b.Property<int>("UsbBlockMode")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UsbEnforceMachines")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
                     b.HasKey("Id")
                         .HasName("PK_AssetSettings");
 
@@ -1256,6 +1263,42 @@ namespace Asset.Infrastructure.Migrations
                     b.ToTable("TransferHistories");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.UsbAgent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AgentVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MachineName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("WindowsUser")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_UsbAgents");
+
+                    b.HasIndex(new[] { "MachineName" }, "IX_UsbAgents_MachineName")
+                        .IsUnique();
+
+                    b.ToTable("UsbAgents");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.UsbDevice", b =>
                 {
                     b.Property<int>("Id")
@@ -1264,8 +1307,26 @@ namespace Asset.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("ApprovalNote")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
                     b.Property<long?>("CapacityBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("DeviceClass")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("DiskDrive");
 
                     b.Property<DateTime>("FirstSeenAt")
                         .HasColumnType("datetime2");
@@ -1273,6 +1334,9 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<string>("FriendlyName")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<bool>("IsApproved")
+                        .HasColumnType("bit");
 
                     b.Property<DateTime>("LastSeenAt")
                         .HasColumnType("datetime2");
@@ -1367,6 +1431,9 @@ namespace Asset.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("PolicyResult")
+                        .HasColumnType("int");
 
                     b.Property<int>("UsbDeviceId")
                         .HasColumnType("int");

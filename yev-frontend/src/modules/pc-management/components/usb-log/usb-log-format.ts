@@ -3,6 +3,20 @@ export function formatDateTime(value: string | null) {
     return new Date(value).toLocaleString("vi-VN");
 }
 
+// UsbPolicyResult → badge. Shown on sessions; null (mode Off, phones) shows nothing.
+export const POLICY_META: Record<number, { label: string; variant: "success" | "danger" | "warning"; title: string }> = {
+    1: { label: "Đã cấp phép", variant: "success", title: "USB đã được cấp phép, ghi bình thường" },
+    2: { label: "Bị chặn ghi", variant: "danger", title: "Agent đã chuyển USB sang chỉ đọc" },
+    3: { label: "Chưa cấp phép", variant: "warning", title: "Chế độ Thử: USB này sẽ bị chặn ghi nếu bật Chặn" },
+    4: { label: "Chặn thất bại", variant: "danger", title: "Agent không đặt được chế độ chỉ đọc, xem Event Viewer trên máy" },
+};
+
+export const DEVICE_CLASS_LABELS: Record<string, string> = {
+    DiskDrive: "Ổ lưu trữ",
+    WPD: "Điện thoại",
+    Image: "Máy ảnh / scan",
+};
+
 export function formatBytes(value: number | null) {
     if (value === null || value === undefined) return "-";
     if (value < 1024) return `${value} B`;

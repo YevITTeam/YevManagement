@@ -29,7 +29,8 @@ public partial class AssetDbContext
         // USB logs are append-only and high volume; the IsUseUsb flip they cause is audited on Device.
         typeof(UsbDevice),
         typeof(UsbSession),
-        typeof(UsbFileEvent)
+        typeof(UsbFileEvent),
+        typeof(UsbAgent)
     };
 
     // A grouped row keeps at most this many record names in NewValues — enough to know what was

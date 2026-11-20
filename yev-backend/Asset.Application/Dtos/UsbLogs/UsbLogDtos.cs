@@ -12,6 +12,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
         public bool UnpermittedOnly { get; set; }
+        public int? PolicyResult { get; set; }
     }
 
     public class UsbMachineFilterRequest
@@ -37,6 +38,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime LastConnectedAt { get; set; }
         public bool IsConnectedNow { get; set; }
         public int UnpermittedCount { get; set; }
+        public int BlockedCount { get; set; }
     }
 
     public class UsbSessionDto
@@ -56,6 +58,10 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime ConnectedAt { get; set; }
         public DateTime? DisconnectedAt { get; set; }
         public bool? WasPermitted { get; set; }
+        public int? PolicyResult { get; set; }
+        public int UsbDeviceId { get; set; }
+        public string DeviceClass { get; set; } = null!;
+        public bool IsApproved { get; set; }
         public int FileEventCount { get; set; }
     }
 

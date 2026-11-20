@@ -1,15 +1,51 @@
 import { api } from "@/lib/client";
-import type { UsbFileEventDto, UsbMachineDto, UsbSessionDto } from "@/modules/pc-management/types/usb-log.dto";
-import { ApiResponseWithPageNation } from "@/types/api";
+import type {
+    UsbAgentDto,
+    UsbDeviceDto,
+    UsbFileEventDto,
+    UsbMachineDto,
+    UsbPolicySettingDto,
+    UsbSessionDto,
+} from "@/modules/pc-management/types/usb-log.dto";
+import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Read-only from FE; the agent writes via POST ingest. Needs Asset.UsbLog.View.
+// Reads need Asset.UsbLog.View; approve/revoke and the block mode need Asset.UsbLog.Approve. The agent uses ingest/agent-sync.
 const ENDPOINTS = {
     USB_LOG: {
         getMachines: "/UsbLog/machines",
         getSessions: "/UsbLog/sessions",
         getSessionFiles: (id: string) => `/UsbLog/sessions/${id}/files`,
+        getDevices: "/UsbLog/devices",
+        approve: (id: number) => `/UsbLog/devices/${id}/approve`,
+        revoke: (id: number) => `/UsbLog/devices/${id}/revoke`,
+        policy: "/UsbLog/policy",
+        getAgents: "/UsbLog/agents",
     },
 } as const;
+
+export interface GetUsbDevicesParams {
+    pageIndex?: number;
+    pageSize?: number;
+    keyword?: string;
+    isApproved?: boolean;
+    deviceClass?: string;
+}
+
+export interface GetUsbAgentsParams {
+    pageIndex?: number;
+    pageSize?: number;
+    keyword?: string;
+    staleOnly?: boolean;
+}
+
+function withQuery(base: string, params: Record<string, string | number | boolean | undefined>) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== "" && value !== false) query.set(key, String(value));
+    }
+    const queryString = query.toString();
+    return queryString ? `${base}?${queryString}` : base;
+}
 
 export interface GetUsbSessionsParams {
     pageIndex?: number;
@@ -67,6 +103,30 @@ export const UsbLogApi = {
         const queryString = query.toString();
         const base = ENDPOINTS.USB_LOG.getSessionFiles(id);
         const response = await api.get<ApiResponseWithPageNation<UsbFileEventDto>>(queryString ? `${base}?${queryString}` : base);
+        return response.data;
+    },
+    getDevices: async (params: GetUsbDevicesParams) => {
+        const response = await api.get<ApiResponseWithPageNation<UsbDeviceDto>>(withQuery(ENDPOINTS.USB_LOG.getDevices, { ...params }));
+        return response.data;
+    },
+    approve: async (id: number, note: string) => {
+        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.approve(id), { note: note || null });
+        return response.data;
+    },
+    revoke: async (id: number) => {
+        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.revoke(id));
+        return response.data;
+    },
+    getPolicy: async () => {
+        const response = await api.get<ApiResponse<UsbPolicySettingDto>>(ENDPOINTS.USB_LOG.policy);
+        return response.data;
+    },
+    updatePolicy: async (body: UsbPolicySettingDto) => {
+        const response = await api.put<ApiResponse<UsbPolicySettingDto>>(ENDPOINTS.USB_LOG.policy, body);
+        return response.data;
+    },
+    getAgents: async (params: GetUsbAgentsParams) => {
+        const response = await api.get<ApiResponseWithPageNation<UsbAgentDto>>(withQuery(ENDPOINTS.USB_LOG.getAgents, { ...params }));
         return response.data;
     },
 };

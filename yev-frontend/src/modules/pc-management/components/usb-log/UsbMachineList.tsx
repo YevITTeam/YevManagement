@@ -71,19 +71,6 @@ export default function UsbMachineList() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-                <h1 className="text-lg font-semibold text-[#191c1e]">Quản lý USB</h1>
-                <button
-                    onClick={() => refetch()}
-                    disabled={isLoading}
-                    title="Làm mới"
-                    aria-label="Làm mới"
-                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                </button>
-            </div>
-
             <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
                 <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-[calc(50%-0.25rem)] sm:[&>label]:w-40">
                     <label className="block max-sm:w-full! sm:w-64!">
@@ -143,6 +130,15 @@ export default function UsbMachineList() {
                         >
                             <FilterX className="h-4 w-4" />
                         </button>
+                        <button
+                            onClick={() => refetch()}
+                            disabled={isLoading}
+                            title="Làm mới"
+                            aria-label="Làm mới"
+                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                        </button>
                     </div>
                 </div>
             </section>
@@ -185,9 +181,17 @@ export default function UsbMachineList() {
                                                     Đang cắm
                                                 </span>
                                             )}
-                                            {row.unpermittedCount > 0 && (
+                                            {row.blockedCount > 0 && (
                                                 <span className="shrink-0 rounded-full border border-[#e9bcb6] bg-[#fff4f2] px-2 py-0.5 text-[10px] font-semibold text-[#930006]">
-                                                    Chưa cấp phép
+                                                    Bị chặn ghi
+                                                </span>
+                                            )}
+                                            {row.unpermittedCount > 0 && (
+                                                <span
+                                                    title="Máy chưa bật Dùng USB trong Quản lý thiết bị khi cắm"
+                                                    className="shrink-0 rounded-full border border-[#f3d9b1] bg-[#fff8ee] px-2 py-0.5 text-[10px] font-semibold text-[#8a5a00]"
+                                                >
+                                                    Máy chưa bật USB
                                                 </span>
                                             )}
                                         </div>

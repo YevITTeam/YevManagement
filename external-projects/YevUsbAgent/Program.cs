@@ -14,13 +14,12 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 
 builder.Services.AddWindowsService(options => options.ServiceName = "YevUsbAgent");
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
-builder.Services.AddSingleton(sp =>
-{
-    var options = builder.Configuration.GetSection("Agent").Get<AgentOptions>() ?? new AgentOptions();
-    return new EventQueue(options.ResolveDataDir());
-});
+var dataDir = (builder.Configuration.GetSection("Agent").Get<AgentOptions>() ?? new AgentOptions()).ResolveDataDir();
+builder.Services.AddSingleton(new EventQueue(dataDir));
+builder.Services.AddSingleton(new PolicyStore(dataDir));
 builder.Services.AddHostedService<UsbMonitor>();
 builder.Services.AddHostedService<Uploader>();
+builder.Services.AddHostedService<PolicySync>();
 
 builder.Build().Run();
 return 0;

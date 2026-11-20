@@ -12,6 +12,8 @@ public sealed class AgentOptions
 
     public int BatchSize { get; set; } = 200;
 
+    public int SyncSeconds { get; set; } = 60;
+
     // Empty = %ProgramData%\YevUsbAgent
     public string DataDir { get; set; } = "";
 

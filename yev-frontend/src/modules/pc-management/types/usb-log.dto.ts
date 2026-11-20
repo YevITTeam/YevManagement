@@ -10,6 +10,7 @@ export interface UsbMachineDto {
     lastConnectedAt: string;
     isConnectedNow: boolean;
     unpermittedCount: number;
+    blockedCount: number;
 }
 
 export interface UsbSessionDto {
@@ -29,7 +30,46 @@ export interface UsbSessionDto {
     disconnectedAt: string | null;
     // false = not permitted at plug-in time (BE then enabled IsUseUsb); null = machine name matches no device.
     wasPermitted: boolean | null;
+    // UsbPolicyResult; null when the block mode was Off or the device is not a disk.
+    policyResult: number | null;
+    usbDeviceId: number;
+    deviceClass: string;
+    isApproved: boolean;
     fileEventCount: number;
+}
+
+export interface UsbDeviceDto {
+    id: number;
+    vendorId: string;
+    productId: string;
+    serialNumber: string;
+    friendlyName: string | null;
+    capacityBytes: number | null;
+    deviceClass: string;
+    isApproved: boolean;
+    approvedBy: string | null;
+    approvedAt: string | null;
+    approvalNote: string | null;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    sessionCount: number;
+    lastMachineName: string | null;
+}
+
+// mode: 0 Off, 1 Audit, 2 Enforce (only for enforceMachines when that list is not empty).
+export interface UsbPolicySettingDto {
+    mode: number;
+    enforceMachines: string | null;
+}
+
+export interface UsbAgentDto {
+    id: number;
+    machineName: string;
+    agentVersion: string | null;
+    windowsUser: string | null;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    isStale: boolean;
 }
 
 export interface UsbFileEventDto {

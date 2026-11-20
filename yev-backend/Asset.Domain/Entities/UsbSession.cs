@@ -26,6 +26,9 @@ public partial class UsbSession
     // the only record of the unpermitted use); null when MachineName matches no Device.
     public bool? WasPermitted { get; set; }
 
+    // UsbPolicyResult reported by the agent; null when the block mode was Off or the device is not a disk.
+    public int? PolicyResult { get; set; }
+
     public virtual Device? Device { get; set; }
 
     public virtual UsbDevice UsbDevice { get; set; } = null!;

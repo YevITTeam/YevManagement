@@ -35,5 +35,6 @@ namespace Asset.Application.Interfaces.Service
         IUsbDeviceRepository UsbDevices { get; }
         IUsbSessionRepository UsbSessions { get; }
         IUsbFileEventRepository UsbFileEvents { get; }
+        IUsbAgentRepository UsbAgents { get; }
     }
 }
