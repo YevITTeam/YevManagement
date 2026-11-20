@@ -80,11 +80,23 @@ export default function UsbMachineUsbList({ machineName }: { machineName: string
                             return (
                                 <Fragment key={row.usbDeviceId}>
                                     <tr
-                                        onClick={() => setExpandedId(expanded ? null : row.usbDeviceId)}
+                                        onClick={(event) => {
+                                            // A double-click would toggle twice and a drag-select fires click too; both read as "nothing happened".
+                                            const onButton = (event.target as HTMLElement).closest("button") !== null;
+                                            if (!onButton && (event.detail > 1 || window.getSelection()?.toString())) return;
+                                            setExpandedId(expanded ? null : row.usbDeviceId);
+                                        }}
                                         className="cursor-pointer border-b border-[#f1f5f9] align-top transition hover:bg-[#f8fafc]"
                                     >
-                                        <td className="px-3 py-2.5 text-[#5e3f3a]">
-                                            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                        <td className="px-3 py-2">
+                                            <button
+                                                type="button"
+                                                aria-expanded={expanded}
+                                                aria-label={expanded ? "Thu gọn" : "Xem các lần cắm"}
+                                                className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-[#5e3f3a] hover:bg-[#f2f4f6]"
+                                            >
+                                                {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                            </button>
                                         </td>
                                         <td className="px-3 py-2 text-sm text-[#191c1e]">
                                             <div className="flex flex-wrap items-center gap-2">
