@@ -11,6 +11,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import PasswordGeneratorCard from "./PasswordGeneratorCard";
 
 const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]";
 const fieldClassName =
@@ -126,6 +127,8 @@ export default function AssetSettingPanel() {
                     </form>
                 )}
             </section>
+
+            <PasswordGeneratorCard />
         </div>
     );
 }
