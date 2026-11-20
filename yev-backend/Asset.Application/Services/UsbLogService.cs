@@ -208,7 +208,8 @@ namespace Asset.Application.Services
                     LastConnectedAt = g.Max(s => s.ConnectedAt),
                     IsConnectedNow = g.Any(s => s.DisconnectedAt == null),
                     UnpermittedCount = g.Count(s => s.WasPermitted == false),
-                    BlockedCount = g.Count(s => s.PolicyResult == (int)UsbPolicyResult.Blocked)
+                    // Approving a USB clears its past blocks from the badge; only still-unapproved ones count.
+                    BlockedCount = g.Count(s => s.PolicyResult == (int)UsbPolicyResult.Blocked && !s.UsbDevice.IsApproved)
                 });
 
             var machines = SortMachines(groups.Where(m => !filter.ConnectedNowOnly || m.IsConnectedNow), filter.SortBy, filter.SortDesc);
