@@ -38,6 +38,24 @@ export interface UsbSessionDto {
     fileEventCount: number;
 }
 
+// One USB on one PC, its sessions there rolled up.
+export interface UsbMachineUsbDto {
+    usbDeviceId: number;
+    vendorId: string;
+    productId: string;
+    serialNumber: string;
+    friendlyName: string | null;
+    capacityBytes: number | null;
+    deviceClass: string;
+    isApproved: boolean;
+    driveLetters: string[];
+    sessionCount: number;
+    fileEventCount: number;
+    lastConnectedAt: string;
+    isConnectedNow: boolean;
+    lastPolicyResult: number | null;
+}
+
 export interface UsbDeviceDto {
     id: number;
     vendorId: string;

@@ -3,14 +3,13 @@
 import { ArrowLeft, ExternalLink } from "lucide-react";
 
 import { Link } from "@/navigation";
-import UsbLogList from "./UsbLogList";
+import UsbMachineUsbList from "./UsbMachineUsbList";
 
 interface UsbMachineDetailProps {
     machineName: string;
     deviceId?: number;
 }
 
-// Newest sessions first.
 export default function UsbMachineDetail({ machineName, deviceId }: UsbMachineDetailProps) {
     return (
         <div className="space-y-4">
@@ -39,7 +38,7 @@ export default function UsbMachineDetail({ machineName, deviceId }: UsbMachineDe
                 )}
             </div>
 
-            <UsbLogList machineName={machineName} />
+            <UsbMachineUsbList machineName={machineName} />
         </div>
     );
 }

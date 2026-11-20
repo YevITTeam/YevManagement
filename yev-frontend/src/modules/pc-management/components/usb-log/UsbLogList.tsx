@@ -25,10 +25,12 @@ interface UsbLogListProps {
     // With deviceId or machineName, only that machine's sessions are shown and the filter bar is hidden.
     deviceId?: number;
     machineName?: string;
+    // Narrows to one USB; the USB column then shows only the drive letter and policy badge.
+    usbDeviceId?: number;
 }
 
 // USB plug-in sessions reported by the PC agent.
-export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
+export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLogListProps) {
     const [rows, setRows] = useState<UsbSessionDto[]>([]);
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -50,13 +52,14 @@ export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
                 pageSize: PAGE_SIZE,
                 deviceId,
                 machineName,
+                usbDeviceId,
                 keyword: applied.keyword || undefined,
                 fromDate: applied.fromDate || undefined,
                 toDate: applied.toDate || undefined,
                 unpermittedOnly: applied.unpermittedOnly,
                 ...sort,
             }),
-        [pageIndex, applied, deviceId, machineName, sort],
+        [pageIndex, applied, deviceId, machineName, usbDeviceId, sort],
         (result) => {
             setRows(result.data);
             setTotalCount(result.totalCount);
@@ -177,7 +180,11 @@ export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
                                 <SortableTh label="Rút lúc" sortKey="disconnectedAt" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
                                 {showMachine && <SortableTh label="Máy" sortKey="machineName" sort={sort} onSort={handleSort} className="px-3 py-2" />}
                                 <SortableTh label="Người dùng" sortKey="windowsUser" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
-                                <SortableTh label="USB" sortKey="usb" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                {usbDeviceId === undefined ? (
+                                    <SortableTh label="USB" sortKey="usb" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                ) : (
+                                    <th className="px-3 py-2">Ổ</th>
+                                )}
                                 <SortableTh label="File" sortKey="fileEventCount" sort={sort} onSort={handleSort} className="px-3 py-2" />
                                 <th className="px-3 py-2 text-right">Chi tiết</th>
                             </tr>
@@ -216,14 +223,14 @@ export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
                                         <td className="hidden lg:table-cell px-3 py-2 text-sm text-[#5e3f3a]">{row.windowsUser || "-"}</td>
                                         <td className="px-3 py-2 text-sm text-[#191c1e]">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <span>{row.friendlyName || `${row.vendorId}:${row.productId}`}</span>
+                                                <span>{usbDeviceId === undefined ? row.friendlyName || `${row.vendorId}:${row.productId}` : row.driveLetter || "-"}</span>
                                                 {row.policyResult !== null && POLICY_META[row.policyResult] && (
                                                     <span title={POLICY_META[row.policyResult].title}>
                                                         <Badge variant={POLICY_META[row.policyResult].variant}>{POLICY_META[row.policyResult].label}</Badge>
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="text-xs text-[#5e3f3a]">
+                                            <div className={usbDeviceId === undefined ? "text-xs text-[#5e3f3a]" : "hidden"}>
                                                 {[
                                                     row.deviceClass === "DiskDrive" ? null : DEVICE_CLASS_LABELS[row.deviceClass] ?? row.deviceClass,
                                                     row.driveLetter,

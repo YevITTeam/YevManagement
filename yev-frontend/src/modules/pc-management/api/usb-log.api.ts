@@ -4,6 +4,7 @@ import type {
     UsbDeviceDto,
     UsbFileEventDto,
     UsbMachineDto,
+    UsbMachineUsbDto,
     UsbPolicySettingDto,
     UsbSessionDto,
 } from "@/modules/pc-management/types/usb-log.dto";
@@ -15,6 +16,7 @@ const ENDPOINTS = {
         getMachines: "/UsbLog/machines",
         getSessions: "/UsbLog/sessions",
         getSessionFiles: (id: string) => `/UsbLog/sessions/${id}/files`,
+        getMachineUsbs: "/UsbLog/machine-usbs",
         getDevices: "/UsbLog/devices",
         approve: (id: number) => `/UsbLog/devices/${id}/approve`,
         revoke: (id: number) => `/UsbLog/devices/${id}/revoke`,
@@ -56,6 +58,7 @@ export interface GetUsbSessionsParams {
     pageSize?: number;
     deviceId?: number;
     machineName?: string;
+    usbDeviceId?: number;
     keyword?: string;
     fromDate?: string;
     toDate?: string;
@@ -97,6 +100,7 @@ export const UsbLogApi = {
         if (params?.pageSize) query.set("pageSize", String(params.pageSize));
         if (params?.deviceId !== undefined) query.set("deviceId", String(params.deviceId));
         if (params?.machineName) query.set("machineName", params.machineName);
+        if (params?.usbDeviceId !== undefined) query.set("usbDeviceId", String(params.usbDeviceId));
         if (params?.keyword) query.set("keyword", params.keyword);
         if (params?.fromDate) query.set("fromDate", params.fromDate);
         if (params?.toDate) query.set("toDate", params.toDate);
@@ -117,6 +121,10 @@ export const UsbLogApi = {
         const queryString = query.toString();
         const base = ENDPOINTS.USB_LOG.getSessionFiles(id);
         const response = await api.get<ApiResponseWithPageNation<UsbFileEventDto>>(queryString ? `${base}?${queryString}` : base);
+        return response.data;
+    },
+    getMachineUsbs: async (machineName: string) => {
+        const response = await api.get<ApiResponse<UsbMachineUsbDto[]>>(withQuery(ENDPOINTS.USB_LOG.getMachineUsbs, { machineName }));
         return response.data;
     },
     getDevices: async (params: GetUsbDevicesParams) => {

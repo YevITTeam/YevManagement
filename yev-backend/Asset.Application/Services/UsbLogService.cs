@@ -263,6 +263,9 @@ namespace Asset.Application.Services
             if (filter.PolicyResult.HasValue)
                 query = query.Where(s => s.PolicyResult == filter.PolicyResult.Value);
 
+            if (filter.UsbDeviceId.HasValue)
+                query = query.Where(s => s.UsbDeviceId == filter.UsbDeviceId.Value);
+
             return await _unitOfWork.UsbSessions.ToPagedResponseAsync(
                 UsbSort.Apply(query, filter.SortBy, filter.SortDesc, SessionColumns, q => q.OrderByDescending(s => s.ConnectedAt), s => s.Id),
                 filter.PageIndex,
@@ -290,6 +293,45 @@ namespace Asset.Application.Services
                     IsApproved = s.UsbDevice.IsApproved,
                     FileEventCount = s.FileEvents.Count
                 });
+        }
+
+        public async Task<List<UsbMachineUsbDto>> GetMachineUsbsAsync(string machineName)
+        {
+            var name = machineName.Trim();
+            var query = _unitOfWork.UsbSessions.GetQueryable(false).Where(s => s.MachineName == name);
+
+            // Bounded by the USBs ever plugged into one PC, so no paging.
+            var rows = await _unitOfWork.UsbSessions.GroupCountAsync(
+                query, s => s.UsbDeviceId,
+                g => new UsbMachineUsbDto
+                {
+                    UsbDeviceId = g.Key,
+                    SessionCount = g.Count(),
+                    FileEventCount = g.Sum(s => s.FileEvents.Count),
+                    LastConnectedAt = g.Max(s => s.ConnectedAt),
+                    IsConnectedNow = g.Any(s => s.DisconnectedAt == null),
+                    LastPolicyResult = g.OrderByDescending(s => s.ConnectedAt).Select(s => s.PolicyResult).FirstOrDefault()
+                });
+
+            var ids = rows.Select(r => r.UsbDeviceId).ToList();
+            var devices = (await _unitOfWork.UsbDevices.FindAsync(d => ids.Contains(d.Id))).ToDictionary(d => d.Id);
+            var letters = await _unitOfWork.UsbSessions.GroupCountAsync(
+                query.Where(s => s.DriveLetter != null), s => new { s.UsbDeviceId, s.DriveLetter }, g => g.Key);
+
+            foreach (var row in rows)
+            {
+                var device = devices[row.UsbDeviceId];
+                row.VendorId = device.VendorId;
+                row.ProductId = device.ProductId;
+                row.SerialNumber = device.SerialNumber;
+                row.FriendlyName = device.FriendlyName;
+                row.CapacityBytes = device.CapacityBytes;
+                row.DeviceClass = device.DeviceClass;
+                row.IsApproved = device.IsApproved;
+                row.DriveLetters = letters.Where(l => l.UsbDeviceId == row.UsbDeviceId).Select(l => l.DriveLetter!).Order().ToList();
+            }
+
+            return rows.OrderByDescending(r => r.IsConnectedNow).ThenByDescending(r => r.LastConnectedAt).ToList();
         }
 
         public async Task<PagedResponse<UsbFileEventDto>> GetSessionFilesPagedAsync(

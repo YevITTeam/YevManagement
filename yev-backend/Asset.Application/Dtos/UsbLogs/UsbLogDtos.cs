@@ -13,8 +13,28 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime? ToDate { get; set; }
         public bool UnpermittedOnly { get; set; }
         public int? PolicyResult { get; set; }
+        public int? UsbDeviceId { get; set; }
         public string? SortBy { get; set; }
         public bool SortDesc { get; set; }
+    }
+
+    // One USB as seen on one PC: its sessions there rolled up. Sessions of a multi-volume stick count once per letter.
+    public class UsbMachineUsbDto
+    {
+        public int UsbDeviceId { get; set; }
+        public string VendorId { get; set; } = null!;
+        public string ProductId { get; set; } = null!;
+        public string SerialNumber { get; set; } = null!;
+        public string? FriendlyName { get; set; }
+        public long? CapacityBytes { get; set; }
+        public string DeviceClass { get; set; } = null!;
+        public bool IsApproved { get; set; }
+        public List<string> DriveLetters { get; set; } = new();
+        public int SessionCount { get; set; }
+        public int FileEventCount { get; set; }
+        public DateTime LastConnectedAt { get; set; }
+        public bool IsConnectedNow { get; set; }
+        public int? LastPolicyResult { get; set; }
     }
 
     public class UsbMachineFilterRequest

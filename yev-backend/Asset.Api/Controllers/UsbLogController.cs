@@ -112,6 +112,14 @@ namespace Asset.Api.Controllers
         }
 
         [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("machine-usbs")]
+        public async Task<ActionResult<ApiResponse<List<UsbMachineUsbDto>>>> GetMachineUsbs([FromQuery] string machineName)
+        {
+            var result = await _usbLogService.GetMachineUsbsAsync(machineName);
+            return Success(result);
+        }
+
+        [RequirePermission("Asset.UsbLog.View")]
         [HttpGet("sessions/{id:guid}/files")]
         public async Task<ActionResult<ApiResponse<PagedResponse<UsbFileEventDto>>>> GetSessionFiles(
             Guid id, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null,
