@@ -11,6 +11,7 @@ namespace Asset.Application.Interfaces.Service
 
         Task<PagedResponse<UsbSessionDto>> GetSessionsPagedAsync(UsbSessionFilterRequest filter);
 
-        Task<PagedResponse<UsbFileEventDto>> GetSessionFilesPagedAsync(Guid sessionId, int pageIndex, int pageSize, string? keyword);
+        Task<PagedResponse<UsbFileEventDto>> GetSessionFilesPagedAsync(
+            Guid sessionId, int pageIndex, int pageSize, string? keyword, string? sortBy, bool sortDesc);
     }
 }

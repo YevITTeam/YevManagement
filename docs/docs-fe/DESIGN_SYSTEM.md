@@ -155,3 +155,4 @@ Bỏ indigo còn sót → `#fff4f2`/`#e3000f`; thêm bo góc + `shadow-sm` cho s
 | Menu thao tác (toolbar) · menu ba chấm trên dòng bảng · chồng avatar | `ui/ActionMenu.tsx` · `ui/RowActionsMenu.tsx` · `ui/AvatarStack.tsx` |
 | Trạng thái rỗng | `common/EmptyState.tsx` |
 | Xác nhận xoá · modal nhỏ "chọn vài field rồi xác nhận" | `common/ConfirmDialog.tsx` · `common/FormDialog.tsx` |
+| Tiêu đề cột bấm để sắp xếp (server-side; tăng → giảm → thứ tự mặc định) | `ui/SortableTh.tsx` (`SortState`, đổi sắp xếp thì về trang 1; mẫu `usb-log/`) |

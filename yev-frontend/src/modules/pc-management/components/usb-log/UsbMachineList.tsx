@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { useRouter } from "@/navigation";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbMachineDto } from "@/modules/pc-management/types/usb-log.dto";
+import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { formatDateTime } from "./usb-log-format";
 
@@ -28,6 +29,7 @@ export default function UsbMachineList() {
     const [applied, setApplied] = useState(emptyFilters);
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [sort, setSort] = useState<SortState>(NO_SORT);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -40,8 +42,9 @@ export default function UsbMachineList() {
                 fromDate: applied.fromDate || undefined,
                 toDate: applied.toDate || undefined,
                 connectedNowOnly: applied.connectedNowOnly,
+                ...sort,
             }),
-        [pageIndex, applied],
+        [pageIndex, applied, sort],
         (result) => {
             setRows(result.data);
             setTotalCount(result.totalCount);
@@ -51,6 +54,11 @@ export default function UsbMachineList() {
         (message) => toast.error(message),
         "usb-machines"
     );
+
+    const handleSort = (next: SortState) => {
+        setPageIndex(1);
+        setSort(next);
+    };
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -151,12 +159,12 @@ export default function UsbMachineList() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-3 py-2">Máy</th>
-                                <th className="hidden px-3 py-2 lg:table-cell">Người dùng gần nhất</th>
-                                <th className="hidden lg:table-cell px-3 py-2 text-right">USB</th>
-                                <th className="px-3 py-2 text-right">Lần cắm</th>
-                                <th className="hidden lg:table-cell px-3 py-2 text-right">Thao tác file</th>
-                                <th className="px-3 py-2">Lần cuối</th>
+                                <SortableTh label="Máy" sortKey="machineName" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <SortableTh label="Người dùng gần nhất" sortKey="lastWindowsUser" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
+                                <SortableTh label="USB" sortKey="usbDeviceCount" sort={sort} onSort={handleSort} className="hidden px-3 py-2 text-right lg:table-cell" />
+                                <SortableTh label="Lần cắm" sortKey="sessionCount" sort={sort} onSort={handleSort} className="px-3 py-2 text-right" />
+                                <SortableTh label="Thao tác file" sortKey="fileEventCount" sort={sort} onSort={handleSort} className="hidden px-3 py-2 text-right lg:table-cell" />
+                                <SortableTh label="Lần cuối" sortKey="lastConnectedAt" sort={sort} onSort={handleSort} className="px-3 py-2" />
                             </tr>
                         </thead>
                         <tbody>

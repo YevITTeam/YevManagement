@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 
 import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
+import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbAgentDto } from "@/modules/pc-management/types/usb-log.dto";
@@ -27,6 +28,7 @@ export default function UsbAgentList() {
     const [draft, setDraft] = useState(emptyFilters);
     const [applied, setApplied] = useState(emptyFilters);
     const [pageIndex, setPageIndex] = useState(1);
+    const [sort, setSort] = useState<SortState>(NO_SORT);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -37,8 +39,9 @@ export default function UsbAgentList() {
                 pageSize: PAGE_SIZE,
                 keyword: applied.keyword || undefined,
                 staleOnly: applied.staleOnly,
+                ...sort,
             }),
-        [pageIndex, applied],
+        [pageIndex, applied, sort],
         (result) => {
             setRows(result.data);
             setTotalCount(result.totalCount);
@@ -48,6 +51,11 @@ export default function UsbAgentList() {
         (message) => toast.error(message),
         "usb-agents"
     );
+
+    const handleSort = (next: SortState) => {
+        setPageIndex(1);
+        setSort(next);
+    };
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -113,11 +121,11 @@ export default function UsbAgentList() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-3 py-2">Máy</th>
-                                <th className="px-3 py-2">Phiên bản</th>
-                                <th className="hidden px-3 py-2 lg:table-cell">Người dùng</th>
-                                <th className="hidden px-3 py-2 lg:table-cell">Cài từ</th>
-                                <th className="px-3 py-2">Báo về lần cuối</th>
+                                <SortableTh label="Máy" sortKey="machineName" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <SortableTh label="Phiên bản" sortKey="agentVersion" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <SortableTh label="Người dùng" sortKey="windowsUser" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
+                                <SortableTh label="Cài từ" sortKey="firstSeenAt" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
+                                <SortableTh label="Báo về lần cuối" sortKey="lastSeenAt" sort={sort} onSort={handleSort} className="px-3 py-2" />
                             </tr>
                         </thead>
                         <tbody>

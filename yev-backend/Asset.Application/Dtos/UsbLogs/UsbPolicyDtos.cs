@@ -9,6 +9,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? Keyword { get; set; }
         public bool? IsApproved { get; set; }
         public string? DeviceClass { get; set; }
+        public string? SortBy { get; set; }
+        public bool SortDesc { get; set; }
     }
 
     public class UsbDeviceDto
@@ -52,6 +54,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public int PageSize { get; set; } = 20;
         public string? Keyword { get; set; }
         public bool StaleOnly { get; set; }
+        public string? SortBy { get; set; }
+        public bool SortDesc { get; set; }
     }
 
     public class UsbAgentDto

@@ -29,6 +29,8 @@ export interface GetUsbDevicesParams {
     keyword?: string;
     isApproved?: boolean;
     deviceClass?: string;
+    sortBy?: string;
+    sortDesc?: boolean;
 }
 
 export interface GetUsbAgentsParams {
@@ -36,6 +38,8 @@ export interface GetUsbAgentsParams {
     pageSize?: number;
     keyword?: string;
     staleOnly?: boolean;
+    sortBy?: string;
+    sortDesc?: boolean;
 }
 
 function withQuery(base: string, params: Record<string, string | number | boolean | undefined>) {
@@ -56,6 +60,8 @@ export interface GetUsbSessionsParams {
     fromDate?: string;
     toDate?: string;
     unpermittedOnly?: boolean;
+    sortBy?: string;
+    sortDesc?: boolean;
 }
 
 export interface GetUsbMachinesParams {
@@ -65,6 +71,8 @@ export interface GetUsbMachinesParams {
     fromDate?: string;
     toDate?: string;
     connectedNowOnly?: boolean;
+    sortBy?: string;
+    sortDesc?: boolean;
 }
 
 export const UsbLogApi = {
@@ -76,6 +84,8 @@ export const UsbLogApi = {
         if (params?.fromDate) query.set("fromDate", params.fromDate);
         if (params?.toDate) query.set("toDate", params.toDate);
         if (params?.connectedNowOnly) query.set("connectedNowOnly", "true");
+        if (params?.sortBy) query.set("sortBy", params.sortBy);
+        if (params?.sortDesc) query.set("sortDesc", "true");
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.USB_LOG.getMachines}?${queryString}` : ENDPOINTS.USB_LOG.getMachines;
         const response = await api.get<ApiResponseWithPageNation<UsbMachineDto>>(url);
@@ -91,15 +101,19 @@ export const UsbLogApi = {
         if (params?.fromDate) query.set("fromDate", params.fromDate);
         if (params?.toDate) query.set("toDate", params.toDate);
         if (params?.unpermittedOnly) query.set("unpermittedOnly", "true");
+        if (params?.sortBy) query.set("sortBy", params.sortBy);
+        if (params?.sortDesc) query.set("sortDesc", "true");
         const queryString = query.toString();
         const url = queryString ? `${ENDPOINTS.USB_LOG.getSessions}?${queryString}` : ENDPOINTS.USB_LOG.getSessions;
         const response = await api.get<ApiResponseWithPageNation<UsbSessionDto>>(url);
         return response.data;
     },
-    getSessionFiles: async (id: string, params?: { pageIndex?: number; pageSize?: number }) => {
+    getSessionFiles: async (id: string, params?: { pageIndex?: number; pageSize?: number; sortBy?: string; sortDesc?: boolean }) => {
         const query = new URLSearchParams();
         if (params?.pageIndex) query.set("pageIndex", String(params.pageIndex));
         if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+        if (params?.sortBy) query.set("sortBy", params.sortBy);
+        if (params?.sortDesc) query.set("sortDesc", "true");
         const queryString = query.toString();
         const base = ENDPOINTS.USB_LOG.getSessionFiles(id);
         const response = await api.get<ApiResponseWithPageNation<UsbFileEventDto>>(queryString ? `${base}?${queryString}` : base);

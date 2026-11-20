@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbFileEventDto } from "@/modules/pc-management/types/usb-log.dto";
+import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { formatBytes, formatDateTime } from "./usb-log-format";
 
@@ -20,11 +21,12 @@ const actionClasses: Record<number, string> = {
 export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
     const [rows, setRows] = useState<UsbFileEventDto[]>([]);
     const [pageIndex, setPageIndex] = useState(1);
+    const [sort, setSort] = useState<SortState>(NO_SORT);
     const [totalPages, setTotalPages] = useState(1);
 
     const { isLoading, error } = useFetchEffect(
-        () => UsbLogApi.getSessionFiles(sessionId, { pageIndex, pageSize: PAGE_SIZE }),
-        [sessionId, pageIndex],
+        () => UsbLogApi.getSessionFiles(sessionId, { pageIndex, pageSize: PAGE_SIZE, ...sort }),
+        [sessionId, pageIndex, sort],
         (result) => {
             setRows(result.data);
             setTotalPages(result.totalPages);
@@ -33,6 +35,11 @@ export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
         (message) => toast.error(message)
     );
 
+    const handleSort = (next: SortState) => {
+        setPageIndex(1);
+        setSort(next);
+    };
+
     if (error) return <div className="text-sm text-[#930006]">{error}</div>;
     if (!isLoading && rows.length === 0) return <div className="text-sm text-[#5e3f3a]">Không có thao tác file.</div>;
 
@@ -40,6 +47,14 @@ export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
         <div className="space-y-2">
             <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
+                    <thead>
+                        <tr className="border-b border-[#e0e3e5] text-[11px] font-semibold tracking-[0.06em] text-[#5e3f3a]">
+                            <SortableTh label="Thời gian" sortKey="occurredAt" sort={sort} onSort={handleSort} className="py-1.5 pr-3" />
+                            <SortableTh label="Thao tác" sortKey="action" sort={sort} onSort={handleSort} className="py-1.5 pr-3" />
+                            <SortableTh label="File" sortKey="filePath" sort={sort} onSort={handleSort} className="py-1.5 pr-3" />
+                            <SortableTh label="Dung lượng" sortKey="sizeBytes" sort={sort} onSort={handleSort} className="py-1.5 text-right" />
+                        </tr>
+                    </thead>
                     <tbody>
                         {rows.map((row) => (
                             <tr key={row.id} className="border-b border-[#e0e3e5] last:border-0">

@@ -13,6 +13,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime? ToDate { get; set; }
         public bool UnpermittedOnly { get; set; }
         public int? PolicyResult { get; set; }
+        public string? SortBy { get; set; }
+        public bool SortDesc { get; set; }
     }
 
     public class UsbMachineFilterRequest
@@ -23,6 +25,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
         public bool ConnectedNowOnly { get; set; }
+        public string? SortBy { get; set; }
+        public bool SortDesc { get; set; }
     }
 
     // One PC that has USB activity. Grouped by MachineName so PCs that match no Device still appear.

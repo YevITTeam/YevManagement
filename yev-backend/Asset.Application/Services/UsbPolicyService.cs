@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Text;
 using Asset.Application.Dtos.UsbLogs;
@@ -128,8 +129,13 @@ namespace Asset.Application.Services
                 query = query.Where(u => u.DeviceClass == filter.DeviceClass);
 
             var sessions = _unitOfWork.UsbSessions.GetQueryable(false);
+            var columns = UsbSort.Columns<UsbDevice>(
+                ("name", u => u.FriendlyName),
+                ("isApproved", u => u.IsApproved),
+                ("lastSeenAt", u => u.LastSeenAt),
+                ("sessionCount", u => sessions.Count(s => s.UsbDeviceId == u.Id)));
             return await _unitOfWork.UsbDevices.ToPagedResponseAsync(
-                query.OrderByDescending(u => u.LastSeenAt),
+                UsbSort.Apply(query, filter.SortBy, filter.SortDesc, columns, q => q.OrderByDescending(u => u.LastSeenAt), u => u.Id),
                 filter.PageIndex,
                 filter.PageSize,
                 u => new UsbDeviceDto
@@ -220,7 +226,8 @@ namespace Asset.Application.Services
                 query = query.Where(a => a.LastSeenAt < staleBefore);
 
             return await _unitOfWork.UsbAgents.ToPagedResponseAsync(
-                query.OrderBy(a => a.LastSeenAt < staleBefore ? 0 : 1).ThenBy(a => a.MachineName),
+                UsbSort.Apply(query, filter.SortBy, filter.SortDesc, AgentColumns,
+                    q => q.OrderBy(a => a.LastSeenAt < staleBefore ? 0 : 1).ThenBy(a => a.MachineName), a => a.Id),
                 filter.PageIndex,
                 filter.PageSize,
                 a => new UsbAgentDto
@@ -234,6 +241,13 @@ namespace Asset.Application.Services
                     IsStale = a.LastSeenAt < staleBefore
                 });
         }
+
+        private static readonly Dictionary<string, Expression<Func<UsbAgent, object?>>> AgentColumns = UsbSort.Columns<UsbAgent>(
+            ("machineName", a => a.MachineName),
+            ("agentVersion", a => a.AgentVersion),
+            ("windowsUser", a => a.WindowsUser),
+            ("firstSeenAt", a => a.FirstSeenAt),
+            ("lastSeenAt", a => a.LastSeenAt));
 
         private static string? Trunc(string? value, int max)
             => string.IsNullOrEmpty(value) ? null : (value.Length <= max ? value : value[..max]);

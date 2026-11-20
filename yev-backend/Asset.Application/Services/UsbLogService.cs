@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Asset.Application.Dtos.UsbLogs;
 using Asset.Application.Interfaces.Service;
 using Asset.Domain.Entities;
@@ -210,10 +211,7 @@ namespace Asset.Application.Services
                     BlockedCount = g.Count(s => s.PolicyResult == (int)UsbPolicyResult.Blocked)
                 });
 
-            var machines = groups.Where(m => !filter.ConnectedNowOnly || m.IsConnectedNow)
-                .OrderByDescending(m => m.IsConnectedNow)
-                .ThenByDescending(m => m.LastConnectedAt)
-                .ToList();
+            var machines = SortMachines(groups.Where(m => !filter.ConnectedNowOnly || m.IsConnectedNow), filter.SortBy, filter.SortDesc);
 
             var page = machines.Skip((filter.PageIndex - 1) * filter.PageSize).Take(filter.PageSize).ToList();
 
@@ -266,7 +264,7 @@ namespace Asset.Application.Services
                 query = query.Where(s => s.PolicyResult == filter.PolicyResult.Value);
 
             return await _unitOfWork.UsbSessions.ToPagedResponseAsync(
-                query.OrderByDescending(s => s.ConnectedAt),
+                UsbSort.Apply(query, filter.SortBy, filter.SortDesc, SessionColumns, q => q.OrderByDescending(s => s.ConnectedAt), s => s.Id),
                 filter.PageIndex,
                 filter.PageSize,
                 s => new UsbSessionDto
@@ -295,7 +293,7 @@ namespace Asset.Application.Services
         }
 
         public async Task<PagedResponse<UsbFileEventDto>> GetSessionFilesPagedAsync(
-            Guid sessionId, int pageIndex, int pageSize, string? keyword)
+            Guid sessionId, int pageIndex, int pageSize, string? keyword, string? sortBy, bool sortDesc)
         {
             (await _unitOfWork.UsbSessions.GetByIdAsync(sessionId)).OrThrowNotFound("Phiên USB", sessionId);
 
@@ -308,7 +306,7 @@ namespace Asset.Application.Services
             }
 
             return await _unitOfWork.UsbFileEvents.ToPagedResponseAsync(
-                query.OrderBy(e => e.OccurredAt).ThenBy(e => e.Id),
+                UsbSort.Apply(query, sortBy, sortDesc, FileColumns, q => q.OrderBy(e => e.OccurredAt).ThenBy(e => e.Id), e => e.Id),
                 pageIndex,
                 pageSize,
                 e => new UsbFileEventDto
@@ -320,6 +318,40 @@ namespace Asset.Application.Services
                     SizeBytes = e.SizeBytes,
                     OccurredAt = e.OccurredAt
                 });
+        }
+
+        private static readonly Dictionary<string, Expression<Func<UsbSession, object?>>> SessionColumns = UsbSort.Columns<UsbSession>(
+            ("connectedAt", s => s.ConnectedAt),
+            ("disconnectedAt", s => s.DisconnectedAt),
+            ("machineName", s => s.MachineName),
+            ("windowsUser", s => s.WindowsUser),
+            ("usb", s => s.UsbDevice.FriendlyName),
+            ("fileEventCount", s => s.FileEvents.Count));
+
+        private static readonly Dictionary<string, Expression<Func<UsbFileEvent, object?>>> FileColumns = UsbSort.Columns<UsbFileEvent>(
+            ("occurredAt", e => e.OccurredAt),
+            ("action", e => e.Action),
+            ("filePath", e => e.FilePath),
+            ("sizeBytes", e => e.SizeBytes));
+
+        // Machines are grouped and paged in memory, so they sort in memory too.
+        private static List<UsbMachineDto> SortMachines(IEnumerable<UsbMachineDto> machines, string? sortBy, bool sortDesc)
+        {
+            Func<UsbMachineDto, object?>? key = sortBy?.ToLowerInvariant() switch
+            {
+                "machinename" => m => m.MachineName,
+                "lastwindowsuser" => m => m.LastWindowsUser,
+                "usbdevicecount" => m => m.UsbDeviceCount,
+                "sessioncount" => m => m.SessionCount,
+                "fileeventcount" => m => m.FileEventCount,
+                "lastconnectedat" => m => m.LastConnectedAt,
+                _ => null
+            };
+            if (key == null)
+                return machines.OrderByDescending(m => m.IsConnectedNow).ThenByDescending(m => m.LastConnectedAt).ToList();
+
+            var ordered = sortDesc ? machines.OrderByDescending(key) : machines.OrderBy(key);
+            return ordered.ThenBy(m => m.MachineName).ToList();
         }
 
         public static string NormalizeMachineName(string machineName)

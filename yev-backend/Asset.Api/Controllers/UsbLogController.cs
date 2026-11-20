@@ -114,9 +114,10 @@ namespace Asset.Api.Controllers
         [RequirePermission("Asset.UsbLog.View")]
         [HttpGet("sessions/{id:guid}/files")]
         public async Task<ActionResult<ApiResponse<PagedResponse<UsbFileEventDto>>>> GetSessionFiles(
-            Guid id, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null)
+            Guid id, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null,
+            [FromQuery] string? sortBy = null, [FromQuery] bool sortDesc = false)
         {
-            var result = await _usbLogService.GetSessionFilesPagedAsync(id, pageIndex, pageSize, keyword);
+            var result = await _usbLogService.GetSessionFilesPagedAsync(id, pageIndex, pageSize, keyword, sortBy, sortDesc);
             return Success(result);
         }
 

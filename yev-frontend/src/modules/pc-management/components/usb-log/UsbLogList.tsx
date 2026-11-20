@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbSessionDto } from "@/modules/pc-management/types/usb-log.dto";
+import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Badge } from "@/components/ui/Badge";
 import UsbSessionFiles from "./UsbSessionFiles";
@@ -35,6 +36,7 @@ export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
     const [applied, setApplied] = useState(emptyFilters);
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [sort, setSort] = useState<SortState>(NO_SORT);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -52,8 +54,9 @@ export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
                 fromDate: applied.fromDate || undefined,
                 toDate: applied.toDate || undefined,
                 unpermittedOnly: applied.unpermittedOnly,
+                ...sort,
             }),
-        [pageIndex, applied, deviceId, machineName],
+        [pageIndex, applied, deviceId, machineName, sort],
         (result) => {
             setRows(result.data);
             setTotalCount(result.totalCount);
@@ -63,6 +66,11 @@ export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
         (message) => toast.error(message),
         showMachine ? "usb-log" : undefined
     );
+
+    const handleSort = (next: SortState) => {
+        setPageIndex(1);
+        setSort(next);
+    };
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -165,12 +173,12 @@ export default function UsbLogList({ deviceId, machineName }: UsbLogListProps) {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-3 py-2">Cắm lúc</th>
-                                <th className="hidden lg:table-cell px-3 py-2">Rút lúc</th>
-                                {showMachine && <th className="px-3 py-2">Máy</th>}
-                                <th className="hidden lg:table-cell px-3 py-2">Người dùng</th>
-                                <th className="px-3 py-2">USB</th>
-                                <th className="px-3 py-2">File</th>
+                                <SortableTh label="Cắm lúc" sortKey="connectedAt" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <SortableTh label="Rút lúc" sortKey="disconnectedAt" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
+                                {showMachine && <SortableTh label="Máy" sortKey="machineName" sort={sort} onSort={handleSort} className="px-3 py-2" />}
+                                <SortableTh label="Người dùng" sortKey="windowsUser" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
+                                <SortableTh label="USB" sortKey="usb" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <SortableTh label="File" sortKey="fileEventCount" sort={sort} onSort={handleSort} className="px-3 py-2" />
                                 <th className="px-3 py-2 text-right">Chi tiết</th>
                             </tr>
                         </thead>

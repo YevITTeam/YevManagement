@@ -8,6 +8,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import FormDialog from "@/components/common/FormDialog";
 import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
+import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
@@ -46,6 +47,7 @@ export default function UsbDeviceList() {
     const [draft, setDraft] = useState(emptyFilters);
     const [applied, setApplied] = useState(emptyFilters);
     const [pageIndex, setPageIndex] = useState(1);
+    const [sort, setSort] = useState<SortState>(NO_SORT);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -62,8 +64,9 @@ export default function UsbDeviceList() {
                 keyword: applied.keyword || undefined,
                 isApproved: applied.approval === "" ? undefined : applied.approval === "approved",
                 deviceClass: applied.deviceClass || undefined,
+                ...sort,
             }),
-        [pageIndex, applied],
+        [pageIndex, applied, sort],
         (result) => {
             setRows(result.data);
             setTotalCount(result.totalCount);
@@ -73,6 +76,11 @@ export default function UsbDeviceList() {
         (message) => toast.error(message),
         "usb-devices"
     );
+
+    const handleSort = (next: SortState) => {
+        setPageIndex(1);
+        setSort(next);
+    };
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -183,10 +191,10 @@ export default function UsbDeviceList() {
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-3 py-2">Thiết bị</th>
-                                <th className="px-3 py-2">Cấp phép</th>
-                                <th className="hidden px-3 py-2 lg:table-cell">Lần cuối</th>
-                                <th className="hidden px-3 py-2 text-right lg:table-cell">Lần cắm</th>
+                                <SortableTh label="Thiết bị" sortKey="name" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <SortableTh label="Cấp phép" sortKey="isApproved" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <SortableTh label="Lần cuối" sortKey="lastSeenAt" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
+                                <SortableTh label="Lần cắm" sortKey="sessionCount" sort={sort} onSort={handleSort} className="hidden px-3 py-2 text-right lg:table-cell" />
                                 {canApprove && <th className="px-3 py-2 text-right">Thao tác</th>}
                             </tr>
                         </thead>
