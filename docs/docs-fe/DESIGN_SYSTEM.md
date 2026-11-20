@@ -146,7 +146,7 @@ Bỏ indigo còn sót → `#fff4f2`/`#e3000f`; thêm bo góc + `shadow-sm` cho s
 |---|---|
 | Dropdown nhiều mục có ô tìm (value `number`/`""`) | `ui/SearchableSelect.tsx` |
 | Dropdown ít mục/enum (value string/number, chấm màu) | `ui/StyledSelect.tsx` |
-| Chọn nhiều có ô tìm | `ui/MultiSelect.tsx` |
+| Chọn nhiều có ô tìm | `ui/MultiSelect.tsx` (danh sách hàng nghìn mục: `maxVisible`, gõ để lọc phần còn lại) |
 | Nhập giờ 24h | `ui/TimePicker24h.tsx` |
 | Dấu `*` bắt buộc | `ui/RequiredMark.tsx` |
 | Chú thích dài (icon `i`, hover) | `ui/InfoTooltip.tsx` |

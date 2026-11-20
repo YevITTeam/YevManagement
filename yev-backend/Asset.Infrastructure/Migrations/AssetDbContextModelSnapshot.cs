@@ -1365,6 +1365,38 @@ namespace Asset.Infrastructure.Migrations
                     b.ToTable("UsbDevices");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.UsbDeviceMachine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UsbDeviceId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id")
+                        .HasName("PK_UsbDeviceMachines");
+
+                    b.HasIndex(new[] { "DeviceId" }, "IX_UsbDeviceMachines_DeviceId");
+
+                    b.HasIndex(new[] { "UsbDeviceId", "DeviceId" }, "IX_UsbDeviceMachines_UsbDevice_Device")
+                        .IsUnique();
+
+                    b.ToTable("UsbDeviceMachines");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.UsbFileEvent", b =>
                 {
                     b.Property<long>("Id")
@@ -1827,6 +1859,27 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("OldDevice");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.UsbDeviceMachine", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_UsbDeviceMachines_ThietBis_DeviceId");
+
+                    b.HasOne("Asset.Domain.Entities.UsbDevice", "UsbDevice")
+                        .WithMany("Machines")
+                        .HasForeignKey("UsbDeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_UsbDeviceMachines_UsbDevices_UsbDeviceId");
+
+                    b.Navigation("Device");
+
+                    b.Navigation("UsbDevice");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.UsbFileEvent", b =>
                 {
                     b.HasOne("Asset.Domain.Entities.UsbSession", "Session")
@@ -1933,6 +1986,11 @@ namespace Asset.Infrastructure.Migrations
             modelBuilder.Entity("Asset.Domain.Entities.Supplier", b =>
                 {
                     b.Navigation("Devices");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.UsbDevice", b =>
+                {
+                    b.Navigation("Machines");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.UsbSession", b =>

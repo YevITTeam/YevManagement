@@ -326,6 +326,9 @@ namespace Asset.Application.Services
 
             var agentLive = (await GetLiveMachinesAsync()).Contains(name);
             var ids = rows.Select(r => r.UsbDeviceId).ToList();
+            var deviceId = (await _unitOfWork.UsbSessions.SelectAsync(s => s.MachineName == name && s.DeviceId != null, s => s.DeviceId)).Max();
+            var approvedHere = deviceId == null ? new HashSet<int>()
+                : (await _unitOfWork.UsbDeviceMachines.SelectAsync(m => m.DeviceId == deviceId && ids.Contains(m.UsbDeviceId), m => m.UsbDeviceId)).ToHashSet();
             var devices = (await _unitOfWork.UsbDevices.FindAsync(d => ids.Contains(d.Id))).ToDictionary(d => d.Id);
             var letters = await _unitOfWork.UsbSessions.GroupCountAsync(
                 query.Where(s => s.DriveLetter != null), s => new { s.UsbDeviceId, s.DriveLetter }, g => g.Key);
@@ -341,6 +344,7 @@ namespace Asset.Application.Services
                 row.DeviceClass = device.DeviceClass;
                 row.IsApproved = device.IsApproved;
                 row.IsConnectedNow &= agentLive;
+                row.ApprovedHere = approvedHere.Contains(row.UsbDeviceId);
                 row.DriveLetters = letters.Where(l => l.UsbDeviceId == row.UsbDeviceId).Select(l => l.DriveLetter!).Order().ToList();
             }
 

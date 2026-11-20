@@ -59,7 +59,7 @@ namespace Asset.Api.Controllers
         [HttpPost("devices/{id:int}/approve")]
         public async Task<ActionResult<ApiResponse<bool>>> Approve(int id, [FromBody] UsbApprovalRequest request)
         {
-            await _usbPolicyService.SetApprovalAsync(id, true, request.Note);
+            await _usbPolicyService.ApproveAsync(id, request);
             return Success(true, "Đã cấp phép USB.");
         }
 
@@ -67,8 +67,32 @@ namespace Asset.Api.Controllers
         [HttpPost("devices/{id:int}/revoke")]
         public async Task<ActionResult<ApiResponse<bool>>> Revoke(int id)
         {
-            await _usbPolicyService.SetApprovalAsync(id, false, null);
+            await _usbPolicyService.RevokeAsync(id);
             return Success(true, "Đã thu hồi cấp phép USB.");
+        }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpPost("devices/{id:int}/machines/{deviceId:int}")]
+        public async Task<ActionResult<ApiResponse<bool>>> ApproveMachine(int id, int deviceId)
+        {
+            await _usbPolicyService.SetMachineApprovalAsync(id, deviceId, true);
+            return Success(true, "Đã cấp phép USB cho máy này.");
+        }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpDelete("devices/{id:int}/machines/{deviceId:int}")]
+        public async Task<ActionResult<ApiResponse<bool>>> RevokeMachine(int id, int deviceId)
+        {
+            await _usbPolicyService.SetMachineApprovalAsync(id, deviceId, false);
+            return Success(true, "Đã thu hồi cấp phép USB ở máy này.");
+        }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpGet("machine-options")]
+        public async Task<ActionResult<ApiResponse<List<UsbMachineOptionDto>>>> GetMachineOptions()
+        {
+            var result = await _usbPolicyService.GetMachineOptionsAsync();
+            return Success(result);
         }
 
         [RequirePermission("Asset.UsbLog.View")]

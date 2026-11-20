@@ -30,12 +30,31 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime LastSeenAt { get; set; }
         public int SessionCount { get; set; }
         public string? LastMachineName { get; set; }
+        // Per-machine approvals; empty when IsApproved (every machine) or not approved at all.
+        public List<UsbApprovedMachineDto> ApprovedMachines { get; set; } = new();
     }
 
+    public class UsbApprovedMachineDto
+    {
+        public int DeviceId { get; set; }
+        public string DeviceCode { get; set; } = null!;
+    }
+
+    // Replaces the USB's whole approval scope: every machine, or exactly DeviceIds.
     public class UsbApprovalRequest
     {
         [StringLength(255, ErrorMessage = "Ghi chú tối đa 255 ký tự.")]
         public string? Note { get; set; }
+        public bool AllMachines { get; set; } = true;
+        public List<int> DeviceIds { get; set; } = new();
+    }
+
+    // Asset devices with a PC computer name, for the per-machine approval picker.
+    public class UsbMachineOptionDto
+    {
+        public int Id { get; set; }
+        public string DeviceCode { get; set; } = null!;
+        public string DeviceName { get; set; } = null!;
     }
 
     public class UsbPolicySettingDto

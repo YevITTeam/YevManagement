@@ -1,6 +1,8 @@
 import { api } from "@/lib/client";
 import type {
     UsbAgentDto,
+    UsbApprovalRequest,
+    UsbMachineOptionDto,
     UsbDeviceDto,
     UsbFileEventDto,
     UsbMachineDto,
@@ -10,7 +12,7 @@ import type {
 } from "@/modules/pc-management/types/usb-log.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
-// Reads need Asset.UsbLog.View; approve/revoke and the block mode need Asset.UsbLog.Approve. The agent uses ingest/agent-sync.
+// Reads need Asset.UsbLog.View; approve/revoke, machine-options and the block mode need Asset.UsbLog.Approve. The agent uses ingest/agent-sync.
 const ENDPOINTS = {
     USB_LOG: {
         getMachines: "/UsbLog/machines",
@@ -20,6 +22,8 @@ const ENDPOINTS = {
         getDevices: "/UsbLog/devices",
         approve: (id: number) => `/UsbLog/devices/${id}/approve`,
         revoke: (id: number) => `/UsbLog/devices/${id}/revoke`,
+        machine: (id: number, deviceId: number) => `/UsbLog/devices/${id}/machines/${deviceId}`,
+        machineOptions: "/UsbLog/machine-options",
         policy: "/UsbLog/policy",
         getAgents: "/UsbLog/agents",
     },
@@ -131,8 +135,20 @@ export const UsbLogApi = {
         const response = await api.get<ApiResponseWithPageNation<UsbDeviceDto>>(withQuery(ENDPOINTS.USB_LOG.getDevices, { ...params }));
         return response.data;
     },
-    approve: async (id: number, note: string) => {
-        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.approve(id), { note: note || null });
+    approve: async (id: number, body: UsbApprovalRequest) => {
+        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.approve(id), body);
+        return response.data;
+    },
+    approveMachine: async (id: number, deviceId: number) => {
+        const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.machine(id, deviceId));
+        return response.data;
+    },
+    revokeMachine: async (id: number, deviceId: number) => {
+        const response = await api.delete<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.machine(id, deviceId));
+        return response.data;
+    },
+    getMachineOptions: async () => {
+        const response = await api.get<ApiResponse<UsbMachineOptionDto[]>>(ENDPOINTS.USB_LOG.machineOptions);
         return response.data;
     },
     revoke: async (id: number) => {

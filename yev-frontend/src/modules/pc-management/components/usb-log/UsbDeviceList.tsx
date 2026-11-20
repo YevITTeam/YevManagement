@@ -7,6 +7,8 @@ import { toast } from "react-toastify";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import FormDialog from "@/components/common/FormDialog";
 import { Badge } from "@/components/ui/Badge";
+import { MultiSelect, type MultiSelectOption } from "@/components/ui/MultiSelect";
+import { getApiErrorMessage } from "@/lib/apiError";
 import { Pagination } from "@/components/ui/Pagination";
 import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { StyledSelect } from "@/components/ui/StyledSelect";
@@ -36,7 +38,14 @@ const APPROVAL_OPTIONS: { value: ApprovalFilter; label: string }[] = [
     { value: "notApproved", label: "Chưa cấp phép" },
 ];
 
-const CLASS_OPTIONS = [{ value: "", label: "Tất cả" }, ...Object.entries(DEVICE_CLASS_LABELS).map(([value, label]) => ({ value, label }))];
+type ApprovalScope = "all" | "machines";
+
+const SCOPE_OPTIONS: { value: ApprovalScope; label: string }[] = [
+    { value: "all", label: "Mọi máy" },
+    { value: "machines", label: "Chọn máy" },
+];
+
+const CLASS_OPTIONS =[{ value: "", label: "Tất cả" }, ...Object.entries(DEVICE_CLASS_LABELS).map(([value, label]) => ({ value, label }))];
 
 // Every USB device the agents have seen; approved disks stay writable when the block mode is Chặn.
 export default function UsbDeviceList() {
@@ -53,6 +62,9 @@ export default function UsbDeviceList() {
 
     const [approving, setApproving] = useState<UsbDeviceDto | null>(null);
     const [note, setNote] = useState("");
+    const [scope, setScope] = useState<ApprovalScope>("all");
+    const [machineIds, setMachineIds] = useState<number[]>([]);
+    const [machineOptions, setMachineOptions] = useState<MultiSelectOption[] | null>(null);
     const [revoking, setRevoking] = useState<UsbDeviceDto | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -94,21 +106,36 @@ export default function UsbDeviceList() {
     };
 
     const openApprove = (row: UsbDeviceDto) => {
-        setNote("");
+        setNote(row.approvalNote ?? "");
+        setScope(row.approvedMachines.length > 0 ? "machines" : "all");
+        setMachineIds(row.approvedMachines.map((m) => m.deviceId));
         setApproving(row);
+        if (machineOptions === null) {
+            UsbLogApi.getMachineOptions()
+                .then((options) =>
+                    setMachineOptions(
+                        options.map((o) => ({ value: o.id, label: `${o.deviceCode} · ${o.deviceName}`, searchText: `${o.deviceCode} ${o.deviceName}`.toLowerCase() }))
+                    )
+                )
+                .catch((err) => toast.error(getApiErrorMessage(err, "Không tải được danh sách máy.")));
+        }
     };
 
     const handleApprove = async () => {
         if (!approving) return;
+        if (scope === "machines" && machineIds.length === 0) {
+            toast.error("Chọn ít nhất 1 máy.");
+            return;
+        }
         setBusy(true);
         try {
-            await UsbLogApi.approve(approving.id, note.trim());
+            await UsbLogApi.approve(approving.id, { note: note.trim() || null, allMachines: scope === "all", deviceIds: scope === "all" ? [] : machineIds });
             toast.success("Đã cấp phép USB.");
             setApproving(null);
             refetch();
         } catch (err) {
             console.error(err);
-            toast.error("Cấp phép USB thất bại.");
+            toast.error(getApiErrorMessage(err, "Cấp phép USB thất bại."));
         } finally {
             setBusy(false);
         }
@@ -208,6 +235,7 @@ export default function UsbDeviceList() {
                             )}
                             {rows.map((row) => {
                                 const isDisk = row.deviceClass === "DiskDrive";
+                                const isApproved = row.isApproved || row.approvedMachines.length > 0;
                                 return (
                                     <tr key={row.id} className="border-b border-[#f1f5f9] align-top">
                                         <td className="px-3 py-2 text-sm text-[#191c1e]">
@@ -224,9 +252,21 @@ export default function UsbDeviceList() {
                                             </div>
                                         </td>
                                         <td className="px-3 py-2 text-sm">
-                                            {row.isApproved ? (
+                                            {isApproved ? (
                                                 <div title={row.approvedBy ? `${row.approvedBy}, ${formatDateTime(row.approvedAt)}` : undefined}>
-                                                    <Badge variant="success">Đã cấp phép</Badge>
+                                                    <Badge variant="success">{row.isApproved ? "Mọi máy" : `${row.approvedMachines.length} máy`}</Badge>
+                                                    {row.approvedMachines.length > 0 && (
+                                                        <div
+                                                            className="mt-1 text-xs text-[#191c1e]"
+                                                            title={row.approvedMachines.map((m) => m.deviceCode).join(", ")}
+                                                        >
+                                                            {row.approvedMachines
+                                                                .slice(0, 3)
+                                                                .map((m) => m.deviceCode)
+                                                                .join(", ")}
+                                                            {row.approvedMachines.length > 3 && ` +${row.approvedMachines.length - 3}`}
+                                                        </div>
+                                                    )}
                                                     {row.approvalNote && <div className="mt-1 text-xs text-[#5e3f3a]">{row.approvalNote}</div>}
                                                 </div>
                                             ) : isDisk ? (
@@ -242,13 +282,21 @@ export default function UsbDeviceList() {
                                         <td className="hidden px-3 py-2 text-right text-sm text-[#191c1e] lg:table-cell">{row.sessionCount}</td>
                                         {canApprove && (
                                             <td className="whitespace-nowrap px-3 py-2 text-right text-sm">
-                                                {row.isApproved ? (
-                                                    <button
-                                                        onClick={() => setRevoking(row)}
-                                                        className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#7a0005]"
-                                                    >
-                                                        Thu hồi
-                                                    </button>
+                                                {isApproved ? (
+                                                    <div className="flex justify-end gap-3">
+                                                        <button
+                                                            onClick={() => openApprove(row)}
+                                                            className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
+                                                        >
+                                                            Sửa
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setRevoking(row)}
+                                                            className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#7a0005]"
+                                                        >
+                                                            Thu hồi
+                                                        </button>
+                                                    </div>
                                                 ) : isDisk && row.serialNumber ? (
                                                     <button
                                                         onClick={() => openApprove(row)}
@@ -288,6 +336,23 @@ export default function UsbDeviceList() {
                 <p className="text-sm text-[#5e3f3a]">
                     {approving?.friendlyName || `${approving?.vendorId}:${approving?.productId}`} · {approving?.serialNumber}
                 </p>
+                <label className="block">
+                    <span className={fieldLabelClassName}>Phạm vi</span>
+                    <StyledSelect value={scope} onChange={setScope} options={SCOPE_OPTIONS} triggerClassName={`${fieldClassName} pr-8`} />
+                </label>
+                {scope === "machines" && (
+                    <div>
+                        <span className={fieldLabelClassName}>Máy</span>
+                        <MultiSelect
+                            options={machineOptions ?? []}
+                            values={machineIds}
+                            onChange={setMachineIds}
+                            placeholder={machineOptions === null ? "Đang tải..." : "Tìm mã máy, tên máy"}
+                            disabled={machineOptions === null}
+                            maxVisible={100}
+                        />
+                    </div>
+                )}
                 <label className="block">
                     <span className={fieldLabelClassName}>Ghi chú</span>
                     <input

@@ -9,7 +9,13 @@ namespace Asset.Application.Interfaces.Service
 
         Task<PagedResponse<UsbDeviceDto>> GetDevicesPagedAsync(UsbDeviceFilterRequest filter);
 
-        Task SetApprovalAsync(int usbDeviceId, bool approve, string? note);
+        Task ApproveAsync(int usbDeviceId, UsbApprovalRequest request);
+
+        Task RevokeAsync(int usbDeviceId);
+
+        Task SetMachineApprovalAsync(int usbDeviceId, int deviceId, bool approve);
+
+        Task<List<UsbMachineOptionDto>> GetMachineOptionsAsync();
 
         Task<UsbPolicySettingDto> GetSettingAsync();
 

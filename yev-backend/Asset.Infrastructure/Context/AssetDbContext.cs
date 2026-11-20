@@ -47,6 +47,8 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<UsbFileEvent> UsbFileEvents { get; set; }
     public virtual DbSet<UsbAgent> UsbAgents { get; set; }
 
+    public virtual DbSet<UsbDeviceMachine> UsbDeviceMachines { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AuditTrail>(entity =>
@@ -380,6 +382,24 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.DeviceClass).HasMaxLength(50).HasDefaultValue(UsbDeviceClasses.DiskDrive);
             entity.Property(e => e.ApprovedBy).HasMaxLength(150);
             entity.Property(e => e.ApprovalNote).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<UsbDeviceMachine>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_UsbDeviceMachines");
+            entity.HasIndex(e => new { e.UsbDeviceId, e.DeviceId }, "IX_UsbDeviceMachines_UsbDevice_Device").IsUnique();
+            entity.HasIndex(e => e.DeviceId, "IX_UsbDeviceMachines_DeviceId");
+            entity.Property(e => e.ApprovedBy).HasMaxLength(150);
+
+            entity.HasOne(d => d.UsbDevice).WithMany(p => p.Machines)
+                .HasForeignKey(d => d.UsbDeviceId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_UsbDeviceMachines_UsbDevices_UsbDeviceId");
+
+            entity.HasOne(d => d.Device).WithMany()
+                .HasForeignKey(d => d.DeviceId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_UsbDeviceMachines_ThietBis_DeviceId");
         });
 
         modelBuilder.Entity<UsbAgent>(entity =>

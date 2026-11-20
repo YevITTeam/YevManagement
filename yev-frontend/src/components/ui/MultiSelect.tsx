@@ -18,6 +18,8 @@ interface MultiSelectProps {
     onChange: (values: number[]) => void;
     placeholder: string;
     disabled?: boolean;
+    // Caps rendered rows for lists of thousands; typing narrows the rest.
+    maxVisible?: number;
 }
 
 interface PanelPosition {
@@ -32,7 +34,7 @@ const triggerClassName =
 
 // Searchable multi-select: ticking an option keeps the panel open, and every selected option is
 // shown as a removable chip under the trigger (same look as the IP chips in DeviceForm).
-export function MultiSelect({ options, values, onChange, placeholder, disabled }: MultiSelectProps) {
+export function MultiSelect({ options, values, onChange, placeholder, disabled, maxVisible }: MultiSelectProps) {
     const [query, setQuery] = useState("");
     const [isOpen, setIsOpen] = useState(false);
     const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
@@ -157,7 +159,10 @@ export function MultiSelect({ options, values, onChange, placeholder, disabled }
                                     value={query}
                                     onChange={(e) => setQuery(e.target.value)}
                                     onKeyDown={(e) => {
-                                        if (e.key === "Escape") close();
+                                        if (e.key !== "Escape") return;
+                                        // Dialogs close on a window-level Escape; this one should only close the panel.
+                                        e.stopPropagation();
+                                        close();
                                     }}
                                     placeholder="Tìm kiếm…"
                                     className="h-8 w-full rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
@@ -178,7 +183,7 @@ export function MultiSelect({ options, values, onChange, placeholder, disabled }
                                 {filtered.length === 0 ? (
                                     <li className="px-3 py-4 text-center text-sm text-[#8a8f94]">Không tìm thấy kết quả</li>
                                 ) : (
-                                    filtered.map((opt) => {
+                                    filtered.slice(0, maxVisible).map((opt) => {
                                         const isSelected = values.includes(opt.value);
                                         return (
                                             <li
@@ -207,9 +212,11 @@ export function MultiSelect({ options, values, onChange, placeholder, disabled }
                                 )}
                             </ul>
 
-                            {normalizedQuery !== "" && (
+                            {(normalizedQuery !== "" || (maxVisible !== undefined && filtered.length > maxVisible)) && (
                                 <div className="shrink-0 border-t border-[#f1f5f9] px-3 py-1.5 text-right text-xs text-[#8a8f94]">
-                                    {filtered.length} kết quả
+                                    {maxVisible !== undefined && filtered.length > maxVisible
+                                        ? `Hiện ${maxVisible} / ${filtered.length}, gõ để lọc`
+                                        : `${filtered.length} kết quả`}
                                 </div>
                             )}
                         </div>,

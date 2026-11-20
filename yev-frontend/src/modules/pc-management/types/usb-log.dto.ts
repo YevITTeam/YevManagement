@@ -50,6 +50,8 @@ export interface UsbMachineUsbDto {
     capacityBytes: number | null;
     deviceClass: string;
     isApproved: boolean;
+    // Approved for this PC only; false when the PC matches no asset device.
+    approvedHere: boolean;
     driveLetters: string[];
     sessionCount: number;
     fileEventCount: number;
@@ -74,6 +76,21 @@ export interface UsbDeviceDto {
     lastSeenAt: string;
     sessionCount: number;
     lastMachineName: string | null;
+    // Per-machine approvals; empty when isApproved (every machine) or not approved.
+    approvedMachines: { deviceId: number; deviceCode: string }[];
+}
+
+export interface UsbMachineOptionDto {
+    id: number;
+    deviceCode: string;
+    deviceName: string;
+}
+
+// allMachines=false replaces the per-machine list with exactly deviceIds.
+export interface UsbApprovalRequest {
+    note: string | null;
+    allMachines: boolean;
+    deviceIds: number[];
 }
 
 // mode: 0 Off, 1 Audit, 2 Enforce (only for enforceMachines when that list is not empty).

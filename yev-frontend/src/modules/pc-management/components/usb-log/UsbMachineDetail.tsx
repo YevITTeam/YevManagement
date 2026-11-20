@@ -38,7 +38,7 @@ export default function UsbMachineDetail({ machineName, deviceId }: UsbMachineDe
                 )}
             </div>
 
-            <UsbMachineUsbList machineName={machineName} />
+            <UsbMachineUsbList machineName={machineName} deviceId={deviceId} />
         </div>
     );
 }

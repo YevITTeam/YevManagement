@@ -4,8 +4,12 @@ import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "react-toastify";
 
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { Badge } from "@/components/ui/Badge";
 import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
+import { getApiErrorMessage } from "@/lib/apiError";
+import { useAuth } from "@/modules/auth/context/AuthContext";
+import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbMachineUsbDto } from "@/modules/pc-management/types/usb-log.dto";
@@ -22,13 +26,25 @@ const SORT_KEYS: Record<string, (row: UsbMachineUsbDto) => string | number> = {
     lastConnectedAt: (row) => row.lastConnectedAt,
 };
 
+interface UsbMachineUsbListProps {
+    machineName: string;
+    // Asset device of this PC; without it per-machine approval is not possible.
+    deviceId?: number;
+}
+
 // One row per USB ever plugged into the PC; expanding it lists that USB's sessions.
-export default function UsbMachineUsbList({ machineName }: { machineName: string }) {
+export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineUsbListProps) {
+    const { user } = useAuth();
+    const canApprove = hasPermission(user, "Asset.UsbLog.Approve") && deviceId !== undefined;
+    const columnCount = canApprove ? 6 : 5;
+
     const [rows, setRows] = useState<UsbMachineUsbDto[]>([]);
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [sort, setSort] = useState<SortState>(NO_SORT);
+    const [revoking, setRevoking] = useState<UsbMachineUsbDto | null>(null);
+    const [busy, setBusy] = useState(false);
 
-    const { isLoading, error } = useFetchEffect(
+    const { isLoading, error, refetch } = useFetchEffect(
         () => UsbLogApi.getMachineUsbs(machineName),
         [machineName],
         (result) => setRows(result),
@@ -43,6 +59,23 @@ export default function UsbMachineUsbList({ machineName }: { machineName: string
         return [...rows].sort((a, b) => (key(a) < key(b) ? -direction : key(a) > key(b) ? direction : 0));
     }, [rows, sort]);
 
+    const setHere = async (row: UsbMachineUsbDto, approve: boolean) => {
+        if (deviceId === undefined) return;
+        setBusy(true);
+        try {
+            if (approve) await UsbLogApi.approveMachine(row.usbDeviceId, deviceId);
+            else await UsbLogApi.revokeMachine(row.usbDeviceId, deviceId);
+            toast.success(approve ? "Đã cấp phép USB cho máy này." : "Đã thu hồi cấp phép USB ở máy này.");
+            setRevoking(null);
+            refetch();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, approve ? "Cấp phép USB thất bại." : "Thu hồi cấp phép USB thất bại."));
+        } finally {
+            setBusy(false);
+        }
+    };
+
     return (
         <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
             {error && <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
@@ -52,23 +85,24 @@ export default function UsbMachineUsbList({ machineName }: { machineName: string
                     <thead>
                         <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
                             <th className="w-8 px-3 py-2" />
-                            <SortableTh label="USB" sortKey="usb" sort={sort} onSort={setSort} className="px-3 py-2" />
-                            <SortableTh label="Lần cắm" sortKey="sessionCount" sort={sort} onSort={setSort} className="px-3 py-2" />
-                            <SortableTh label="File" sortKey="fileEventCount" sort={sort} onSort={setSort} className="px-3 py-2" />
-                            <SortableTh label="Cắm gần nhất" sortKey="lastConnectedAt" sort={sort} onSort={setSort} className="px-3 py-2" />
+                            <SortableTh label="USB" sortKey="usb" sort={sort} onSort={setSort} className="whitespace-nowrap px-3 py-2" />
+                            <SortableTh label="Lần cắm" sortKey="sessionCount" sort={sort} onSort={setSort} className="whitespace-nowrap px-3 py-2" />
+                            <SortableTh label="File" sortKey="fileEventCount" sort={sort} onSort={setSort} className="whitespace-nowrap px-3 py-2" />
+                            <SortableTh label="Cắm gần nhất" sortKey="lastConnectedAt" sort={sort} onSort={setSort} className="whitespace-nowrap px-3 py-2" />
+                            {canApprove && <th className="px-3 py-2 text-right">Thao tác</th>}
                         </tr>
                     </thead>
                     <tbody>
                         {isLoading && rows.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                <td colSpan={columnCount} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                     Đang tải dữ liệu...
                                 </td>
                             </tr>
                         )}
                         {!isLoading && rows.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                <td colSpan={columnCount} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                     Không có dữ liệu.
                                 </td>
                             </tr>
@@ -76,7 +110,13 @@ export default function UsbMachineUsbList({ machineName }: { machineName: string
                         {sorted.map((row) => {
                             const expanded = expandedId === row.usbDeviceId;
                             // Approval is the current state; otherwise show what the agent did on the latest plug-in.
-                            const policy = row.isApproved ? POLICY_META[1] : row.lastPolicyResult && row.lastPolicyResult !== 1 ? POLICY_META[row.lastPolicyResult] : undefined;
+                            const policy =
+                                row.isApproved || row.approvedHere
+                                    ? { ...POLICY_META[1], title: row.isApproved ? "Cấp phép cho mọi máy" : "Cấp phép riêng cho máy này" }
+                                    : row.lastPolicyResult && row.lastPolicyResult !== 1
+                                      ? POLICY_META[row.lastPolicyResult]
+                                      : undefined;
+                            const approvable = row.deviceClass === "DiskDrive" && row.serialNumber !== "" && !row.isApproved;
                             return (
                                 <Fragment key={row.usbDeviceId}>
                                     <tr
@@ -126,10 +166,32 @@ export default function UsbMachineUsbList({ machineName }: { machineName: string
                                         <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.sessionCount}</td>
                                         <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.fileEventCount}</td>
                                         <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{formatDateTime(row.lastConnectedAt)}</td>
+                                        {canApprove && (
+                                            <td className="whitespace-nowrap px-3 py-2 text-right text-sm" onClick={(event) => event.stopPropagation()}>
+                                                {approvable &&
+                                                    (row.approvedHere ? (
+                                                        <button
+                                                            onClick={() => setRevoking(row)}
+                                                            disabled={busy}
+                                                            className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
+                                                        >
+                                                            Thu hồi ở máy này
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => setHere(row, true)}
+                                                            disabled={busy}
+                                                            className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
+                                                        >
+                                                            Cấp cho máy này
+                                                        </button>
+                                                    ))}
+                                            </td>
+                                        )}
                                     </tr>
                                     {expanded && (
                                         <tr className="border-b border-[#f1f5f9] bg-[#f8fafc]">
-                                            <td colSpan={5} className="px-3 py-3">
+                                            <td colSpan={columnCount} className="px-3 py-3">
                                                 <UsbLogList machineName={machineName} usbDeviceId={row.usbDeviceId} />
                                             </td>
                                         </tr>
@@ -140,6 +202,19 @@ export default function UsbMachineUsbList({ machineName }: { machineName: string
                     </tbody>
                 </table>
             </div>
+
+            <ConfirmDialog
+                isOpen={revoking !== null}
+                title="Thu hồi cấp phép"
+                message={`USB ${revoking ? usbName(revoking) : ""} sẽ bị chặn ghi lại trên máy ${machineName} khi đang ở chế độ Chặn.`}
+                onApprove={async () => {
+                    if (revoking) await setHere(revoking, false);
+                }}
+                onDenied={() => setRevoking(null)}
+                approveLabel="Thu hồi"
+                deniedLabel="Huỷ"
+                loading={busy}
+            />
         </section>
     );
 }
