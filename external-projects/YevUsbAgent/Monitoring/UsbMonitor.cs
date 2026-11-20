@@ -41,7 +41,11 @@ public sealed partial class UsbMonitor : BackgroundService
         public UsbDrive? Drive { get; init; }
         public DriveSession? Watcher { get; set; }
         public int? PolicyResult { get; set; }
+        // Set while a block waits for open files to close; after BlockGrace the volume is locked anyway.
+        public DateTime? BlockDeferredSince { get; set; }
     }
+
+    private static readonly TimeSpan BlockGrace = TimeSpan.FromMinutes(1);
 
     public UsbMonitor(EventQueue queue, PolicyStore policy, IOptions<AgentOptions> options, ILogger<UsbMonitor> logger)
     {
@@ -146,6 +150,9 @@ public sealed partial class UsbMonitor : BackgroundService
             : !drives.ContainsKey(k)).ToList();
         foreach (var key in gone) Close(key);
 
+        foreach (var tracked in _sessions.Values.Where(t => t.Drive != null && t.Watcher == null))
+            tracked.Watcher = StartWatcher(tracked.SessionId, tracked.Drive!);
+
         if (_policy.Revision != _appliedRevision || _reevaluationPending) Reevaluate(drives.Values);
     }
 
@@ -240,7 +247,8 @@ public sealed partial class UsbMonitor : BackgroundService
         _logger.LogInformation("Device connected: {Name} ({Class})", phone.Name, phone.DeviceClass);
     }
 
-    // Policy changed (approved, revoked, mode switched): bring plugged-in disks in line. Disks with open files are retried next poll.
+    // Policy changed (approved, revoked, mode switched): bring plugged-in disks in line. Re-run every poll while a
+    // block waits for the user's open files; unlocking never waits, a read-only volume has nothing unsaved to lose.
     private void Reevaluate(IReadOnlyCollection<UsbDrive> present)
     {
         _appliedRevision = _policy.Revision;
@@ -253,19 +261,36 @@ public sealed partial class UsbMonitor : BackgroundService
             var decision = Decide(tracked.Drive.Identity);
             if (decision == tracked.PolicyResult) continue;
 
-            var (done, result, remounted) = Enforce(tracked.Drive, decision, present, force: false);
+            var blocking = decision == PolicyResults.Blocked;
+            var force = !blocking || DateTime.UtcNow - tracked.BlockDeferredSince > BlockGrace;
+
+            // Our own watchers keep the volumes open and would make the volume lock fail every time.
+            var touchesDisk = blocking || _locked.Contains(tracked.Drive.Identity.Key);
+            var sameDisk = touchesDisk ? _sessions.Values.Where(t => t.Drive?.DiskIndex == tracked.Drive.DiskIndex).ToList() : new List<Tracked>();
+            foreach (var t in sameDisk)
+            {
+                t.Watcher?.Dispose();
+                t.Watcher = null;
+            }
+
+            var (done, result, _) = Enforce(tracked.Drive, decision, present, force);
+
+            foreach (var t in sameDisk) t.Watcher = StartWatcher(t.SessionId, t.Drive!);
+
             if (!done)
             {
                 _reevaluationPending = true;
+                if (tracked.BlockDeferredSince == null)
+                {
+                    tracked.BlockDeferredSince = DateTime.UtcNow;
+                    _logger.LogInformation("USB {Letter} has open files; blocking in {Seconds}s.", tracked.Drive.Letter, BlockGrace.TotalSeconds);
+                    UserSession.ShowToast("USB sắp chuyển sang chỉ đọc",
+                        $"Ổ {tracked.Drive.Letter} chưa được cấp phép ghi. Hãy lưu và đóng các file đang mở trên ổ, sau 1 phút ổ sẽ chỉ đọc được.", _logger);
+                }
                 continue;
             }
 
-            if (remounted)
-            {
-                tracked.Watcher?.Dispose();
-                tracked.Watcher = StartWatcher(tracked.SessionId, tracked.Drive);
-            }
-
+            tracked.BlockDeferredSince = null;
             tracked.PolicyResult = result;
             _queue.Enqueue(new AgentEvent { Type = EventTypes.Policy, SessionId = tracked.SessionId, PolicyResult = result });
             _logger.LogInformation("USB {Letter} policy is now {Result}", tracked.Drive.Letter, result);
@@ -273,11 +298,20 @@ public sealed partial class UsbMonitor : BackgroundService
         }
     }
 
-    private DriveSession StartWatcher(Guid sessionId, UsbDrive drive)
+    // Null when the volume is briefly unavailable (just dismounted); Refresh retries on the next poll.
+    private DriveSession? StartWatcher(Guid sessionId, UsbDrive drive)
     {
-        var session = new DriveSession(sessionId, drive.Letter + "\\", _queue, _logger);
-        session.Start();
-        return session;
+        try
+        {
+            var session = new DriveSession(sessionId, drive.Letter + "\\", _queue, _logger);
+            session.Start();
+            return session;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning("Could not watch {Letter}: {Message}", drive.Letter, ex.Message);
+            return null;
+        }
     }
 
     private void NotifyBlocked(UsbDrive drive)
