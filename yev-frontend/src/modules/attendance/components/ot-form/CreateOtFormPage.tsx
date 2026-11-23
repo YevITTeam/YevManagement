@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, Car, Check, Printer, RefreshCw, Undo2, UserMinus, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
 
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
@@ -80,10 +80,24 @@ function isEmployeeTimeOutOfRange(formStart: string, formEnd: string, start: str
     return offset >= formLength || length === 0 || offset + length > formLength;
 }
 
-function addOneDay(date: string): string {
+function addOneDay(date: string, days = 1): string {
     const next = new Date(`${date}T00:00:00Z`);
-    next.setUTCDate(next.getUTCDate() + 1);
+    next.setUTCDate(next.getUTCDate() + days);
     return next.toISOString().slice(0, 10);
+}
+
+// Company rule for OT on a non-working day: sign with the workshop head by that week's Wednesday for Sat/Sun,
+// otherwise 3 working days before; a non-working Wednesday moves back to the previous working day.
+function holidaySignDeadline(offDate: string, isOff: (value: string) => boolean): string {
+    const weekday = new Date(`${offDate}T00:00:00Z`).getUTCDay();
+    const weekend = weekday === 0 || weekday === 6;
+    let deadline = weekend ? addOneDay(offDate, weekday === 6 ? -3 : -4) : offDate;
+    // The cap guards against a calendar that marks a whole stretch as non-working.
+    for (let left = weekend ? 0 : 3, guard = 0; guard < 60 && (left > 0 || isOff(deadline)); guard++) {
+        deadline = addOneDay(deadline, -1);
+        if (left > 0 && !isOff(deadline)) left--;
+    }
+    return deadline;
 }
 
 type AccumulationKind = "Daily" | "Monthly" | "Yearly";
@@ -226,6 +240,7 @@ interface CreateOtFormPageProps {
 export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const t = useTranslations("Attendance.CreateOtForm");
     const tCommon = useTranslations("Common");
+    const locale = useLocale();
     const router = useRouter();
     const { user } = useAuth();
     const isEditMode = otFormId !== undefined;
@@ -261,10 +276,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const isOvernightForm = isOvernight(startTime, endTime);
     const nextDate = date ? addOneDay(date) : "";
     const spansNewYear = isOvernightForm && Boolean(date) && nextDate.slice(0, 4) !== date.slice(0, 4);
-    useFetchEffect(
+    // A January form's signing deadline can fall in the previous year.
+    const needsPrevYear = date.slice(5, 7) === "01";
+    const { isLoading: isCalendarLoading } = useFetchEffect(
         async () => {
             if (!calendarYear || !workshopKey) return [];
-            const years = spansNewYear ? [calendarYear, calendarYear + 1] : [calendarYear];
+            const years = [...(needsPrevYear ? [calendarYear - 1] : []), calendarYear, ...(spansNewYear ? [calendarYear + 1] : [])];
             const lists = await Promise.all(
                 workshopKey.split(",").map(Number).flatMap((workshopId) =>
                     years.map(async (year) => (await WorkCalendarApi.getByYear(workshopId, year)).map((day) => ({ ...day, workshopId })))
@@ -272,7 +289,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             );
             return lists.flat();
         },
-        [calendarYear, spansNewYear, workshopKey],
+        [calendarYear, spansNewYear, needsPrevYear, workshopKey],
         setCalendarDays,
         t("workCalendarLoadError")
     );
@@ -317,6 +334,24 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const [manualMealTicketKeys, setManualMealTicketKeys] = useState<Record<number, boolean>>({});
 
     const { setting } = useAttendanceSetting();
+
+    // Only TH2 forms on create, after the calendar loads (the Sunday fallback would mislead) and once the date is in
+    // the allowed range, so half-typed years like 0002 never pop the dialog. Earliest deadline wins across workshops.
+    const holidayDeadline =
+        isEditMode || isCalendarLoading || !date || date < getTodayStr(-setting.backdateDays)
+            ? null
+            : ([...new Set(groupIds.map(workshopIdOfGroup).filter(Boolean))]
+                  .filter(touchesNonWorkingDayOf)
+                  .map((workshopId) =>
+                      holidaySignDeadline(isNonWorkingDate(date, workshopId) ? date : nextDate, (value) => isNonWorkingDate(value, workshopId))
+                  )
+                  .sort()[0] ?? null);
+    const today = getTodayStr();
+    const holidayDeadlineKey = `${date}|${holidayDeadline}`;
+    const [dismissedDeadlineKey, setDismissedDeadlineKey] = useState("");
+    const isDeadlineDialogOpen = holidayDeadline !== null && today >= holidayDeadline && dismissedDeadlineKey !== holidayDeadlineKey;
+    const formatDeadline = (value: string) =>
+        `${new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`))}, ${value.slice(8, 10)}/${value.slice(5, 7)}`;
 
     // New rows default to "eat later" ticked (didEat = false, no deduction).
     const defaultDidEatForNewEmployee = false;
@@ -1053,6 +1088,18 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     {t("endTimeEqualsStartError")}
                                 </p>
                             )}
+                            {holidayDeadline && (
+                                <p
+                                    role="status"
+                                    className={`mt-2 flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                                        today > holidayDeadline ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]" : "border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]"
+                                    }`}
+                                >
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                    {t(today > holidayDeadline ? "holidaySignOverdue" : "holidaySignDeadline", { deadline: formatDeadline(holidayDeadline) })}
+                                    <InfoTooltip text={`${t("holidaySignRuleWeekend")} ${t("holidaySignRuleOther")} ${t("holidaySignReason")}`} />
+                                </p>
+                            )}
                         </div>
 
                         <label className="block sm:col-span-2">
@@ -1752,6 +1799,36 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                     </button>
                 </div>
             </form>
+
+            {isDeadlineDialogOpen && holidayDeadline && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center" onKeyDown={(e) => e.key === "Escape" && setDismissedDeadlineKey(holidayDeadlineKey)}>
+                    <div className="fixed inset-0 bg-black/40" onClick={() => setDismissedDeadlineKey(holidayDeadlineKey)} />
+                    <div role="alertdialog" aria-modal="true" aria-labelledby="holiday-sign-title" className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
+                        <h3 id="holiday-sign-title" className="mb-3 flex items-center gap-2 text-lg font-semibold text-[#191c1e]">
+                            <AlertTriangle className="h-5 w-5 shrink-0 text-[#930006]" />
+                            {t("holidaySignTitle")}
+                        </h3>
+                        <p className="mb-3 text-sm font-semibold text-[#930006]">
+                            {t(today > holidayDeadline ? "holidaySignOverdue" : "holidaySignDueToday", { deadline: formatDeadline(holidayDeadline) })}
+                        </p>
+                        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm text-[#5e3f3a]">
+                            <li>{t("holidaySignRuleWeekend")}</li>
+                            <li>{t("holidaySignRuleOther")}</li>
+                        </ul>
+                        <p className="mb-5 text-sm text-[#5e3f3a]">{t("holidaySignReason")}</p>
+                        <div className="flex justify-end">
+                            <button
+                                type="button"
+                                autoFocus
+                                onClick={() => setDismissedDeadlineKey(holidayDeadlineKey)}
+                                className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                            >
+                                {t("holidaySignAck")}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <SecondaryPasswordDialog
                 isOpen={isPasswordDialogOpen}
