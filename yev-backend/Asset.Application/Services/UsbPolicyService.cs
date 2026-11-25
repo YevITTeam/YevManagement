@@ -66,6 +66,20 @@ namespace Asset.Application.Services
         {
             var now = DateTime.UtcNow.AddHours(7);
             var agent = await _unitOfWork.UsbAgents.FirstOrDefaultAsync(a => a.MachineName == machineName);
+            if (agent != null && now - agent.LastSeenAt < HeartbeatInterval && agent.AgentVersion == version
+                && (windowsUser == null || agent.WindowsUser == windowsUser))
+                return;
+
+            // Sessions opened before this agent went silent or was (re)installed can never get their unplug event
+            // (a reinstall wipes the agent's session file); the agent's own sessions all start after the cutoff.
+            var window = UsbLogService.AgentLiveWindow;
+            var cutoff = agent == null ? now - window
+                : now - agent.LastSeenAt >= window ? agent.LastSeenAt
+                : agent.FirstSeenAt - window;
+            foreach (var stale in await _unitOfWork.UsbSessions.FindAsync(
+                         s => s.MachineName == machineName && s.DisconnectedAt == null && s.ConnectedAt < cutoff))
+                stale.DisconnectedAt = cutoff;
+
             if (agent == null)
             {
                 await _unitOfWork.UsbAgents.AddAsync(new UsbAgent
@@ -77,14 +91,12 @@ namespace Asset.Application.Services
                     LastSeenAt = now
                 });
             }
-            else if (now - agent.LastSeenAt >= HeartbeatInterval || agent.AgentVersion != version
-                     || (windowsUser != null && agent.WindowsUser != windowsUser))
+            else
             {
                 agent.AgentVersion = version;
                 agent.WindowsUser = windowsUser ?? agent.WindowsUser;
                 agent.LastSeenAt = now;
             }
-            else return;
 
             await _unitOfWork.SaveChangesAsync();
         }

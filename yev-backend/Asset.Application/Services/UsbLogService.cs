@@ -17,7 +17,7 @@ namespace Asset.Application.Services
 
         // Heartbeat rows are written every 5 minutes; 15 minutes of silence means the PC is off or the agent is gone,
         // so its open sessions can no longer be trusted as "plugged in".
-        private static readonly TimeSpan AgentLiveWindow = TimeSpan.FromMinutes(15);
+        internal static readonly TimeSpan AgentLiveWindow = TimeSpan.FromMinutes(15);
 
         public UsbLogService(IAssetUnitOfWork unitOfWork) : base(unitOfWork) { }
 
