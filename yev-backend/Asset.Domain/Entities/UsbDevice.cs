@@ -14,6 +14,9 @@ public partial class UsbDevice
 
     public string? FriendlyName { get; set; }
 
+    // Admin-given name ("Token ký số kế toán"); FriendlyName is the hardware model and repeats across sticks.
+    public string? Alias { get; set; }
+
     public long? CapacityBytes { get; set; }
 
     public DateTime FirstSeenAt { get; set; }

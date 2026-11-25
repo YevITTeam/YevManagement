@@ -26,6 +26,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public string ProductId { get; set; } = null!;
         public string SerialNumber { get; set; } = null!;
         public string? FriendlyName { get; set; }
+        public string? Alias { get; set; }
         public long? CapacityBytes { get; set; }
         public string DeviceClass { get; set; } = null!;
         public bool IsApproved { get; set; }
@@ -78,6 +79,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public string ProductId { get; set; } = null!;
         public string SerialNumber { get; set; } = null!;
         public string? FriendlyName { get; set; }
+        public string? UsbAlias { get; set; }
         public long? CapacityBytes { get; set; }
         public string? DriveLetter { get; set; }
         public string? VolumeLabel { get; set; }

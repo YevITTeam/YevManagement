@@ -23,6 +23,7 @@ const ENDPOINTS = {
         approve: (id: number) => `/UsbLog/devices/${id}/approve`,
         revoke: (id: number) => `/UsbLog/devices/${id}/revoke`,
         machine: (id: number, deviceId: number) => `/UsbLog/devices/${id}/machines/${deviceId}`,
+        alias: (id: number) => `/UsbLog/devices/${id}/alias`,
         machineOptions: "/UsbLog/machine-options",
         policy: "/UsbLog/policy",
         getAgents: "/UsbLog/agents",
@@ -137,6 +138,10 @@ export const UsbLogApi = {
     },
     approve: async (id: number, body: UsbApprovalRequest) => {
         const response = await api.post<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.approve(id), body);
+        return response.data;
+    },
+    setAlias: async (id: number, alias: string) => {
+        const response = await api.put<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.alias(id), { alias: alias || null });
         return response.data;
     },
     approveMachine: async (id: number, deviceId: number) => {

@@ -212,12 +212,16 @@ namespace Asset.Application.Services
                     LastConnectedAt = g.Max(s => s.ConnectedAt),
                     IsConnectedNow = g.Any(s => s.DisconnectedAt == null),
                     UnpermittedCount = g.Count(s => s.WasPermitted == false),
-                    // Approving a USB clears its past blocks from the badge; only still-unapproved ones count.
-                    BlockedCount = g.Count(s => s.PolicyResult == (int)UsbPolicyResult.Blocked && !s.UsbDevice.IsApproved)
+                    // Only USBs blocked right now; past blocks stay visible per USB on the machine page.
+                    BlockedCount = g.Count(s => s.PolicyResult == (int)UsbPolicyResult.Blocked && s.DisconnectedAt == null)
                 });
 
             var live = await GetLiveMachinesAsync();
-            foreach (var m in groups) m.IsConnectedNow &= live.Contains(m.MachineName);
+            foreach (var m in groups)
+            {
+                m.IsConnectedNow &= live.Contains(m.MachineName);
+                if (!m.IsConnectedNow) m.BlockedCount = 0;
+            }
 
             var machines = SortMachines(groups.Where(m => !filter.ConnectedNowOnly || m.IsConnectedNow), filter.SortBy, filter.SortDesc);
 
@@ -253,7 +257,8 @@ namespace Asset.Application.Services
                     || (s.WindowsUser != null && s.WindowsUser.Contains(keyword))
                     || (s.Device != null && s.Device.DeviceCode.Contains(keyword))
                     || s.UsbDevice.SerialNumber.Contains(keyword)
-                    || (s.UsbDevice.FriendlyName != null && s.UsbDevice.FriendlyName.Contains(keyword)));
+                    || (s.UsbDevice.FriendlyName != null && s.UsbDevice.FriendlyName.Contains(keyword))
+                    || (s.UsbDevice.Alias != null && s.UsbDevice.Alias.Contains(keyword)));
             }
 
             if (filter.FromDate.HasValue)
@@ -291,6 +296,7 @@ namespace Asset.Application.Services
                     ProductId = s.UsbDevice.ProductId,
                     SerialNumber = s.UsbDevice.SerialNumber,
                     FriendlyName = s.UsbDevice.FriendlyName,
+                    UsbAlias = s.UsbDevice.Alias,
                     CapacityBytes = s.UsbDevice.CapacityBytes,
                     DriveLetter = s.DriveLetter,
                     VolumeLabel = s.VolumeLabel,
@@ -340,6 +346,7 @@ namespace Asset.Application.Services
                 row.ProductId = device.ProductId;
                 row.SerialNumber = device.SerialNumber;
                 row.FriendlyName = device.FriendlyName;
+                row.Alias = device.Alias;
                 row.CapacityBytes = device.CapacityBytes;
                 row.DeviceClass = device.DeviceClass;
                 row.IsApproved = device.IsApproved;
@@ -384,7 +391,7 @@ namespace Asset.Application.Services
             ("disconnectedAt", s => s.DisconnectedAt),
             ("machineName", s => s.MachineName),
             ("windowsUser", s => s.WindowsUser),
-            ("usb", s => s.UsbDevice.FriendlyName),
+            ("usb", s => s.UsbDevice.Alias ?? s.UsbDevice.FriendlyName),
             ("fileEventCount", s => s.FileEvents.Count));
 
         private static readonly Dictionary<string, Expression<Func<UsbFileEvent, object?>>> FileColumns = UsbSort.Columns<UsbFileEvent>(

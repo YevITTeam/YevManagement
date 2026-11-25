@@ -191,7 +191,7 @@ export default function UsbMachineList() {
                                             )}
                                             {row.blockedCount > 0 && (
                                                 <span
-                                                    title="Có USB chưa cấp phép đã bị chặn ghi trên máy này"
+                                                    title="Máy đang cắm USB bị chặn ghi"
                                                     className="shrink-0 rounded-full border border-[#e9bcb6] bg-[#fff4f2] px-2 py-0.5 text-[10px] font-semibold text-[#930006]">
                                                     Bị chặn ghi
                                                 </span>

@@ -11,6 +11,11 @@ export const POLICY_META: Record<number, { label: string; variant: "success" | "
     4: { label: "Chặn thất bại", variant: "danger", title: "Agent không đặt được chế độ chỉ đọc, xem Event Viewer trên máy" },
 };
 
+// The admin-given alias wins over the hardware model name, which repeats across identical sticks.
+export function usbLabel(usb: { alias?: string | null; friendlyName: string | null; vendorId: string; productId: string }) {
+    return usb.alias || usb.friendlyName || `${usb.vendorId}:${usb.productId}`;
+}
+
 export const DEVICE_CLASS_LABELS: Record<string, string> = {
     DiskDrive: "Ổ lưu trữ",
     WPD: "Điện thoại",

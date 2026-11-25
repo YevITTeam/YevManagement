@@ -23,6 +23,7 @@ export interface UsbSessionDto {
     productId: string;
     serialNumber: string;
     friendlyName: string | null;
+    usbAlias: string | null;
     capacityBytes: number | null;
     driveLetter: string | null;
     volumeLabel: string | null;
@@ -47,6 +48,7 @@ export interface UsbMachineUsbDto {
     productId: string;
     serialNumber: string;
     friendlyName: string | null;
+    alias: string | null;
     capacityBytes: number | null;
     deviceClass: string;
     isApproved: boolean;
@@ -66,6 +68,8 @@ export interface UsbDeviceDto {
     productId: string;
     serialNumber: string;
     friendlyName: string | null;
+    // Admin-given name; shown instead of friendlyName when set.
+    alias: string | null;
     capacityBytes: number | null;
     deviceClass: string;
     isApproved: boolean;

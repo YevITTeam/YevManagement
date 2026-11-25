@@ -11,7 +11,7 @@ import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh"
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Badge } from "@/components/ui/Badge";
 import UsbSessionFiles from "./UsbSessionFiles";
-import { DEVICE_CLASS_LABELS, POLICY_META, formatBytes, formatDateTime } from "./usb-log-format";
+import { DEVICE_CLASS_LABELS, POLICY_META, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 
 const PAGE_SIZE = 20;
 
@@ -229,14 +229,14 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                         <td className="hidden lg:table-cell px-3 py-2 text-sm text-[#5e3f3a]">{row.windowsUser || "-"}</td>
                                         <td className="px-3 py-2 text-sm text-[#191c1e]">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <span>{usbDeviceId === undefined ? row.friendlyName || `${row.vendorId}:${row.productId}` : row.driveLetter || "-"}</span>
+                                                <span>{usbDeviceId === undefined ? usbLabel({ ...row, alias: row.usbAlias }) : row.driveLetter || "-"}</span>
                                                 {row.policyResult !== null && POLICY_META[row.policyResult] && (
                                                     <span title={POLICY_META[row.policyResult].title}>
                                                         <Badge variant={POLICY_META[row.policyResult].variant}>{POLICY_META[row.policyResult].label}</Badge>
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className={usbDeviceId === undefined ? "text-xs text-[#5e3f3a]" : "hidden"}>
+                                            <div className={usbDeviceId === undefined ? "break-all text-xs text-[#5e3f3a]" : "hidden"}>
                                                 {[
                                                     row.deviceClass === "DiskDrive" ? null : DEVICE_CLASS_LABELS[row.deviceClass] ?? row.deviceClass,
                                                     row.driveLetter,

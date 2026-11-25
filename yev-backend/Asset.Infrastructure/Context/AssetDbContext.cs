@@ -379,6 +379,7 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.ProductId).HasMaxLength(8);
             entity.Property(e => e.SerialNumber).HasMaxLength(100);
             entity.Property(e => e.FriendlyName).HasMaxLength(255);
+            entity.Property(e => e.Alias).HasMaxLength(100);
             entity.Property(e => e.DeviceClass).HasMaxLength(50).HasDefaultValue(UsbDeviceClasses.DiskDrive);
             entity.Property(e => e.ApprovedBy).HasMaxLength(150);
             entity.Property(e => e.ApprovalNote).HasMaxLength(255);

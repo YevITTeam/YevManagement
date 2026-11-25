@@ -141,6 +141,7 @@ namespace Asset.Application.Services
                 var keyword = filter.Keyword.Trim();
                 query = query.Where(u => u.SerialNumber.Contains(keyword)
                     || (u.FriendlyName != null && u.FriendlyName.Contains(keyword))
+                    || (u.Alias != null && u.Alias.Contains(keyword))
                     || u.VendorId.Contains(keyword) || u.ProductId.Contains(keyword)
                     || (u.ApprovalNote != null && u.ApprovalNote.Contains(keyword)));
             }
@@ -153,7 +154,7 @@ namespace Asset.Application.Services
 
             var sessions = _unitOfWork.UsbSessions.GetQueryable(false);
             var columns = UsbSort.Columns<UsbDevice>(
-                ("name", u => u.FriendlyName),
+                ("name", u => u.Alias ?? u.FriendlyName),
                 ("isApproved", u => u.IsApproved ? 2 : u.Machines.Any() ? 1 : 0),
                 ("lastSeenAt", u => u.LastSeenAt),
                 ("sessionCount", u => sessions.Count(s => s.UsbDeviceId == u.Id)));
@@ -168,6 +169,7 @@ namespace Asset.Application.Services
                     ProductId = u.ProductId,
                     SerialNumber = u.SerialNumber,
                     FriendlyName = u.FriendlyName,
+                    Alias = u.Alias,
                     CapacityBytes = u.CapacityBytes,
                     DeviceClass = u.DeviceClass,
                     IsApproved = u.IsApproved,
@@ -213,6 +215,14 @@ namespace Asset.Application.Services
             _unitOfWork.UsbDevices.Update(usb);
             await _unitOfWork.SaveChangesAsync();
             _snapshot = null;
+        }
+
+        public async Task SetAliasAsync(int usbDeviceId, string? alias)
+        {
+            var usb = (await _unitOfWork.UsbDevices.GetByIdAsync(usbDeviceId)).OrThrowNotFound("Thiết bị USB", usbDeviceId);
+            usb.Alias = Trunc(alias?.Trim(), 100);
+            _unitOfWork.UsbDevices.Update(usb);
+            await _unitOfWork.SaveChangesAsync();
         }
 
         public async Task RevokeAsync(int usbDeviceId)

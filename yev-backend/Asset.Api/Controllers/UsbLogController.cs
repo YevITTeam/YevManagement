@@ -72,6 +72,14 @@ namespace Asset.Api.Controllers
         }
 
         [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpPut("devices/{id:int}/alias")]
+        public async Task<ActionResult<ApiResponse<bool>>> SetAlias(int id, [FromBody] UsbAliasRequest request)
+        {
+            await _usbPolicyService.SetAliasAsync(id, request.Alias);
+            return Success(true, "Đã lưu tên gợi nhớ.");
+        }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
         [HttpPost("devices/{id:int}/machines/{deviceId:int}")]
         public async Task<ActionResult<ApiResponse<bool>>> ApproveMachine(int id, int deviceId)
         {

@@ -13,6 +13,8 @@ namespace Asset.Application.Interfaces.Service
 
         Task RevokeAsync(int usbDeviceId);
 
+        Task SetAliasAsync(int usbDeviceId, string? alias);
+
         Task SetMachineApprovalAsync(int usbDeviceId, int deviceId, bool approve);
 
         Task<List<UsbMachineOptionDto>> GetMachineOptionsAsync();

@@ -20,6 +20,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public string ProductId { get; set; } = null!;
         public string SerialNumber { get; set; } = null!;
         public string? FriendlyName { get; set; }
+        public string? Alias { get; set; }
         public long? CapacityBytes { get; set; }
         public string DeviceClass { get; set; } = null!;
         public bool IsApproved { get; set; }
@@ -47,6 +48,13 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? Note { get; set; }
         public bool AllMachines { get; set; } = true;
         public List<int> DeviceIds { get; set; } = new();
+    }
+
+    // Empty or whitespace clears the alias.
+    public class UsbAliasRequest
+    {
+        [StringLength(100, ErrorMessage = "Tên gợi nhớ tối đa 100 ký tự.")]
+        public string? Alias { get; set; }
     }
 
     // Asset devices with a PC computer name, for the per-machine approval picker.

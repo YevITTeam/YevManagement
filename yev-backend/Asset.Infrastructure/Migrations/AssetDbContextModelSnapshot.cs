@@ -1307,6 +1307,10 @@ namespace Asset.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Alias")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("ApprovalNote")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");

@@ -14,9 +14,9 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbMachineUsbDto } from "@/modules/pc-management/types/usb-log.dto";
 import UsbLogList from "./UsbLogList";
-import { DEVICE_CLASS_LABELS, POLICY_META, formatBytes, formatDateTime } from "./usb-log-format";
+import { DEVICE_CLASS_LABELS, POLICY_META, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 
-const usbName = (row: UsbMachineUsbDto) => row.friendlyName || `${row.vendorId}:${row.productId}`;
+const usbName = (row: UsbMachineUsbDto) => usbLabel(row);
 
 // The whole list is loaded (one PC has few USBs), so sorting stays client-side.
 const SORT_KEYS: Record<string, (row: UsbMachineUsbDto) => string | number> = {
@@ -152,8 +152,9 @@ export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineU
                                                     </Badge>
                                                 )}
                                             </div>
-                                            <div className="text-xs text-[#5e3f3a]">
+                                            <div className="break-all text-xs text-[#5e3f3a]">
                                                 {[
+                                                    row.alias ? row.friendlyName : null,
                                                     row.deviceClass === "DiskDrive" ? null : DEVICE_CLASS_LABELS[row.deviceClass] ?? row.deviceClass,
                                                     row.driveLetters.join(", "),
                                                     row.serialNumber,

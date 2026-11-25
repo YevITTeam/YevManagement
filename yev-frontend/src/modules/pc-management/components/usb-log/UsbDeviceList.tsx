@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FilterX, RefreshCw, Search } from "lucide-react";
+import { FilterX, Pencil, RefreshCw, Search } from "lucide-react";
 import { toast } from "react-toastify";
 
 import ConfirmDialog from "@/components/common/ConfirmDialog";
@@ -18,7 +18,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbDeviceDto } from "@/modules/pc-management/types/usb-log.dto";
 import UsbPolicyBar from "./UsbPolicyBar";
-import { DEVICE_CLASS_LABELS, formatBytes, formatDateTime } from "./usb-log-format";
+import { DEVICE_CLASS_LABELS, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 
 const PAGE_SIZE = 20;
 
@@ -67,6 +67,29 @@ export default function UsbDeviceList() {
     const [machineOptions, setMachineOptions] = useState<MultiSelectOption[] | null>(null);
     const [revoking, setRevoking] = useState<UsbDeviceDto | null>(null);
     const [busy, setBusy] = useState(false);
+    const [naming, setNaming] = useState<UsbDeviceDto | null>(null);
+    const [alias, setAlias] = useState("");
+
+    const openAlias = (row: UsbDeviceDto) => {
+        setAlias(row.alias ?? "");
+        setNaming(row);
+    };
+
+    const handleAlias = async () => {
+        if (!naming) return;
+        setBusy(true);
+        try {
+            await UsbLogApi.setAlias(naming.id, alias.trim());
+            toast.success("Đã lưu tên gợi nhớ.");
+            setNaming(null);
+            refetch();
+        } catch (err) {
+            console.error(err);
+            toast.error(getApiErrorMessage(err, "Lưu tên gợi nhớ thất bại."));
+        } finally {
+            setBusy(false);
+        }
+    };
 
     const { isLoading, error, refetch } = useFetchEffect(
         () =>
@@ -219,10 +242,10 @@ export default function UsbDeviceList() {
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
                                 <SortableTh label="Thiết bị" sortKey="name" sort={sort} onSort={handleSort} className="px-3 py-2" />
-                                <SortableTh label="Cấp phép" sortKey="isApproved" sort={sort} onSort={handleSort} className="px-3 py-2" />
-                                <SortableTh label="Lần cuối" sortKey="lastSeenAt" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
-                                <SortableTh label="Lần cắm" sortKey="sessionCount" sort={sort} onSort={handleSort} className="hidden px-3 py-2 text-right lg:table-cell" />
-                                {canApprove && <th className="px-3 py-2 text-right">Thao tác</th>}
+                                <SortableTh label="Cấp phép" sortKey="isApproved" sort={sort} onSort={handleSort} className="whitespace-nowrap px-3 py-2" />
+                                <SortableTh label="Lần cuối" sortKey="lastSeenAt" sort={sort} onSort={handleSort} className="hidden whitespace-nowrap px-3 py-2 lg:table-cell" />
+                                <SortableTh label="Lần cắm" sortKey="sessionCount" sort={sort} onSort={handleSort} className="hidden whitespace-nowrap px-3 py-2 text-right lg:table-cell" />
+                                {canApprove && <th className="whitespace-nowrap px-3 py-2 text-right">Thao tác</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -239,9 +262,22 @@ export default function UsbDeviceList() {
                                 return (
                                     <tr key={row.id} className="border-b border-[#f1f5f9] align-top">
                                         <td className="px-3 py-2 text-sm text-[#191c1e]">
-                                            <div className="font-semibold">{row.friendlyName || `${row.vendorId}:${row.productId}`}</div>
-                                            <div className="text-xs text-[#5e3f3a]">
+                                            <div className="flex items-center gap-1">
+                                                <span className="font-semibold">{usbLabel(row)}</span>
+                                                {canApprove && (
+                                                    <button
+                                                        onClick={() => openAlias(row)}
+                                                        title="Đặt tên gợi nhớ"
+                                                        aria-label="Đặt tên gợi nhớ"
+                                                        className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-[#8a8f94] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="break-all text-xs text-[#5e3f3a]">
                                                 {[
+                                                    row.alias ? row.friendlyName : null,
                                                     isDisk ? null : DEVICE_CLASS_LABELS[row.deviceClass] ?? row.deviceClass,
                                                     row.serialNumber || "Không có serial",
                                                     `${row.vendorId}:${row.productId}`,
@@ -333,8 +369,8 @@ export default function UsbDeviceList() {
                 submitLabel="Cấp phép"
                 cancelLabel="Huỷ"
             >
-                <p className="text-sm text-[#5e3f3a]">
-                    {approving?.friendlyName || `${approving?.vendorId}:${approving?.productId}`} · {approving?.serialNumber}
+                <p className="break-all text-sm text-[#5e3f3a]">
+                    {approving && usbLabel(approving)} · {approving?.serialNumber}
                 </p>
                 <label className="block">
                     <span className={fieldLabelClassName}>Phạm vi</span>
@@ -365,10 +401,33 @@ export default function UsbDeviceList() {
                 </label>
             </FormDialog>
 
+            <FormDialog
+                isOpen={naming !== null}
+                title="Tên gợi nhớ"
+                onClose={() => setNaming(null)}
+                onSubmit={handleAlias}
+                loading={busy}
+                submitLabel="Lưu"
+                cancelLabel="Huỷ"
+            >
+                <p className="break-all text-sm text-[#5e3f3a]">
+                    {naming?.friendlyName || `${naming?.vendorId}:${naming?.productId}`} · {naming?.serialNumber || "Không có serial"}
+                </p>
+                <input
+                    value={alias}
+                    onChange={(event) => setAlias(event.target.value)}
+                    maxLength={100}
+                    autoFocus
+                    aria-label="Tên gợi nhớ"
+                    placeholder="VD: Token ký số kế toán"
+                    className={fieldClassName}
+                />
+            </FormDialog>
+
             <ConfirmDialog
                 isOpen={revoking !== null}
                 title="Thu hồi cấp phép"
-                message={`USB ${revoking?.friendlyName || revoking?.serialNumber} sẽ bị chặn ghi lại khi đang ở chế độ Chặn.`}
+                message={`USB ${revoking ? usbLabel(revoking) : ""} sẽ bị chặn ghi lại khi đang ở chế độ Chặn.`}
                 onApprove={handleRevoke}
                 onDenied={() => setRevoking(null)}
                 approveLabel="Thu hồi"
