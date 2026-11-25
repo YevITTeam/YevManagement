@@ -16,6 +16,8 @@ const actionClasses: Record<number, string> = {
     2: "border border-[#cfe0fb] bg-[#eef4ff] text-[#1d4ed8]",
     3: "border border-[#e9bcb6] bg-[#fff4f2] text-[#930006]",
     4: "border border-[#f0dca6] bg-[#fff9e8] text-[#8a5a00]",
+    // Copied from the USB onto the PC: oldFilePath is the USB source, filePath the PC copy.
+    5: "border border-[#e0e3e5] bg-[#f2f4f6] text-[#5e3f3a]",
 };
 
 export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {

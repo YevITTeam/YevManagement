@@ -21,5 +21,17 @@ public partial class AssetSetting
     // Machine names or device codes, one per line or comma separated.
     public string? UsbEnforceMachines { get; set; }
 
+    // Agents log files copied from a plugged USB onto the PC's fixed drives (a size + timestamp guess).
+    public bool UsbTrackCopyIn { get; set; }
+
+    // "iterations.saltBase64.hashBase64" (PBKDF2-SHA256) the agent asks for before an uninstall; null = no password.
+    public string? UsbUninstallPasswordHash { get; set; }
+
+    // UsbAgentRelease.Version agents should run; null = no automatic update.
+    public string? UsbAgentTargetVersion { get; set; }
+
+    // Machines that take TargetVersion first (same format as UsbEnforceMachines); empty = every agent.
+    public string? UsbAgentUpdateMachines { get; set; }
+
     public virtual Branch? ServerCheckBranch { get; set; }
 }

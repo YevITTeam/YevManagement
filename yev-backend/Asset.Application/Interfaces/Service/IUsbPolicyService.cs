@@ -24,5 +24,23 @@ namespace Asset.Application.Interfaces.Service
         Task<UsbPolicySettingDto> UpdateSettingAsync(UsbPolicySettingDto request);
 
         Task<PagedResponse<UsbAgentDto>> GetAgentsPagedAsync(UsbAgentFilterRequest filter);
+
+        Task<byte[]> ExportDevicesAsync(UsbDeviceFilterRequest filter);
+
+        Task<List<UsbAgentEventDto>> GetAgentEventsAsync(string machineName);
+
+        Task<UsbAgentSettingDto> GetAgentSettingAsync();
+
+        Task<UsbAgentSettingDto> UpdateAgentSettingAsync(UsbAgentSettingRequest request);
+
+        Task SetUninstallPasswordAsync(string? password);
+
+        Task<List<UsbAgentReleaseDto>> GetReleasesAsync();
+
+        Task<UsbAgentReleaseDto> UploadReleaseAsync(Stream content, string fileName, string signingKeyXml, string? note);
+
+        Task DeleteReleaseAsync(int id);
+
+        Task<string?> GetReleaseFilePathAsync(string version);
     }
 }

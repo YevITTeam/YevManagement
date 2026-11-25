@@ -4,21 +4,29 @@ namespace YevUsbAgent;
 
 public sealed class Policy
 {
-    public static readonly Policy Off = new(PolicyModes.Off, null, new HashSet<string>());
+    public static readonly Policy Off = new(PolicyModes.Off, null, new HashSet<string>(), new HashSet<string>(), false, null);
 
-    public Policy(int mode, string? version, HashSet<string> approved)
+    public Policy(int mode, string? version, HashSet<string> approved, HashSet<string> readOnly, bool trackCopyIn, string? uninstallPasswordHash)
     {
         Mode = mode;
         Version = version;
         Approved = approved;
+        ReadOnly = readOnly;
+        TrackCopyIn = trackCopyIn;
+        UninstallPasswordHash = uninstallPasswordHash;
     }
 
     public int Mode { get; }
     public string? Version { get; }
     public HashSet<string> Approved { get; }
+    public HashSet<string> ReadOnly { get; }
+    public bool TrackCopyIn { get; }
+    public string? UninstallPasswordHash { get; }
 
     // Serial-less disks are never approved: every stick of that model would share the approval.
     public bool IsApproved(string key, string serial) => serial.Length > 0 && Approved.Contains(key);
+
+    public bool IsReadOnly(string key, string serial) => serial.Length > 0 && ReadOnly.Contains(key);
 }
 
 // Last policy pulled from the server, persisted so blocking keeps working offline and across restarts.
@@ -31,46 +39,59 @@ public sealed class PolicyStore
     public PolicyStore(string dataDir)
     {
         Directory.CreateDirectory(dataDir);
-        _path = Path.Combine(dataDir, "policy.json");
-        _current = Load();
+        _path = PathIn(dataDir);
+        _current = Load(_path) ?? Policy.Off;
     }
+
+    public static string PathIn(string dataDir) => Path.Combine(dataDir, "policy.json");
 
     public Policy Current => _current;
 
-    // Bumped on every change so UsbMonitor re-evaluates the disks already plugged in.
+    // Bumped on every list or mode change so UsbMonitor re-evaluates the disks already plugged in.
     public int Revision => Volatile.Read(ref _revision);
 
-    public void Update(int mode, string version, List<string>? approved)
+    public void Update(SyncResponse data)
     {
         var current = _current;
-        // Without the list the server's version cannot be trusted; keep the old one so the next sync asks again.
-        if (approved == null) version = current.Version ?? "";
-        if (mode == current.Mode && version == current.Version) return;
+        // Without the lists the server's version cannot be trusted; keep the old ones so the next sync asks again.
+        var hasLists = data.Approved != null;
+        var version = hasLists ? data.PolicyVersion : current.Version ?? "";
+        var approved = hasLists ? ToSet(data.Approved) : current.Approved;
+        var readOnly = hasLists ? ToSet(data.ReadOnly) : current.ReadOnly;
 
-        var set = approved == null ? current.Approved : approved.Select(x => x.ToUpperInvariant()).ToHashSet();
-        _current = new Policy(mode, version, set);
-        Interlocked.Increment(ref _revision);
+        var listsChanged = data.Mode != current.Mode || version != current.Version;
+        if (!listsChanged && data.TrackCopyIn == current.TrackCopyIn && data.UninstallPasswordHash == current.UninstallPasswordHash) return;
+
+        _current = new Policy(data.Mode, version, approved, readOnly, data.TrackCopyIn, data.UninstallPasswordHash);
+        if (listsChanged) Interlocked.Increment(ref _revision);
 
         try
         {
-            var file = new PolicyFile { Mode = mode, Version = version, Approved = set.ToList() };
+            var file = new PolicyFile
+            {
+                Mode = data.Mode, Version = version, Approved = approved.ToList(), ReadOnly = readOnly.ToList(),
+                TrackCopyIn = data.TrackCopyIn, UninstallPasswordHash = data.UninstallPasswordHash
+            };
             File.WriteAllText(_path, JsonSerializer.Serialize(file, AgentJson.Default.PolicyFile));
         }
         catch (IOException) { }
     }
 
+    private static HashSet<string> ToSet(List<string>? keys) => (keys ?? new List<string>()).Select(x => x.ToUpperInvariant()).ToHashSet();
+
     // A PC that has never synced cannot know whether it is under Enforce, so it starts in Off.
-    private Policy Load()
+    public static Policy? Load(string path)
     {
         try
         {
-            if (!File.Exists(_path)) return Policy.Off;
-            var file = JsonSerializer.Deserialize(File.ReadAllText(_path), AgentJson.Default.PolicyFile);
-            return file == null ? Policy.Off : new Policy(file.Mode, file.Version, file.Approved.ToHashSet());
+            if (!File.Exists(path)) return null;
+            var file = JsonSerializer.Deserialize(File.ReadAllText(path), AgentJson.Default.PolicyFile);
+            return file == null ? null
+                : new Policy(file.Mode, file.Version, file.Approved.ToHashSet(), file.ReadOnly.ToHashSet(), file.TrackCopyIn, file.UninstallPasswordHash);
         }
-        catch (Exception ex) when (ex is IOException or JsonException)
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            return Policy.Off;
+            return null;
         }
     }
 }

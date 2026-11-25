@@ -27,6 +27,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? ApprovedBy { get; set; }
         public DateTime? ApprovedAt { get; set; }
         public string? ApprovalNote { get; set; }
+        public int AccessLevel { get; set; }
+        public bool IsSharedSerial { get; set; }
         public DateTime FirstSeenAt { get; set; }
         public DateTime LastSeenAt { get; set; }
         public int SessionCount { get; set; }
@@ -47,6 +49,9 @@ namespace Asset.Application.Dtos.UsbLogs
         [StringLength(255, ErrorMessage = "Ghi chú tối đa 255 ký tự.")]
         public string? Note { get; set; }
         public bool AllMachines { get; set; } = true;
+        // UsbAccessLevel: 1 read-only, 2 read-write.
+        [Range(1, 2, ErrorMessage = "Quyền không hợp lệ.")]
+        public int AccessLevel { get; set; } = 2;
         public List<int> DeviceIds { get; set; } = new();
     }
 
@@ -94,6 +99,54 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime FirstSeenAt { get; set; }
         public DateTime LastSeenAt { get; set; }
         public bool IsStale { get; set; }
+        // UsbAgentEventType of the latest lifecycle event; null for agents before 1.3.
+        public int? LastEventType { get; set; }
+        public DateTime? LastEventAt { get; set; }
+    }
+
+    public class UsbAgentEventDto
+    {
+        public int EventType { get; set; }
+        public DateTime OccurredAt { get; set; }
+        public string? Actor { get; set; }
+        public string? Detail { get; set; }
+    }
+
+    public class UsbAgentSettingDto
+    {
+        public bool TrackCopyIn { get; set; }
+        public bool HasUninstallPassword { get; set; }
+        public string? TargetVersion { get; set; }
+        public string? UpdateMachines { get; set; }
+    }
+
+    public class UsbAgentSettingRequest
+    {
+        public bool TrackCopyIn { get; set; }
+
+        [StringLength(20, ErrorMessage = "Phiên bản tối đa 20 ký tự.")]
+        public string? TargetVersion { get; set; }
+
+        [StringLength(4000, ErrorMessage = "Danh sách máy tối đa 4000 ký tự.")]
+        public string? UpdateMachines { get; set; }
+    }
+
+    // Empty clears the password.
+    public class UsbUninstallPasswordRequest
+    {
+        [StringLength(100, ErrorMessage = "Mật khẩu tối đa 100 ký tự.")]
+        public string? Password { get; set; }
+    }
+
+    public class UsbAgentReleaseDto
+    {
+        public int Id { get; set; }
+        public string Version { get; set; } = null!;
+        public long SizeBytes { get; set; }
+        public string Sha256 { get; set; } = null!;
+        public string? Note { get; set; }
+        public string? UploadedBy { get; set; }
+        public DateTime UploadedAt { get; set; }
     }
 
     public class UsbAgentSyncRequest
@@ -111,7 +164,20 @@ namespace Asset.Application.Dtos.UsbLogs
     {
         public int Mode { get; set; }
         public string PolicyVersion { get; set; } = null!;
-        // "VID|PID|SERIAL", upper case.
+        // "VID|PID|SERIAL", upper case, read-write.
         public List<string>? Approved { get; set; }
+        // Approved read-only; null together with Approved. Agents before 1.3 ignore it and keep these write-blocked.
+        public List<string>? ReadOnly { get; set; }
+        public bool TrackCopyIn { get; set; }
+        public string? UninstallPasswordHash { get; set; }
+        // Set only when this machine should run another version.
+        public UsbAgentUpdateDto? Update { get; set; }
+    }
+
+    public class UsbAgentUpdateDto
+    {
+        public string Version { get; set; } = null!;
+        public string Sha256 { get; set; } = null!;
+        public string Signature { get; set; } = null!;
     }
 }

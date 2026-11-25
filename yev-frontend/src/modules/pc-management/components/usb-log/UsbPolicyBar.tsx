@@ -18,7 +18,7 @@ const MODE_OPTIONS = [
 ];
 
 const MODE_TITLE =
-    "Tắt: chỉ ghi log. Thử: ghi lại USB nào sẽ bị chặn, không khoá. Chặn: USB chưa cấp phép bị chuyển sang chỉ đọc; agent áp dụng trong khoảng 1 phút.";
+    "Tắt: chỉ ghi log. Thử: ghi lại USB nào sẽ bị chặn, không khoá. Chặn: USB chưa cấp phép bị chặn hẳn (agent trước 1.3 chỉ chặn ghi), USB cấp phép chỉ đọc thì không ghi được; agent áp dụng trong khoảng 1 phút.";
 
 // Block mode of the whole fleet; Enforce applies only to the listed machines (empty = every machine), the rest run as Audit.
 export default function UsbPolicyBar({ canEdit }: { canEdit: boolean }) {
@@ -59,7 +59,7 @@ export default function UsbPolicyBar({ canEdit }: { canEdit: boolean }) {
     return (
         <section className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
             <span className="text-sm font-semibold text-[#191c1e]" title={MODE_TITLE}>
-                Chặn ghi USB
+                Chặn USB
             </span>
             <div className="w-28">
                 <StyledSelect
@@ -67,7 +67,7 @@ export default function UsbPolicyBar({ canEdit }: { canEdit: boolean }) {
                     onChange={setMode}
                     options={MODE_OPTIONS}
                     disabled={!canEdit || saved === null}
-                    ariaLabel="Chế độ chặn ghi USB"
+                    ariaLabel="Chế độ chặn USB"
                     triggerClassName={`${fieldClassName} w-full pr-8`}
                 />
             </div>

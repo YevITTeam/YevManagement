@@ -35,6 +35,13 @@ public partial class UsbDevice
 
     public string? ApprovalNote { get; set; }
 
+    // UsbAccessLevel granted wherever the USB is approved (every machine or the listed ones).
+    public int AccessLevel { get; set; } = 2;
+
+    // The bridge chip reports a serial every unit of the model shares and the inner disk's own serial could not be
+    // read, so an approval covers every such enclosure.
+    public bool IsSharedSerial { get; set; }
+
     public virtual ICollection<UsbDeviceMachine> Machines { get; set; } = new List<UsbDeviceMachine>();
 }
 

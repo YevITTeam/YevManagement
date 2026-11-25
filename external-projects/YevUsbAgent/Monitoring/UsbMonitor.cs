@@ -1,16 +1,18 @@
 using System.Management;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 
 namespace YevUsbAgent;
 
 // Polls WMI for USB disks, built-in SD cards and USB phones/cameras; a new one opens a session, a vanished one closes it.
-// Device-change events trigger an immediate scan so an unapproved disk is write-blocked right after it mounts.
+// Device-change events trigger an immediate scan so an unapproved disk is blocked right after it mounts.
 public sealed partial class UsbMonitor : BackgroundService
 {
     // Phones need a Win32_PnPEntity scan, far heavier than the disk query; between device events it runs every N polls.
     private const int PhoneScanEvery = 5;
     private const string PhonePrefix = "phone|";
+    private const string BlockedPrefix = "blocked|";
 
     private readonly EventQueue _queue;
     private readonly PolicyStore _policy;
@@ -21,6 +23,9 @@ public sealed partial class UsbMonitor : BackgroundService
     private readonly string _activeSessionsPath;
     private readonly string _lockedPath;
     private readonly HashSet<string> _locked;
+    private readonly string _blockedPath;
+    private readonly Dictionary<string, BlockedDisk> _blocked;
+    private readonly CopyInMonitor _copyIn;
     private readonly SemaphoreSlim _deviceChanged = new(0, 1);
     private int _appliedRevision = -1;
     private bool _reevaluationPending;
@@ -31,7 +36,9 @@ public sealed partial class UsbMonitor : BackgroundService
         public string Key => $"{VendorId}|{ProductId}|{Serial}".ToUpperInvariant();
     }
 
-    private sealed record UsbDrive(string Letter, string? Label, long? Capacity, string? Model, UsbIdentity Identity, uint DiskIndex);
+    // Letter is "" for a disk this agent disabled: it is still plugged in but has no volume any more.
+    private sealed record UsbDrive(string Letter, string? Label, long? Capacity, string? Model, UsbIdentity Identity, uint DiskIndex,
+        string PnpId, bool SharedSerial);
 
     private sealed record Phone(string? Name, string DeviceClass, UsbIdentity Identity);
 
@@ -43,6 +50,7 @@ public sealed partial class UsbMonitor : BackgroundService
         public int? PolicyResult { get; set; }
         // Set while a block waits for open files to close; after BlockGrace the volume is locked anyway.
         public DateTime? BlockDeferredSince { get; set; }
+        public bool Disabled => Drive?.Letter.Length == 0;
     }
 
     private static readonly TimeSpan BlockGrace = TimeSpan.FromMinutes(1);
@@ -57,6 +65,23 @@ public sealed partial class UsbMonitor : BackgroundService
         _activeSessionsPath = Path.Combine(dataDir, "active-sessions.txt");
         _lockedPath = Path.Combine(dataDir, "locked-disks.txt");
         _locked = File.Exists(_lockedPath) ? File.ReadAllLines(_lockedPath).Where(x => x.Length > 0).ToHashSet() : new HashSet<string>();
+        _blockedPath = BlockedPathIn(dataDir);
+        _blocked = LoadBlocked(_blockedPath).ToDictionary(b => b.PnpId, StringComparer.OrdinalIgnoreCase);
+        _copyIn = new CopyInMonitor(queue, logger);
+    }
+
+    public static string BlockedPathIn(string dataDir) => Path.Combine(dataDir, "blocked-disks.json");
+
+    public static List<BlockedDisk> LoadBlocked(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? JsonSerializer.Deserialize(File.ReadAllText(path), AgentJson.Default.ListBlockedDisk) ?? new() : new();
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            return new();
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -78,6 +103,7 @@ public sealed partial class UsbMonitor : BackgroundService
             catch (OperationCanceledException) { }
         }
 
+        _copyIn.Dispose();
         foreach (var key in _sessions.Keys.ToList()) Close(key);
     }
 
@@ -134,26 +160,45 @@ public sealed partial class UsbMonitor : BackgroundService
         catch (IOException ex) { _logger.LogWarning(ex, "Could not save locked disks."); }
     }
 
+    private void SaveBlocked()
+    {
+        try { File.WriteAllText(_blockedPath, JsonSerializer.Serialize(_blocked.Values.ToList(), AgentJson.Default.ListBlockedDisk)); }
+        catch (IOException ex) { _logger.LogWarning(ex, "Could not save blocked disks."); }
+    }
+
+    private static string BlockedKey(string pnpId) => BlockedPrefix + pnpId;
+
     private void Refresh(bool scanPhones)
     {
         var drives = ScanDrives();
         foreach (var (key, drive) in drives)
-            if (!_sessions.ContainsKey(key)) OpenDrive(key, drive, drives.Values);
+            if (!_sessions.ContainsKey(key) && !_sessions.ContainsKey(BlockedKey(drive.PnpId))) OpenDrive(key, drive, drives.Values);
+
+        // A disabled disk has no letter, so it is found through the list of disks this agent disabled.
+        foreach (var blocked in _blocked.Values.ToList())
+            if (!_sessions.ContainsKey(BlockedKey(blocked.PnpId)) && DeviceBlock.IsPresent(blocked.PnpId) && DeviceBlock.IsDisabled(blocked.PnpId))
+                OpenDisabled(blocked);
 
         var phones = scanPhones ? ScanPhones() : null;
         if (phones != null)
             foreach (var (key, phone) in phones)
                 if (!_sessions.ContainsKey(key)) OpenPhone(key, phone);
 
-        var gone = _sessions.Keys.Where(k => k.StartsWith(PhonePrefix, StringComparison.Ordinal)
-            ? phones != null && !phones.ContainsKey(k)
+        var gone = _sessions.Keys.Where(k =>
+            k.StartsWith(PhonePrefix, StringComparison.Ordinal) ? phones != null && !phones.ContainsKey(k)
+            : k.StartsWith(BlockedPrefix, StringComparison.Ordinal) ? !DeviceBlock.IsPresent(k[BlockedPrefix.Length..])
             : !drives.ContainsKey(k)).ToList();
         foreach (var key in gone) Close(key);
 
-        foreach (var tracked in _sessions.Values.Where(t => t.Drive != null && t.Watcher == null))
+        foreach (var tracked in _sessions.Values.Where(t => t.Drive != null && !t.Disabled && t.Watcher == null))
             tracked.Watcher = StartWatcher(tracked.SessionId, tracked.Drive!);
 
         if (_policy.Revision != _appliedRevision || _reevaluationPending) Reevaluate(drives.Values);
+
+        var readable = _policy.Current.TrackCopyIn
+            ? _sessions.Values.Where(t => t.Watcher != null).Select(t => new CopyInMonitor.UsbRoot(t.Drive!.Letter + "\\", t.SessionId)).ToList()
+            : new List<CopyInMonitor.UsbRoot>();
+        _copyIn.Process(readable);
     }
 
     private int? Decide(UsbIdentity identity)
@@ -161,24 +206,46 @@ public sealed partial class UsbMonitor : BackgroundService
         var policy = _policy.Current;
         if (policy.Mode == PolicyModes.Off) return null;
         if (policy.IsApproved(identity.Key, identity.Serial)) return PolicyResults.Approved;
-        return policy.Mode == PolicyModes.Enforce ? PolicyResults.Blocked : PolicyResults.NotApproved;
+
+        var enforce = policy.Mode == PolicyModes.Enforce;
+        if (policy.IsReadOnly(identity.Key, identity.Serial)) return enforce ? PolicyResults.ReadOnly : PolicyResults.Approved;
+        return enforce ? PolicyResults.Blocked : PolicyResults.NotApproved;
     }
 
-    // Applies a decision to the disk. Only disks this agent locked are ever unlocked, so a stick with a hardware
-    // write-protect switch is left alone. Remounted = the volume was dismounted and its watcher must be recreated.
-    private (bool Done, int? Result, bool Remounted) Enforce(UsbDrive drive, int? decision, IReadOnlyCollection<UsbDrive> present, bool force)
+    // Applies a decision to the disk. Only disks this agent locked or disabled are ever given back, so a stick with a
+    // hardware write-protect switch is left alone. Disabled = the disk is now off in Windows and has no volume.
+    private (bool Done, int? Result, bool Disabled) Enforce(UsbDrive drive, int? decision, IReadOnlyCollection<UsbDrive> present, bool force)
     {
         var key = drive.Identity.Key;
         var letters = present.Where(d => d.DiskIndex == drive.DiskIndex).Select(d => d.Letter).Distinct().ToList();
 
-        if (decision == PolicyResults.Blocked)
+        // A built-in SD reader keeps one disk device for every card, so disabling it would block approved cards too.
+        if (decision == PolicyResults.Blocked && drive.Identity.VendorId != "SD")
+        {
+            var outcome = DeviceBlock.Disable(drive.PnpId, letters, force, _logger);
+            if (outcome == LockOutcome.Deferred) return (false, null, false);
+            if (outcome == LockOutcome.Done)
+            {
+                _blocked[drive.PnpId] = new BlockedDisk
+                {
+                    PnpId = drive.PnpId, Key = key, VendorId = drive.Identity.VendorId, ProductId = drive.Identity.ProductId,
+                    Serial = drive.Identity.Serial, Model = drive.Model, SharedSerial = drive.SharedSerial
+                };
+                SaveBlocked();
+                return (true, PolicyResults.Blocked, true);
+            }
+            // Windows would not disable it (system disk, driver refusing): writes are still stopped below.
+            _logger.LogWarning("Falling back to read-only for {Letter}.", drive.Letter);
+        }
+
+        if (decision is PolicyResults.Blocked or PolicyResults.ReadOnly)
         {
             var outcome = DiskLock.Apply(drive.DiskIndex, letters, readOnly: true, force, _logger);
             if (outcome == LockOutcome.Deferred) return (false, null, false);
             if (outcome == LockOutcome.Failed) return (true, PolicyResults.BlockFailed, false);
             // Unchanged is recorded too: an attribute left from an earlier plug-in must still be cleared on approval.
             if (_locked.Add(key)) SaveLocked();
-            return (true, PolicyResults.Blocked, outcome == LockOutcome.Done);
+            return (true, decision, false);
         }
 
         if (!_locked.Contains(key)) return (true, decision, false);
@@ -192,7 +259,7 @@ public sealed partial class UsbMonitor : BackgroundService
         }
         _locked.Remove(key);
         SaveLocked();
-        return (true, decision, unlock == LockOutcome.Done);
+        return (true, decision, false);
     }
 
     private void OpenDrive(string key, UsbDrive drive, IReadOnlyCollection<UsbDrive> present)
@@ -201,31 +268,51 @@ public sealed partial class UsbMonitor : BackgroundService
         var sessionId = Guid.NewGuid();
 
         // Force: a disk that just mounted has nothing worth protecting open yet.
-        var (_, result, _) = Enforce(drive, Decide(identity), present, force: true);
+        var (_, result, disabled) = Enforce(drive, Decide(identity), present, force: true);
 
         // Connected must be queued before the watcher can queue file events of the same session.
-        _queue.Enqueue(new AgentEvent
+        QueueConnected(sessionId, drive, result);
+
+        var tracked = disabled
+            ? new Tracked { SessionId = sessionId, Drive = drive with { Letter = "" }, PolicyResult = result }
+            : new Tracked { SessionId = sessionId, Drive = drive, Watcher = StartWatcher(sessionId, drive), PolicyResult = result };
+        _sessions[disabled ? BlockedKey(drive.PnpId) : key] = tracked;
+        SaveActiveSessions();
+        _logger.LogInformation("USB connected: {Model} {Letter} (serial {Serial}, policy {Result})", drive.Model, drive.Letter, identity.Serial, result);
+
+        Notify(drive, result);
+    }
+
+    // A disk Windows still keeps disabled from an earlier plug-in.
+    private void OpenDisabled(BlockedDisk blocked)
+    {
+        var identity = new UsbIdentity(blocked.VendorId, blocked.ProductId, blocked.Serial);
+        var drive = new UsbDrive("", null, null, blocked.Model, identity, uint.MaxValue, blocked.PnpId, blocked.SharedSerial);
+        var sessionId = Guid.NewGuid();
+        QueueConnected(sessionId, drive, PolicyResults.Blocked);
+        _sessions[BlockedKey(blocked.PnpId)] = new Tracked { SessionId = sessionId, Drive = drive, PolicyResult = PolicyResults.Blocked };
+        SaveActiveSessions();
+        _logger.LogInformation("Disabled USB plugged in: {Model} (serial {Serial})", blocked.Model, blocked.Serial);
+        Notify(drive, PolicyResults.Blocked);
+    }
+
+    private void QueueConnected(Guid sessionId, UsbDrive drive, int? result)
+        => _queue.Enqueue(new AgentEvent
         {
             Type = EventTypes.Connected,
             SessionId = sessionId,
-            VendorId = identity.VendorId,
-            ProductId = identity.ProductId,
-            SerialNumber = identity.Serial,
+            VendorId = drive.Identity.VendorId,
+            ProductId = drive.Identity.ProductId,
+            SerialNumber = drive.Identity.Serial,
+            SharedSerial = drive.SharedSerial,
             FriendlyName = drive.Model,
             CapacityBytes = drive.Capacity,
             WindowsUser = UserSession.GetConsoleUser(),
-            DriveLetter = drive.Letter,
+            DriveLetter = drive.Letter.Length == 0 ? null : drive.Letter,
             VolumeLabel = drive.Label,
             DeviceClass = "DiskDrive",
             PolicyResult = result
         });
-
-        _sessions[key] = new Tracked { SessionId = sessionId, Drive = drive, Watcher = StartWatcher(sessionId, drive), PolicyResult = result };
-        SaveActiveSessions();
-        _logger.LogInformation("USB connected: {Model} {Letter} (serial {Serial}, policy {Result})", drive.Model, drive.Letter, identity.Serial, result);
-
-        if (result == PolicyResults.Blocked) NotifyBlocked(drive);
-    }
 
     private void OpenPhone(string key, Phone phone)
     {
@@ -248,34 +335,60 @@ public sealed partial class UsbMonitor : BackgroundService
     }
 
     // Policy changed (approved, revoked, mode switched): bring plugged-in disks in line. Re-run every poll while a
-    // block waits for the user's open files; unlocking never waits, a read-only volume has nothing unsaved to lose.
+    // block waits for the user's open files; giving access back never waits, there is nothing unsaved to lose.
     private void Reevaluate(IReadOnlyCollection<UsbDrive> present)
     {
         _appliedRevision = _policy.Revision;
         _reevaluationPending = false;
 
-        foreach (var tracked in _sessions.Values)
+        // Disks disabled earlier and now allowed, plugged in or not: Windows would otherwise keep them off forever.
+        foreach (var blocked in _blocked.Values.ToList())
         {
-            if (tracked.Drive == null) continue;
+            if (Decide(new UsbIdentity(blocked.VendorId, blocked.ProductId, blocked.Serial)) == PolicyResults.Blocked) continue;
+
+            DeviceBlock.Enable(blocked.PnpId, _logger);
+            _blocked.Remove(blocked.PnpId);
+            SaveBlocked();
+            // It comes back with a letter and opens a fresh session under the new decision.
+            if (_sessions.ContainsKey(BlockedKey(blocked.PnpId))) Close(BlockedKey(blocked.PnpId));
+            _logger.LogInformation("Re-enabled USB {Serial}.", blocked.Serial);
+        }
+
+        foreach (var (key, tracked) in _sessions.ToList())
+        {
+            if (tracked.Drive == null || tracked.Disabled || !_sessions.ContainsKey(key)) continue;
 
             var decision = Decide(tracked.Drive.Identity);
             if (decision == tracked.PolicyResult) continue;
 
-            var blocking = decision == PolicyResults.Blocked;
+            var blocking = decision is PolicyResults.Blocked or PolicyResults.ReadOnly;
             var force = !blocking || DateTime.UtcNow - tracked.BlockDeferredSince > BlockGrace;
 
             // Our own watchers keep the volumes open and would make the volume lock fail every time.
             var touchesDisk = blocking || _locked.Contains(tracked.Drive.Identity.Key);
-            var sameDisk = touchesDisk ? _sessions.Values.Where(t => t.Drive?.DiskIndex == tracked.Drive.DiskIndex).ToList() : new List<Tracked>();
-            foreach (var t in sameDisk)
+            var sameDisk = touchesDisk ? _sessions.Where(s => s.Value.Drive?.DiskIndex == tracked.Drive.DiskIndex && !s.Value.Disabled).ToList()
+                : new List<KeyValuePair<string, Tracked>>();
+            foreach (var (_, t) in sameDisk)
             {
                 t.Watcher?.Dispose();
                 t.Watcher = null;
             }
 
-            var (done, result, _) = Enforce(tracked.Drive, decision, present, force);
+            var (done, result, disabled) = Enforce(tracked.Drive, decision, present, force);
 
-            foreach (var t in sameDisk) t.Watcher = StartWatcher(t.SessionId, t.Drive!);
+            if (disabled)
+            {
+                // Every volume of the disk is gone; one session stands for the disabled disk from now on.
+                foreach (var (otherKey, _) in sameDisk.Where(s => s.Key != key)) Close(otherKey);
+                _sessions.Remove(key);
+                _sessions[BlockedKey(tracked.Drive.PnpId)] = new Tracked
+                {
+                    SessionId = tracked.SessionId, Drive = tracked.Drive with { Letter = "" }, PolicyResult = result
+                };
+                SaveActiveSessions();
+            }
+            else
+                foreach (var (_, t) in sameDisk) t.Watcher = StartWatcher(t.SessionId, t.Drive!);
 
             if (!done)
             {
@@ -284,8 +397,9 @@ public sealed partial class UsbMonitor : BackgroundService
                 {
                     tracked.BlockDeferredSince = DateTime.UtcNow;
                     _logger.LogInformation("USB {Letter} has open files; blocking in {Seconds}s.", tracked.Drive.Letter, BlockGrace.TotalSeconds);
-                    UserSession.ShowToast("USB sắp chuyển sang chỉ đọc",
-                        $"Ổ {tracked.Drive.Letter} chưa được cấp phép ghi. Hãy lưu và đóng các file đang mở trên ổ, sau 1 phút ổ sẽ chỉ đọc được.", _logger);
+                    UserSession.ShowToast(decision == PolicyResults.ReadOnly ? "USB sắp chuyển sang chỉ đọc" : "USB sắp bị chặn",
+                        $"Ổ {tracked.Drive.Letter} chưa được cấp phép {(decision == PolicyResults.ReadOnly ? "ghi" : "sử dụng")}. "
+                        + "Hãy lưu và đóng các file đang mở trên ổ, sau 1 phút ổ sẽ bị khoá.", _logger);
                 }
                 continue;
             }
@@ -294,7 +408,7 @@ public sealed partial class UsbMonitor : BackgroundService
             tracked.PolicyResult = result;
             _queue.Enqueue(new AgentEvent { Type = EventTypes.Policy, SessionId = tracked.SessionId, PolicyResult = result });
             _logger.LogInformation("USB {Letter} policy is now {Result}", tracked.Drive.Letter, result);
-            if (result == PolicyResults.Blocked) NotifyBlocked(tracked.Drive);
+            Notify(tracked.Drive, result);
         }
     }
 
@@ -314,11 +428,16 @@ public sealed partial class UsbMonitor : BackgroundService
         }
     }
 
-    private void NotifyBlocked(UsbDrive drive)
+    private void Notify(UsbDrive drive, int? result)
     {
         var serial = drive.Identity.Serial.Length > 0 ? drive.Identity.Serial : "không có";
-        UserSession.ShowToast("USB chưa được cấp phép ghi",
-            $"Ổ {drive.Letter} chỉ đọc được, không chép dữ liệu vào được. Serial: {serial}. Liên hệ IT để được cấp phép.", _logger);
+        var name = drive.Letter.Length > 0 ? $"Ổ {drive.Letter}" : drive.Model ?? "USB";
+        if (result == PolicyResults.Blocked)
+            UserSession.ShowToast("USB chưa được cấp phép",
+                $"{name} đã bị chặn, không đọc hay chép dữ liệu được. Serial: {serial}. Liên hệ IT để được cấp phép.", _logger);
+        else if (result == PolicyResults.ReadOnly)
+            UserSession.ShowToast("USB chỉ được phép đọc",
+                $"{name} chỉ đọc được, không chép dữ liệu vào được. Serial: {serial}. Liên hệ IT nếu cần ghi.", _logger);
     }
 
     private void Close(string key)
@@ -335,6 +454,7 @@ public sealed partial class UsbMonitor : BackgroundService
     private Dictionary<string, UsbDrive> ScanDrives()
     {
         var result = new Dictionary<string, UsbDrive>();
+        var seen = new List<string>();
 
         using var disks = new ManagementObjectSearcher("SELECT * FROM Win32_DiskDrive");
         foreach (ManagementObject disk in disks.Get())
@@ -344,10 +464,22 @@ public sealed partial class UsbMonitor : BackgroundService
                 var pnpId = disk["PNPDeviceID"] as string ?? "";
                 var identity = Identify(pnpId) ?? CardReaderIdentity(disk);
                 if (identity == null) continue;
+                seen.Add(pnpId);
 
                 var model = disk["Model"] as string;
                 long? capacity = disk["Size"] == null ? null : Convert.ToInt64(disk["Size"]);
                 var index = Convert.ToUInt32(disk["Index"]);
+
+                var shared = false;
+                if (identity.VendorId != "SD" && BridgedSerial.IsGeneric(identity.Serial))
+                {
+                    if (BridgedSerial.Get(pnpId, index, model) is { } inner)
+                    {
+                        identity = identity with { Serial = inner.Serial };
+                        if (inner.Model.Length > 0) model = $"{inner.Model} ({model})";
+                    }
+                    else shared = true;
+                }
 
                 foreach (ManagementObject partition in disk.GetRelated("Win32_DiskPartition"))
                 {
@@ -359,13 +491,14 @@ public sealed partial class UsbMonitor : BackgroundService
                             {
                                 var letter = logical["DeviceID"] as string;
                                 if (string.IsNullOrEmpty(letter)) continue;
-                                result[$"{pnpId}|{letter}"] = new UsbDrive(letter, logical["VolumeName"] as string, capacity, model, identity, index);
+                                result[$"{pnpId}|{letter}"] = new UsbDrive(letter, logical["VolumeName"] as string, capacity, model, identity, index, pnpId, shared);
                             }
                         }
                     }
                 }
             }
         }
+        BridgedSerial.ForgetAllExcept(seen);
         return result;
     }
 

@@ -1,6 +1,10 @@
-import { api } from "@/lib/client";
+import { api, getForBlob } from "@/lib/client";
 import type {
     UsbAgentDto,
+    UsbAgentEventDto,
+    UsbAgentReleaseDto,
+    UsbAgentSettingDto,
+    UsbAgentSettingRequest,
     UsbApprovalRequest,
     UsbMachineOptionDto,
     UsbDeviceDto,
@@ -27,6 +31,14 @@ const ENDPOINTS = {
         machineOptions: "/UsbLog/machine-options",
         policy: "/UsbLog/policy",
         getAgents: "/UsbLog/agents",
+        agentEvents: (machineName: string) => `/UsbLog/agents/${encodeURIComponent(machineName)}/events`,
+        agentSettings: "/UsbLog/agent-settings",
+        uninstallPassword: "/UsbLog/agent-settings/uninstall-password",
+        releases: "/UsbLog/agent-releases",
+        release: (id: number) => `/UsbLog/agent-releases/${id}`,
+        exportDevices: "/UsbLog/devices/export",
+        exportSessions: "/UsbLog/sessions/export",
+        exportFiles: "/UsbLog/files/export",
     },
 } as const;
 
@@ -172,6 +184,43 @@ export const UsbLogApi = {
         const response = await api.get<ApiResponseWithPageNation<UsbAgentDto>>(withQuery(ENDPOINTS.USB_LOG.getAgents, { ...params }));
         return response.data;
     },
+    getAgentEvents: async (machineName: string) => {
+        const response = await api.get<ApiResponse<UsbAgentEventDto[]>>(ENDPOINTS.USB_LOG.agentEvents(machineName));
+        return response.data;
+    },
+    getAgentSetting: async () => {
+        const response = await api.get<ApiResponse<UsbAgentSettingDto>>(ENDPOINTS.USB_LOG.agentSettings);
+        return response.data;
+    },
+    updateAgentSetting: async (body: UsbAgentSettingRequest) => {
+        const response = await api.put<ApiResponse<UsbAgentSettingDto>>(ENDPOINTS.USB_LOG.agentSettings, body);
+        return response.data;
+    },
+    // Empty password removes it.
+    setUninstallPassword: async (password: string) => {
+        const response = await api.put<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.uninstallPassword, { password: password || null });
+        return response.data;
+    },
+    getReleases: async () => {
+        const response = await api.get<ApiResponse<UsbAgentReleaseDto[]>>(ENDPOINTS.USB_LOG.releases);
+        return response.data;
+    },
+    // The BE signs the exe with its release key; the version comes from the exe's file version.
+    uploadRelease: async (file: File, note: string) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        if (note) formData.append("note", note);
+        const response = await api.postForm<ApiResponse<UsbAgentReleaseDto>>(ENDPOINTS.USB_LOG.releases, formData);
+        return response.data;
+    },
+    deleteRelease: async (id: number) => {
+        const response = await api.delete<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.release(id));
+        return response.data;
+    },
+    exportDevices: (params: GetUsbDevicesParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportDevices, { ...params })),
+    // Same filter as the session list; files = file operations of those sessions.
+    exportSessions: (params: GetUsbSessionsParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportSessions, { ...params })),
+    exportFiles: (params: GetUsbSessionsParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportFiles, { ...params })),
 };
 
 export { ENDPOINTS };

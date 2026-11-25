@@ -30,7 +30,8 @@ public partial class AssetDbContext
         typeof(UsbDevice),
         typeof(UsbSession),
         typeof(UsbFileEvent),
-        typeof(UsbAgent)
+        typeof(UsbAgent),
+        typeof(UsbAgentEvent)
     };
 
     // A grouped row keeps at most this many record names in NewValues — enough to know what was

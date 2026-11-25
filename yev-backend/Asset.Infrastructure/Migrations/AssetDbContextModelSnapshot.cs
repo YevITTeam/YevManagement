@@ -78,12 +78,27 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<int?>("ServerCheckBranchId")
                         .HasColumnType("int");
 
+                    b.Property<string>("UsbAgentTargetVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("UsbAgentUpdateMachines")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
                     b.Property<int>("UsbBlockMode")
                         .HasColumnType("int");
 
                     b.Property<string>("UsbEnforceMachines")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
+
+                    b.Property<bool>("UsbTrackCopyIn")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("UsbUninstallPasswordHash")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.HasKey("Id")
                         .HasName("PK_AssetSettings");
@@ -1299,6 +1314,98 @@ namespace Asset.Infrastructure.Migrations
                     b.ToTable("UsbAgents");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.UsbAgentEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Actor")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MachineName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id")
+                        .HasName("PK_UsbAgentEvents");
+
+                    b.HasIndex(new[] { "EventId" }, "IX_UsbAgentEvents_EventId")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "MachineName", "OccurredAt" }, "IX_UsbAgentEvents_Machine_OccurredAt");
+
+                    b.ToTable("UsbAgentEvents");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.UsbAgentRelease", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Signature")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoredFileName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UploadedBy")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id")
+                        .HasName("PK_UsbAgentReleases");
+
+                    b.HasIndex(new[] { "Version" }, "IX_UsbAgentReleases_Version")
+                        .IsUnique();
+
+                    b.ToTable("UsbAgentReleases");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.UsbDevice", b =>
                 {
                     b.Property<int>("Id")
@@ -1306,6 +1413,11 @@ namespace Asset.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AccessLevel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(2);
 
                     b.Property<string>("Alias")
                         .HasMaxLength(100)
@@ -1340,6 +1452,9 @@ namespace Asset.Infrastructure.Migrations
                         .HasColumnType("nvarchar(255)");
 
                     b.Property<bool>("IsApproved")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSharedSerial")
                         .HasColumnType("bit");
 
                     b.Property<DateTime>("LastSeenAt")

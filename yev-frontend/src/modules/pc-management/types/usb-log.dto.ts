@@ -52,6 +52,8 @@ export interface UsbMachineUsbDto {
     capacityBytes: number | null;
     deviceClass: string;
     isApproved: boolean;
+    accessLevel: number;
+    isSharedSerial: boolean;
     // Approved for this PC only; false when the PC matches no asset device.
     approvedHere: boolean;
     driveLetters: string[];
@@ -76,6 +78,10 @@ export interface UsbDeviceDto {
     approvedBy: string | null;
     approvedAt: string | null;
     approvalNote: string | null;
+    // USB_ACCESS_LEVEL; applies wherever the USB is approved.
+    accessLevel: number;
+    // The bridge chip's serial is shared by every unit of the model, so an approval covers all of them.
+    isSharedSerial: boolean;
     firstSeenAt: string;
     lastSeenAt: string;
     sessionCount: number;
@@ -95,6 +101,7 @@ export interface UsbApprovalRequest {
     note: string | null;
     allMachines: boolean;
     deviceIds: number[];
+    accessLevel: number;
 }
 
 // mode: 0 Off, 1 Audit, 2 Enforce (only for enforceMachines when that list is not empty).
@@ -111,6 +118,40 @@ export interface UsbAgentDto {
     firstSeenAt: string;
     lastSeenAt: string;
     isStale: boolean;
+    // AGENT_EVENT_META key of the latest lifecycle event; null for agents before 1.3.
+    lastEventType: number | null;
+    lastEventAt: string | null;
+}
+
+export interface UsbAgentEventDto {
+    eventType: number;
+    occurredAt: string;
+    actor: string | null;
+    detail: string | null;
+}
+
+export interface UsbAgentSettingDto {
+    trackCopyIn: boolean;
+    hasUninstallPassword: boolean;
+    // Version every agent (or only updateMachines when set) should run; null = no automatic update.
+    targetVersion: string | null;
+    updateMachines: string | null;
+}
+
+export interface UsbAgentSettingRequest {
+    trackCopyIn: boolean;
+    targetVersion: string | null;
+    updateMachines: string | null;
+}
+
+export interface UsbAgentReleaseDto {
+    id: number;
+    version: string;
+    sizeBytes: number;
+    sha256: string;
+    note: string | null;
+    uploadedBy: string | null;
+    uploadedAt: string;
 }
 
 export interface UsbFileEventDto {

@@ -16,8 +16,7 @@ public sealed class Uploader : BackgroundService
         _queue = queue;
         _options = options.Value;
         _logger = logger;
-        _http = new HttpClient { BaseAddress = new Uri(_options.ServerUrl.TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(30) };
-        _http.DefaultRequestHeaders.Add("X-Agent-Key", _options.ApiKey);
+        _http = AgentHttp.Create(_options);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

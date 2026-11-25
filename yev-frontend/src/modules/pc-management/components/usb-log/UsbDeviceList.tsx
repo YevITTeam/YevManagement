@@ -17,8 +17,9 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbDeviceDto } from "@/modules/pc-management/types/usb-log.dto";
+import UsbExportButton from "./UsbExportButton";
 import UsbPolicyBar from "./UsbPolicyBar";
-import { DEVICE_CLASS_LABELS, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
+import { ACCESS_LEVEL_OPTIONS, DEVICE_CLASS_LABELS, USB_ACCESS_LEVEL, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 
 const PAGE_SIZE = 20;
 
@@ -64,6 +65,7 @@ export default function UsbDeviceList() {
     const [note, setNote] = useState("");
     const [scope, setScope] = useState<ApprovalScope>("all");
     const [machineIds, setMachineIds] = useState<number[]>([]);
+    const [accessLevel, setAccessLevel] = useState<number>(USB_ACCESS_LEVEL.ReadWrite);
     const [machineOptions, setMachineOptions] = useState<MultiSelectOption[] | null>(null);
     const [revoking, setRevoking] = useState<UsbDeviceDto | null>(null);
     const [busy, setBusy] = useState(false);
@@ -128,10 +130,17 @@ export default function UsbDeviceList() {
         setApplied(emptyFilters);
     };
 
+    const exportFilter = () => ({
+        keyword: applied.keyword || undefined,
+        isApproved: applied.approval === "" ? undefined : applied.approval === "approved",
+        deviceClass: applied.deviceClass || undefined,
+    });
+
     const openApprove = (row: UsbDeviceDto) => {
         setNote(row.approvalNote ?? "");
         setScope(row.approvedMachines.length > 0 ? "machines" : "all");
         setMachineIds(row.approvedMachines.map((m) => m.deviceId));
+        setAccessLevel(row.accessLevel || USB_ACCESS_LEVEL.ReadWrite);
         setApproving(row);
         if (machineOptions === null) {
             UsbLogApi.getMachineOptions()
@@ -152,7 +161,12 @@ export default function UsbDeviceList() {
         }
         setBusy(true);
         try {
-            await UsbLogApi.approve(approving.id, { note: note.trim() || null, allMachines: scope === "all", deviceIds: scope === "all" ? [] : machineIds });
+            await UsbLogApi.approve(approving.id, {
+                note: note.trim() || null,
+                allMachines: scope === "all",
+                deviceIds: scope === "all" ? [] : machineIds,
+                accessLevel,
+            });
             toast.success("Đã cấp phép USB.");
             setApproving(null);
             refetch();
@@ -231,6 +245,14 @@ export default function UsbDeviceList() {
                             <RefreshCw className="h-4 w-4" />
                         </button>
                     </div>
+                    <div className="sm:ml-auto">
+                        <UsbExportButton
+                            label="Excel"
+                            title="Xuất Excel danh sách USB theo bộ lọc"
+                            fallbackFileName="ThietBiUSB.xlsx"
+                            download={() => UsbLogApi.exportDevices(exportFilter())}
+                        />
+                    </div>
                 </div>
             </section>
 
@@ -264,6 +286,11 @@ export default function UsbDeviceList() {
                                         <td className="px-3 py-2 text-sm text-[#191c1e]">
                                             <div className="flex items-center gap-1">
                                                 <span className="font-semibold">{usbLabel(row)}</span>
+                                                {row.isSharedSerial && (
+                                                    <span title="Box USB chỉ báo serial chung của cả dòng sản phẩm và agent không đọc được serial ổ bên trong: cấp phép là cấp cho mọi box cùng loại">
+                                                        <Badge variant="warning">Serial chung</Badge>
+                                                    </span>
+                                                )}
                                                 {canApprove && (
                                                     <button
                                                         onClick={() => openAlias(row)}
@@ -290,7 +317,10 @@ export default function UsbDeviceList() {
                                         <td className="px-3 py-2 text-sm">
                                             {isApproved ? (
                                                 <div title={row.approvedBy ? `${row.approvedBy}, ${formatDateTime(row.approvedAt)}` : undefined}>
-                                                    <Badge variant="success">{row.isApproved ? "Mọi máy" : `${row.approvedMachines.length} máy`}</Badge>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        <Badge variant="success">{row.isApproved ? "Mọi máy" : `${row.approvedMachines.length} máy`}</Badge>
+                                                        {row.accessLevel === USB_ACCESS_LEVEL.ReadOnly && <Badge variant="warning">Chỉ đọc</Badge>}
+                                                    </div>
                                                     {row.approvedMachines.length > 0 && (
                                                         <div
                                                             className="mt-1 text-xs text-[#191c1e]"
@@ -376,6 +406,10 @@ export default function UsbDeviceList() {
                     <span className={fieldLabelClassName}>Phạm vi</span>
                     <StyledSelect value={scope} onChange={setScope} options={SCOPE_OPTIONS} triggerClassName={`${fieldClassName} pr-8`} />
                 </label>
+                <label className="block">
+                    <span className={fieldLabelClassName}>Quyền</span>
+                    <StyledSelect value={accessLevel} onChange={setAccessLevel} options={ACCESS_LEVEL_OPTIONS} triggerClassName={`${fieldClassName} pr-8`} />
+                </label>
                 {scope === "machines" && (
                     <div>
                         <span className={fieldLabelClassName}>Máy</span>
@@ -427,7 +461,7 @@ export default function UsbDeviceList() {
             <ConfirmDialog
                 isOpen={revoking !== null}
                 title="Thu hồi cấp phép"
-                message={`USB ${revoking ? usbLabel(revoking) : ""} sẽ bị chặn ghi lại khi đang ở chế độ Chặn.`}
+                message={`USB ${revoking ? usbLabel(revoking) : ""} sẽ bị chặn lại khi đang ở chế độ Chặn.`}
                 onApprove={handleRevoke}
                 onDenied={() => setRevoking(null)}
                 approveLabel="Thu hồi"

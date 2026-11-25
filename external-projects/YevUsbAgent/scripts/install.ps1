@@ -1,10 +1,13 @@
 # Run as Administrator (Install.bat elevates; Tanium runs it as SYSTEM). Idempotent: re-running upgrades the binary and settings.
-# ServerUrl/ApiKey come from the parameters, else from agent.json next to this script (written by build.ps1 -ApiKey), else a prompt.
+# ServerUrl/ApiKey come from the parameters, else agent.json next to this script (build.ps1 -ApiKey), else the config of the
+# copy being upgraded (how the updater runs it), else a prompt.
 param(
     [string]$ServerUrl,
     [string]$ApiKey,
     [string]$InstallDir = "$env:ProgramFiles\YevUsbAgent",
-    [string]$ExePath = "$PSScriptRoot\YevUsbAgent.exe"
+    [string]$ExePath = "$PSScriptRoot\YevUsbAgent.exe",
+    # 'self-update' when the running agent installs a newer build of itself; reported on the web.
+    [string]$Reason = 'install'
 )
 $ErrorActionPreference = 'Stop'
 $name = 'YevUsbAgent'
@@ -19,8 +22,10 @@ Start-Transcript -Path "$dataDir\install.log" -Append | Out-Null
 try {
     $preset = $null
     if (Test-Path "$PSScriptRoot\agent.json") { $preset = Get-Content "$PSScriptRoot\agent.json" -Raw | ConvertFrom-Json }
-    if (-not $ServerUrl) { $ServerUrl = if ($preset.ServerUrl) { $preset.ServerUrl } else { 'http://10.45.1.49:8080' } }
-    if (-not $ApiKey) { $ApiKey = $preset.ApiKey }
+    $existing = $null
+    if (Test-Path "$InstallDir\appsettings.json") { $existing = (Get-Content "$InstallDir\appsettings.json" -Raw | ConvertFrom-Json).Agent }
+    if (-not $ServerUrl) { $ServerUrl = if ($preset.ServerUrl) { $preset.ServerUrl } elseif ($existing.ServerUrl) { $existing.ServerUrl } else { 'http://10.45.1.49:8080' } }
+    if (-not $ApiKey) { $ApiKey = if ($preset.ApiKey) { $preset.ApiKey } else { $existing.ApiKey } }
     # Tanium/SYSTEM sessions are not interactive, so only prompt when a person is at the console.
     if (-not $ApiKey -and [Environment]::UserInteractive) { $ApiKey = Read-Host 'Nhap ApiKey (trung UsbAgent:ApiKey cua BE)' }
     if (-not $ApiKey) { throw 'ApiKey is required.' }
@@ -41,6 +46,10 @@ try {
         Set-Content "$InstallDir\appsettings.json" -Encoding UTF8
     # The file holds the API key: only SYSTEM (the service) and Administrators may read it, not ordinary users.
     & "$sys\icacls.exe" "$InstallDir\appsettings.json" /inheritance:r /grant:r '*S-1-5-18:(R)' '*S-1-5-32-544:(F)' | Out-Null
+
+    # The service reports this as its "installed" event on start.
+    @{ By = [Security.Principal.WindowsIdentity]::GetCurrent().Name; Reason = $Reason } | ConvertTo-Json |
+        Set-Content "$dataDir\installed.json" -Encoding UTF8
 
     if (-not (Get-Service $name -ErrorAction SilentlyContinue)) {
         New-Service -Name $name -BinaryPathName "`"$InstallDir\YevUsbAgent.exe`"" `

@@ -1,4 +1,5 @@
 ﻿using Asset.Domain.Entities;
+using Asset.Domain.Enums;
 using Asset.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -48,6 +49,8 @@ public partial class AssetDbContext : DbContext
     public virtual DbSet<UsbAgent> UsbAgents { get; set; }
 
     public virtual DbSet<UsbDeviceMachine> UsbDeviceMachines { get; set; }
+    public virtual DbSet<UsbAgentEvent> UsbAgentEvents { get; set; }
+    public virtual DbSet<UsbAgentRelease> UsbAgentReleases { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +69,9 @@ public partial class AssetDbContext : DbContext
         {
             entity.HasKey(e => e.Id).HasName("PK_AssetSettings");
             entity.Property(e => e.UsbEnforceMachines).HasMaxLength(4000);
+            entity.Property(e => e.UsbUninstallPasswordHash).HasMaxLength(200);
+            entity.Property(e => e.UsbAgentTargetVersion).HasMaxLength(20);
+            entity.Property(e => e.UsbAgentUpdateMachines).HasMaxLength(4000);
 
             entity.HasOne(d => d.ServerCheckBranch).WithMany()
                 .HasForeignKey(d => d.ServerCheckBranchId)
@@ -383,6 +389,7 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.DeviceClass).HasMaxLength(50).HasDefaultValue(UsbDeviceClasses.DiskDrive);
             entity.Property(e => e.ApprovedBy).HasMaxLength(150);
             entity.Property(e => e.ApprovalNote).HasMaxLength(255);
+            entity.Property(e => e.AccessLevel).HasDefaultValue((int)UsbAccessLevel.ReadWrite);
         });
 
         modelBuilder.Entity<UsbDeviceMachine>(entity =>
@@ -410,6 +417,28 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.MachineName).HasMaxLength(100);
             entity.Property(e => e.AgentVersion).HasMaxLength(20);
             entity.Property(e => e.WindowsUser).HasMaxLength(150);
+        });
+
+        modelBuilder.Entity<UsbAgentEvent>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_UsbAgentEvents");
+            entity.HasIndex(e => e.EventId, "IX_UsbAgentEvents_EventId").IsUnique();
+            entity.HasIndex(e => new { e.MachineName, e.OccurredAt }, "IX_UsbAgentEvents_Machine_OccurredAt");
+            entity.Property(e => e.MachineName).HasMaxLength(100);
+            entity.Property(e => e.Actor).HasMaxLength(150);
+            entity.Property(e => e.Detail).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<UsbAgentRelease>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_UsbAgentReleases");
+            entity.HasIndex(e => e.Version, "IX_UsbAgentReleases_Version").IsUnique();
+            entity.Property(e => e.Version).HasMaxLength(20);
+            entity.Property(e => e.StoredFileName).HasMaxLength(100);
+            entity.Property(e => e.Sha256).HasMaxLength(64);
+            entity.Property(e => e.Signature).HasMaxLength(1000);
+            entity.Property(e => e.Note).HasMaxLength(255);
+            entity.Property(e => e.UploadedBy).HasMaxLength(150);
         });
 
         modelBuilder.Entity<UsbSession>(entity =>

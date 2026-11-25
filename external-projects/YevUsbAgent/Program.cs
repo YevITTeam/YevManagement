@@ -17,6 +17,8 @@ builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent
 var dataDir = (builder.Configuration.GetSection("Agent").Get<AgentOptions>() ?? new AgentOptions()).ResolveDataDir();
 builder.Services.AddSingleton(new EventQueue(dataDir));
 builder.Services.AddSingleton(new PolicyStore(dataDir));
+builder.Services.AddSingleton<Updater>();
+builder.Services.AddHostedService<Lifecycle>();
 builder.Services.AddHostedService<UsbMonitor>();
 builder.Services.AddHostedService<Uploader>();
 builder.Services.AddHostedService<PolicySync>();

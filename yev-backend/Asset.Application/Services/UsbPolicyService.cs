@@ -19,21 +19,28 @@ namespace Asset.Application.Services
         private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromMinutes(5);
         private static readonly TimeSpan SnapshotTtl = TimeSpan.FromSeconds(30);
 
-        private sealed record ApprovedList(List<string> Keys, string Version);
+        private const int PasswordIterations = 100_000;
+        private const int MinPasswordLength = 6;
+
+        private sealed record ApprovedList(List<string> Keys, List<string> ReadOnlyKeys, string Version);
 
         // PerMachine is keyed by both DeviceCode and computer name (DeviceName), mirroring how ingest matches a PC.
         private sealed record PolicySnapshot(
             UsbBlockMode Mode, HashSet<string> EnforceMachines, ApprovedList Global,
-            Dictionary<string, ApprovedList> PerMachine, DateTime LoadedAt);
+            Dictionary<string, ApprovedList> PerMachine, bool TrackCopyIn, string? PasswordHash,
+            UsbAgentUpdateDto? Update, HashSet<string> UpdateMachines, DateTime LoadedAt);
 
         // Every agent syncs about once a minute; a shared snapshot keeps that to one query per TTL (single IIS process).
         private static PolicySnapshot? _snapshot;
 
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IAppReleaseFileStorage _fileStorage;
 
-        public UsbPolicyService(IAssetUnitOfWork unitOfWork, IHttpContextAccessor httpContextAccessor) : base(unitOfWork)
+        public UsbPolicyService(IAssetUnitOfWork unitOfWork, IHttpContextAccessor httpContextAccessor, IAppReleaseFileStorage fileStorage)
+            : base(unitOfWork)
         {
             _httpContextAccessor = httpContextAccessor;
+            _fileStorage = fileStorage;
         }
 
         public async Task<UsbAgentSyncResponse> SyncAgentAsync(UsbAgentSyncRequest request)
@@ -53,11 +60,20 @@ namespace Asset.Application.Services
                 ?? snapshot.PerMachine.GetValueOrDefault(machineName)
                 ?? snapshot.Global;
 
+            var current = request.PolicyVersion == list.Version;
+            var update = snapshot.Update;
+            var wantsUpdate = update != null && request.AgentVersion != update.Version
+                && (snapshot.UpdateMachines.Count == 0 || snapshot.UpdateMachines.Contains(machineName) || snapshot.UpdateMachines.Contains(deviceCode));
+
             return new UsbAgentSyncResponse
             {
                 Mode = (int)mode,
                 PolicyVersion = list.Version,
-                Approved = request.PolicyVersion == list.Version ? null : list.Keys
+                Approved = current ? null : list.Keys,
+                ReadOnly = current ? null : list.ReadOnlyKeys,
+                TrackCopyIn = snapshot.TrackCopyIn,
+                UninstallPasswordHash = snapshot.PasswordHash,
+                Update = wantsUpdate ? update : null
             };
         }
 
@@ -107,36 +123,56 @@ namespace Asset.Application.Services
             if (cached != null && DateTime.UtcNow - cached.LoadedAt < SnapshotTtl) return cached;
 
             var setting = (await _unitOfWork.AssetSettings.GetAllAsync()).FirstOrDefault();
-            var global = await _unitOfWork.UsbDevices.SelectAsync(
-                u => u.IsApproved && u.SerialNumber != "",
-                u => u.VendorId + "|" + u.ProductId + "|" + u.SerialNumber);
+            var global = (await _unitOfWork.UsbDevices.SelectAsync(
+                    u => u.IsApproved && u.SerialNumber != "",
+                    u => new { Key = u.VendorId + "|" + u.ProductId + "|" + u.SerialNumber, u.AccessLevel }))
+                .Select(x => (x.Key, x.AccessLevel)).ToList();
             var perMachine = await _unitOfWork.UsbDeviceMachines.SelectAsync(
                 m => !m.UsbDevice.IsApproved && m.UsbDevice.SerialNumber != "" && !m.Device.IsDeleted,
-                m => new { m.Device.DeviceCode, m.Device.DeviceName, Key = m.UsbDevice.VendorId + "|" + m.UsbDevice.ProductId + "|" + m.UsbDevice.SerialNumber });
+                m => new { m.Device.DeviceCode, m.Device.DeviceName, Key = m.UsbDevice.VendorId + "|" + m.UsbDevice.ProductId + "|" + m.UsbDevice.SerialNumber, m.UsbDevice.AccessLevel });
 
-            var extras = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            var extras = new Dictionary<string, List<(string Key, int AccessLevel)>>(StringComparer.OrdinalIgnoreCase);
             foreach (var row in perMachine)
                 foreach (var name in new[] { row.DeviceCode, UsbLogService.NormalizeMachineName(row.DeviceName) })
                 {
                     if (name.Length == 0) continue;
-                    if (!extras.TryGetValue(name, out var keys)) extras[name] = keys = new List<string>();
-                    keys.Add(row.Key);
+                    if (!extras.TryGetValue(name, out var keys)) extras[name] = keys = new List<(string, int)>();
+                    keys.Add((row.Key, row.AccessLevel));
                 }
+
+            UsbAgentUpdateDto? update = null;
+            if (!string.IsNullOrEmpty(setting?.UsbAgentTargetVersion))
+            {
+                var release = await _unitOfWork.UsbAgentReleases.FirstOrDefaultAsync(r => r.Version == setting.UsbAgentTargetVersion);
+                if (release != null)
+                    update = new UsbAgentUpdateDto { Version = release.Version, Sha256 = release.Sha256, Signature = release.Signature };
+            }
 
             cached = new PolicySnapshot(
                 (UsbBlockMode)(setting?.UsbBlockMode ?? 0),
                 ParseMachines(setting?.UsbEnforceMachines),
                 BuildList(global),
                 extras.ToDictionary(e => e.Key, e => BuildList(global.Concat(e.Value)), StringComparer.OrdinalIgnoreCase),
+                setting?.UsbTrackCopyIn ?? false,
+                setting?.UsbUninstallPasswordHash,
+                update,
+                ParseMachines(setting?.UsbAgentUpdateMachines),
                 DateTime.UtcNow);
             _snapshot = cached;
             return cached;
         }
 
-        private static ApprovedList BuildList(IEnumerable<string> keys)
+        // A USB in the global list and a machine list has one level, so read-write wins only on a real conflict.
+        private static ApprovedList BuildList(IEnumerable<(string Key, int AccessLevel)> items)
         {
-            var list = keys.Select(x => x.ToUpperInvariant()).Distinct().Order(StringComparer.Ordinal).ToList();
-            return new ApprovedList(list, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', list))))[..16]);
+            var all = items.Select(x => (Key: x.Key.ToUpperInvariant(), x.AccessLevel)).ToList();
+            var readWrite = all.Where(x => x.AccessLevel != (int)UsbAccessLevel.ReadOnly).Select(x => x.Key)
+                .Distinct().Order(StringComparer.Ordinal).ToList();
+            var readOnly = all.Where(x => x.AccessLevel == (int)UsbAccessLevel.ReadOnly).Select(x => x.Key)
+                .Except(readWrite).Distinct().Order(StringComparer.Ordinal).ToList();
+            // Without read-only keys the text (and so the version) is what agents before 1.3 already hold.
+            var text = string.Join('\n', readWrite) + (readOnly.Count == 0 ? "" : "\nR:" + string.Join('\n', readOnly));
+            return new ApprovedList(readWrite, readOnly, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16]);
         }
 
         private static HashSet<string> ParseMachines(string? value)
@@ -145,6 +181,42 @@ namespace Asset.Application.Services
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         public async Task<PagedResponse<UsbDeviceDto>> GetDevicesPagedAsync(UsbDeviceFilterRequest filter)
+        {
+            var query = DeviceQuery(filter);
+            var sessions = _unitOfWork.UsbSessions.GetQueryable(false);
+            var columns = UsbSort.Columns<UsbDevice>(
+                ("name", u => u.Alias ?? u.FriendlyName),
+                ("isApproved", u => u.IsApproved ? 2 : u.Machines.Any() ? 1 : 0),
+                ("lastSeenAt", u => u.LastSeenAt),
+                ("sessionCount", u => sessions.Count(s => s.UsbDeviceId == u.Id)));
+            return await _unitOfWork.UsbDevices.ToPagedResponseAsync(
+                UsbSort.Apply(query, filter.SortBy, filter.SortDesc, columns, q => q.OrderByDescending(u => u.LastSeenAt), u => u.Id),
+                filter.PageIndex,
+                filter.PageSize,
+                ToDto(sessions));
+        }
+
+        public async Task<byte[]> ExportDevicesAsync(UsbDeviceFilterRequest filter)
+        {
+            var sessions = _unitOfWork.UsbSessions.GetQueryable(false);
+            var rows = await _unitOfWork.UsbDevices.ToPagedResponseAsync(
+                DeviceQuery(filter).OrderByDescending(u => u.LastSeenAt).ThenBy(u => u.Id), 1, UsbExcel.MaxRows, ToDto(sessions));
+
+            return UsbExcel.Build("Thiết bị USB",
+                new[] { "Tên gợi nhớ", "Tên thiết bị", "Loại", "VID", "PID", "Serial", "Serial chung", "Dung lượng (GB)", "Cấp phép", "Quyền",
+                    "Người cấp", "Ngày cấp", "Ghi chú", "Lần đầu", "Lần cuối", "Số lần cắm", "Máy cắm gần nhất" },
+                rows.Data.Select(u => new object?[]
+                {
+                    u.Alias, u.FriendlyName, u.DeviceClass, u.VendorId, u.ProductId, u.SerialNumber, u.IsSharedSerial ? "Có" : null,
+                    u.CapacityBytes == null ? null : Math.Round(u.CapacityBytes.Value / 1e9, 1),
+                    u.IsApproved ? "Mọi máy" : u.ApprovedMachines.Count > 0 ? string.Join(", ", u.ApprovedMachines.Select(m => m.DeviceCode)) : "Chưa cấp",
+                    u.IsApproved || u.ApprovedMachines.Count > 0 ? UsbExcel.AccessLevelText(u.AccessLevel) : null,
+                    u.ApprovedBy, u.ApprovedAt, u.ApprovalNote, u.FirstSeenAt, u.LastSeenAt, u.SessionCount, u.LastMachineName
+                }),
+                rows.TotalCount);
+        }
+
+        private IQueryable<UsbDevice> DeviceQuery(UsbDeviceFilterRequest filter)
         {
             var query = _unitOfWork.UsbDevices.GetQueryable(false);
 
@@ -164,17 +236,11 @@ namespace Asset.Application.Services
             if (!string.IsNullOrWhiteSpace(filter.DeviceClass))
                 query = query.Where(u => u.DeviceClass == filter.DeviceClass);
 
-            var sessions = _unitOfWork.UsbSessions.GetQueryable(false);
-            var columns = UsbSort.Columns<UsbDevice>(
-                ("name", u => u.Alias ?? u.FriendlyName),
-                ("isApproved", u => u.IsApproved ? 2 : u.Machines.Any() ? 1 : 0),
-                ("lastSeenAt", u => u.LastSeenAt),
-                ("sessionCount", u => sessions.Count(s => s.UsbDeviceId == u.Id)));
-            return await _unitOfWork.UsbDevices.ToPagedResponseAsync(
-                UsbSort.Apply(query, filter.SortBy, filter.SortDesc, columns, q => q.OrderByDescending(u => u.LastSeenAt), u => u.Id),
-                filter.PageIndex,
-                filter.PageSize,
-                u => new UsbDeviceDto
+            return query;
+        }
+
+        private static Expression<Func<UsbDevice, UsbDeviceDto>> ToDto(IQueryable<UsbSession> sessions)
+            => u => new UsbDeviceDto
                 {
                     Id = u.Id,
                     VendorId = u.VendorId,
@@ -188,6 +254,8 @@ namespace Asset.Application.Services
                     ApprovedBy = u.ApprovedBy,
                     ApprovedAt = u.ApprovedAt,
                     ApprovalNote = u.ApprovalNote,
+                    AccessLevel = u.AccessLevel,
+                    IsSharedSerial = u.IsSharedSerial,
                     FirstSeenAt = u.FirstSeenAt,
                     LastSeenAt = u.LastSeenAt,
                     SessionCount = sessions.Count(s => s.UsbDeviceId == u.Id),
@@ -195,8 +263,7 @@ namespace Asset.Application.Services
                         .OrderByDescending(s => s.ConnectedAt).Select(s => s.MachineName).FirstOrDefault(),
                     ApprovedMachines = u.Machines.OrderBy(m => m.Device.DeviceCode)
                         .Select(m => new UsbApprovedMachineDto { DeviceId = m.DeviceId, DeviceCode = m.Device.DeviceCode }).ToList()
-                });
-        }
+                };
 
         public async Task ApproveAsync(int usbDeviceId, UsbApprovalRequest request)
         {
@@ -221,6 +288,7 @@ namespace Asset.Application.Services
                 usb.IsApproved = false;
             }
 
+            usb.AccessLevel = request.AccessLevel;
             usb.ApprovedBy = CurrentUser();
             usb.ApprovedAt = Now();
             usb.ApprovalNote = Trunc(request.Note?.Trim(), 255);
@@ -303,6 +371,7 @@ namespace Asset.Application.Services
             usb.ApprovedBy = null;
             usb.ApprovedAt = null;
             usb.ApprovalNote = null;
+            usb.AccessLevel = (int)UsbAccessLevel.ReadWrite;
             _unitOfWork.UsbDevices.Update(usb);
         }
 
@@ -353,6 +422,7 @@ namespace Asset.Application.Services
             if (filter.StaleOnly)
                 query = query.Where(a => a.LastSeenAt < staleBefore);
 
+            var events = _unitOfWork.UsbAgentEvents.GetQueryable(false);
             return await _unitOfWork.UsbAgents.ToPagedResponseAsync(
                 UsbSort.Apply(query, filter.SortBy, filter.SortDesc, AgentColumns,
                     q => q.OrderBy(a => a.LastSeenAt < staleBefore ? 0 : 1).ThenBy(a => a.MachineName), a => a.Id),
@@ -366,9 +436,151 @@ namespace Asset.Application.Services
                     WindowsUser = a.WindowsUser,
                     FirstSeenAt = a.FirstSeenAt,
                     LastSeenAt = a.LastSeenAt,
-                    IsStale = a.LastSeenAt < staleBefore
+                    IsStale = a.LastSeenAt < staleBefore,
+                    LastEventType = events.Where(e => e.MachineName == a.MachineName)
+                        .OrderByDescending(e => e.OccurredAt).Select(e => (int?)e.EventType).FirstOrDefault(),
+                    LastEventAt = events.Where(e => e.MachineName == a.MachineName)
+                        .OrderByDescending(e => e.OccurredAt).Select(e => (DateTime?)e.OccurredAt).FirstOrDefault()
                 });
         }
+
+        public async Task<List<UsbAgentEventDto>> GetAgentEventsAsync(string machineName)
+        {
+            var name = machineName.Trim();
+            var rows = await _unitOfWork.UsbAgentEvents.ToPagedResponseAsync(
+                _unitOfWork.UsbAgentEvents.GetQueryable(false).Where(e => e.MachineName == name)
+                    .OrderByDescending(e => e.OccurredAt).ThenByDescending(e => e.Id),
+                1, 100,
+                e => new UsbAgentEventDto { EventType = e.EventType, OccurredAt = e.OccurredAt, Actor = e.Actor, Detail = e.Detail });
+            return rows.Data.ToList();
+        }
+
+        public async Task<UsbAgentSettingDto> GetAgentSettingAsync()
+        {
+            var setting = (await _unitOfWork.AssetSettings.GetAllAsync()).FirstOrDefault();
+            return new UsbAgentSettingDto
+            {
+                TrackCopyIn = setting?.UsbTrackCopyIn ?? false,
+                HasUninstallPassword = setting?.UsbUninstallPasswordHash != null,
+                TargetVersion = setting?.UsbAgentTargetVersion,
+                UpdateMachines = setting?.UsbAgentUpdateMachines
+            };
+        }
+
+        public async Task<UsbAgentSettingDto> UpdateAgentSettingAsync(UsbAgentSettingRequest request)
+        {
+            var setting = await GetAssetSettingAsync();
+            var target = string.IsNullOrWhiteSpace(request.TargetVersion) ? null : request.TargetVersion.Trim();
+            if (target != null && await _unitOfWork.UsbAgentReleases.FirstOrDefaultAsync(r => r.Version == target) == null)
+                throw new DomainException($"Chưa có bản agent {target}.");
+
+            setting.UsbTrackCopyIn = request.TrackCopyIn;
+            setting.UsbAgentTargetVersion = target;
+            setting.UsbAgentUpdateMachines = string.IsNullOrWhiteSpace(request.UpdateMachines) ? null : request.UpdateMachines.Trim();
+            _unitOfWork.AssetSettings.Update(setting);
+            await _unitOfWork.SaveChangesAsync();
+            _snapshot = null;
+            return await GetAgentSettingAsync();
+        }
+
+        public async Task SetUninstallPasswordAsync(string? password)
+        {
+            if (!string.IsNullOrEmpty(password) && password.Length < MinPasswordLength)
+                throw new DomainException($"Mật khẩu tối thiểu {MinPasswordLength} ký tự.");
+
+            var setting = await GetAssetSettingAsync();
+            setting.UsbUninstallPasswordHash = string.IsNullOrEmpty(password) ? null : HashPassword(password);
+            _unitOfWork.AssetSettings.Update(setting);
+            await _unitOfWork.SaveChangesAsync();
+            _snapshot = null;
+        }
+
+        // Format shared with YevUsbAgent Installer.VerifyPassword.
+        public static string HashPassword(string password)
+        {
+            var salt = RandomNumberGenerator.GetBytes(16);
+            var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, PasswordIterations, HashAlgorithmName.SHA256, 32);
+            return $"{PasswordIterations}.{Convert.ToBase64String(salt)}.{Convert.ToBase64String(hash)}";
+        }
+
+        public async Task<List<UsbAgentReleaseDto>> GetReleasesAsync()
+        {
+            var releases = await _unitOfWork.UsbAgentReleases.GetAllAsync();
+            return releases.OrderByDescending(r => r.UploadedAt).Select(ToReleaseDto).ToList();
+        }
+
+        public async Task<UsbAgentReleaseDto> UploadReleaseAsync(Stream content, string fileName, string signingKeyXml, string? note)
+        {
+            if (!string.Equals(Path.GetExtension(fileName), ".exe", StringComparison.OrdinalIgnoreCase))
+                throw new DomainException("Chỉ nhận file YevUsbAgent.exe.");
+
+            var storedFileName = await _fileStorage.SaveAsync(content, fileName);
+            var path = _fileStorage.GetPhysicalPath(storedFileName);
+            try
+            {
+                var bytes = await File.ReadAllBytesAsync(path);
+                var signature = UsbAgentReleaseKey.Sign(bytes, signingKeyXml)
+                    ?? throw new DomainException("Khoá ký trên server không khớp khoá của agent.");
+
+                // The agent reports AssemblyName.Version in 3 parts; the exe's file version carries the same number.
+                var fileVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(path).FileVersion;
+                if (!Version.TryParse(fileVersion, out var parsed))
+                    throw new DomainException("Không đọc được phiên bản của file exe.");
+                var version = parsed.ToString(3);
+                if (await _unitOfWork.UsbAgentReleases.FirstOrDefaultAsync(r => r.Version == version) != null)
+                    throw new DomainException($"Bản {version} đã có.");
+
+                var release = new UsbAgentRelease
+                {
+                    Version = version,
+                    StoredFileName = storedFileName,
+                    SizeBytes = bytes.LongLength,
+                    Sha256 = Convert.ToHexString(SHA256.HashData(bytes)),
+                    Signature = signature,
+                    Note = Trunc(note?.Trim(), 255),
+                    UploadedBy = CurrentUser(),
+                    UploadedAt = Now()
+                };
+                await _unitOfWork.UsbAgentReleases.AddAsync(release);
+                await _unitOfWork.SaveChangesAsync();
+                return ToReleaseDto(release);
+            }
+            catch
+            {
+                File.Delete(path);
+                throw;
+            }
+        }
+
+        public async Task DeleteReleaseAsync(int id)
+        {
+            var release = (await _unitOfWork.UsbAgentReleases.GetByIdAsync(id)).OrThrowNotFound("Bản agent", id);
+            var setting = (await _unitOfWork.AssetSettings.GetAllAsync()).FirstOrDefault();
+            if (setting?.UsbAgentTargetVersion == release.Version)
+                throw new DomainException("Bản này đang được phát cho agent, đổi bản phát hành trước khi xoá.");
+
+            _unitOfWork.UsbAgentReleases.Delete(release);
+            await _unitOfWork.SaveChangesAsync();
+            File.Delete(_fileStorage.GetPhysicalPath(release.StoredFileName));
+        }
+
+        // Null when the version was never uploaded or its file is gone.
+        public async Task<string?> GetReleaseFilePathAsync(string version)
+        {
+            var release = await _unitOfWork.UsbAgentReleases.FirstOrDefaultAsync(r => r.Version == version);
+            if (release == null) return null;
+            var path = _fileStorage.GetPhysicalPath(release.StoredFileName);
+            return File.Exists(path) ? path : null;
+        }
+
+        private static UsbAgentReleaseDto ToReleaseDto(UsbAgentRelease r) => new()
+        {
+            Id = r.Id, Version = r.Version, SizeBytes = r.SizeBytes, Sha256 = r.Sha256,
+            Note = r.Note, UploadedBy = r.UploadedBy, UploadedAt = r.UploadedAt
+        };
+
+        private async Task<AssetSetting> GetAssetSettingAsync()
+            => (await _unitOfWork.AssetSettings.GetAllAsync()).FirstOrDefault() ?? throw new DomainException("Chưa có cấu hình Asset.");
 
         private static readonly Dictionary<string, Expression<Func<UsbAgent, object?>>> AgentColumns = UsbSort.Columns<UsbAgent>(
             ("machineName", a => a.MachineName),

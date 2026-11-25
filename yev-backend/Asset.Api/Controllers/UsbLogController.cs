@@ -3,6 +3,7 @@ using System.Text;
 using Asset.Application.Dtos.UsbLogs;
 using Asset.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Shared.Application.Authorization;
@@ -14,6 +15,7 @@ namespace Asset.Api.Controllers
     public class UsbLogController : BaseController
     {
         private const string AgentKeyHeader = "X-Agent-Key";
+        private const string XlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
         private readonly IUsbLogService _usbLogService;
         private readonly IUsbPolicyService _usbPolicyService;
@@ -54,6 +56,11 @@ namespace Asset.Api.Controllers
             var result = await _usbPolicyService.GetDevicesPagedAsync(filter);
             return Success(result);
         }
+
+        [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("devices/export")]
+        public async Task<IActionResult> ExportDevices([FromQuery] UsbDeviceFilterRequest filter)
+            => File(await _usbPolicyService.ExportDevicesAsync(filter), XlsxType, $"ThietBiUSB_{Stamp()}.xlsx");
 
         [RequirePermission("Asset.UsbLog.Approve")]
         [HttpPost("devices/{id:int}/approve")]
@@ -128,6 +135,83 @@ namespace Asset.Api.Controllers
         }
 
         [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("agents/{machineName}/events")]
+        public async Task<ActionResult<ApiResponse<List<UsbAgentEventDto>>>> GetAgentEvents(string machineName)
+        {
+            var result = await _usbPolicyService.GetAgentEventsAsync(machineName);
+            return Success(result);
+        }
+
+        [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("agent-settings")]
+        public async Task<ActionResult<ApiResponse<UsbAgentSettingDto>>> GetAgentSetting()
+        {
+            var result = await _usbPolicyService.GetAgentSettingAsync();
+            return Success(result);
+        }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpPut("agent-settings")]
+        public async Task<ActionResult<ApiResponse<UsbAgentSettingDto>>> UpdateAgentSetting([FromBody] UsbAgentSettingRequest request)
+        {
+            var result = await _usbPolicyService.UpdateAgentSettingAsync(request);
+            return Success(result, "Đã lưu cài đặt agent.");
+        }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpPut("agent-settings/uninstall-password")]
+        public async Task<ActionResult<ApiResponse<bool>>> SetUninstallPassword([FromBody] UsbUninstallPasswordRequest request)
+        {
+            await _usbPolicyService.SetUninstallPasswordAsync(request.Password);
+            return Success(true, string.IsNullOrEmpty(request.Password) ? "Đã bỏ mật khẩu gỡ agent." : "Đã đặt mật khẩu gỡ agent.");
+        }
+
+        [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("agent-releases")]
+        public async Task<ActionResult<ApiResponse<List<UsbAgentReleaseDto>>>> GetReleases()
+        {
+            var result = await _usbPolicyService.GetReleasesAsync();
+            return Success(result);
+        }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpPost("agent-releases")]
+        [RequestSizeLimit(300L * 1024 * 1024)]
+        public async Task<ActionResult<ApiResponse<UsbAgentReleaseDto>>> UploadRelease(IFormFile file, [FromForm] string? note)
+        {
+            if (file is null || file.Length == 0) return Fail<UsbAgentReleaseDto>("Chọn file YevUsbAgent.exe.");
+
+            // App_Data survives deploys (AutoDeploy keeps it); the key file is copied there once per server.
+            var configured = _configuration["UsbAgent:SigningKeyPath"];
+            var keyPath = string.IsNullOrWhiteSpace(configured) ? "App_Data/usb-agent-update-key.xml" : configured;
+            if (!Path.IsPathRooted(keyPath)) keyPath = Path.Combine(AppContext.BaseDirectory, keyPath);
+            if (!System.IO.File.Exists(keyPath)) return Fail<UsbAgentReleaseDto>("Server chưa có khoá ký bản agent (App_Data/usb-agent-update-key.xml).");
+
+            await using var stream = file.OpenReadStream();
+            var result = await _usbPolicyService.UploadReleaseAsync(stream, file.FileName, await System.IO.File.ReadAllTextAsync(keyPath), note);
+            return Success(result, $"Đã tải lên bản {result.Version}.");
+        }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpDelete("agent-releases/{id:int}")]
+        public async Task<ActionResult<ApiResponse<bool>>> DeleteRelease(int id)
+        {
+            await _usbPolicyService.DeleteReleaseAsync(id);
+            return Success(true, "Đã xoá bản agent.");
+        }
+
+        // Called by the agent's updater; it checks hash and signature itself, so the key only guards bandwidth.
+        [AllowAnonymous]
+        [HttpGet("agent-releases/{version}/download")]
+        public async Task<IActionResult> DownloadRelease(string version)
+        {
+            if (!IsAgentKeyValid()) return Unauthorized();
+
+            var path = await _usbPolicyService.GetReleaseFilePathAsync(version);
+            return path == null ? NotFound() : PhysicalFile(path, "application/octet-stream", "YevUsbAgent.exe");
+        }
+
+        [RequirePermission("Asset.UsbLog.View")]
         [HttpGet("machines")]
         public async Task<ActionResult<ApiResponse<PagedResponse<UsbMachineDto>>>> GetMachines([FromQuery] UsbMachineFilterRequest filter)
         {
@@ -142,6 +226,16 @@ namespace Asset.Api.Controllers
             var result = await _usbLogService.GetSessionsPagedAsync(filter);
             return Success(result);
         }
+
+        [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("sessions/export")]
+        public async Task<IActionResult> ExportSessions([FromQuery] UsbSessionFilterRequest filter)
+            => File(await _usbLogService.ExportSessionsAsync(filter), XlsxType, $"PhienCamUSB_{Stamp()}.xlsx");
+
+        [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("files/export")]
+        public async Task<IActionResult> ExportFileEvents([FromQuery] UsbSessionFilterRequest filter)
+            => File(await _usbLogService.ExportFileEventsAsync(filter), XlsxType, $"ThaoTacFileUSB_{Stamp()}.xlsx");
 
         [RequirePermission("Asset.UsbLog.View")]
         [HttpGet("machine-usbs")]
@@ -160,6 +254,8 @@ namespace Asset.Api.Controllers
             var result = await _usbLogService.GetSessionFilesPagedAsync(id, pageIndex, pageSize, keyword, sortBy, sortDesc);
             return Success(result);
         }
+
+        private static string Stamp() => DateTime.UtcNow.AddHours(7).ToString("yyyyMMdd_HHmm");
 
         // Fails closed: an empty configured key rejects every call. Constant-time compare avoids leaking the key.
         private bool IsAgentKeyValid()

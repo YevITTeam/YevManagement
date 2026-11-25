@@ -10,6 +10,7 @@ public static class UsbFileActionExtensions
         UsbFileAction.Modified => "Sửa",
         UsbFileAction.Deleted => "Xoá",
         UsbFileAction.Renamed => "Đổi tên",
+        UsbFileAction.CopiedIn => "Chép vào máy",
         _ => UnknownText
     };
 

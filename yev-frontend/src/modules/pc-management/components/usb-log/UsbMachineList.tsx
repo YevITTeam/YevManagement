@@ -10,6 +10,7 @@ import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbMachineDto } from "@/modules/pc-management/types/usb-log.dto";
 import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import UsbExportButton from "./UsbExportButton";
 import { formatDateTime } from "./usb-log-format";
 
 const PAGE_SIZE = 20;
@@ -27,6 +28,11 @@ export default function UsbMachineList() {
 
     const [draft, setDraft] = useState(emptyFilters);
     const [applied, setApplied] = useState(emptyFilters);
+    const exportFilter = () => ({
+        keyword: applied.keyword || undefined,
+        fromDate: applied.fromDate || undefined,
+        toDate: applied.toDate || undefined,
+    });
 
     const [pageIndex, setPageIndex] = useState(1);
     const [sort, setSort] = useState<SortState>(NO_SORT);
@@ -147,6 +153,20 @@ export default function UsbMachineList() {
                         >
                             <RefreshCw className="h-4 w-4" />
                         </button>
+                    </div>
+                    <div className="flex items-center gap-1.5 sm:ml-auto">
+                        <UsbExportButton
+                            label="Phiên cắm"
+                            title="Xuất Excel các lần cắm USB theo bộ lọc"
+                            fallbackFileName="PhienCamUSB.xlsx"
+                            download={() => UsbLogApi.exportSessions(exportFilter())}
+                        />
+                        <UsbExportButton
+                            label="Thao tác file"
+                            title="Xuất Excel thao tác file trên USB (và chép từ USB vào máy) theo bộ lọc"
+                            fallbackFileName="ThaoTacFileUSB.xlsx"
+                            download={() => UsbLogApi.exportFiles(exportFilter())}
+                        />
                     </div>
                 </div>
             </section>

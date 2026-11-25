@@ -11,6 +11,10 @@ namespace Asset.Application.Interfaces.Service
 
         Task<PagedResponse<UsbSessionDto>> GetSessionsPagedAsync(UsbSessionFilterRequest filter);
 
+        Task<byte[]> ExportSessionsAsync(UsbSessionFilterRequest filter);
+
+        Task<byte[]> ExportFileEventsAsync(UsbSessionFilterRequest filter);
+
         Task<List<UsbMachineUsbDto>> GetMachineUsbsAsync(string machineName);
 
         Task<PagedResponse<UsbFileEventDto>> GetSessionFilesPagedAsync(

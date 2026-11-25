@@ -30,6 +30,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public long? CapacityBytes { get; set; }
         public string DeviceClass { get; set; } = null!;
         public bool IsApproved { get; set; }
+        public int AccessLevel { get; set; }
+        public bool IsSharedSerial { get; set; }
         // Approved for this PC only (UsbDeviceMachines); false when the PC matches no asset Device.
         public bool ApprovedHere { get; set; }
         public List<string> DriveLetters { get; set; } = new();

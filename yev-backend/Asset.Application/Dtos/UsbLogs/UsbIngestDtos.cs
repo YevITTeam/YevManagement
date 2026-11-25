@@ -9,6 +9,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public const string File = "File";
         // Re-evaluation of an open session after the policy changed (approved, revoked, mode switched).
         public const string Policy = "Policy";
+        // Agent lifecycle: Action = UsbAgentEventType, WindowsUser = actor, Detail = free text.
+        public const string Agent = "Agent";
     }
 
     // Batch sent by the PC agent. Only the fields of the event's Type are read.
@@ -39,6 +41,9 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? VolumeLabel { get; set; }
         public string? DeviceClass { get; set; }
 
+        // True = shared bridge serial (UsbDevice.IsSharedSerial); null from agents before 1.3.
+        public bool? SharedSerial { get; set; }
+
         // Connected + Policy
         public int? PolicyResult { get; set; }
 
@@ -48,6 +53,9 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? FilePath { get; set; }
         public string? OldFilePath { get; set; }
         public long? SizeBytes { get; set; }
+
+        // Agent
+        public string? Detail { get; set; }
     }
 
     public class UsbIngestResultDto

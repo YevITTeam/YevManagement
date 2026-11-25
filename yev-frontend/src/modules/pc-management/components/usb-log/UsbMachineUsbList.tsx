@@ -14,7 +14,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbMachineUsbDto } from "@/modules/pc-management/types/usb-log.dto";
 import UsbLogList from "./UsbLogList";
-import { DEVICE_CLASS_LABELS, POLICY_META, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
+import { DEVICE_CLASS_LABELS, POLICY_META, USB_ACCESS_LEVEL, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 
 const usbName = (row: UsbMachineUsbDto) => usbLabel(row);
 
@@ -112,7 +112,10 @@ export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineU
                             // Approval is the current state; otherwise show what the agent did on the latest plug-in.
                             const policy =
                                 row.isApproved || row.approvedHere
-                                    ? { ...POLICY_META[1], title: row.isApproved ? "Cấp phép cho mọi máy" : "Cấp phép riêng cho máy này" }
+                                    ? {
+                                          ...POLICY_META[row.accessLevel === USB_ACCESS_LEVEL.ReadOnly ? 5 : 1],
+                                          title: row.isApproved ? "Cấp phép cho mọi máy" : "Cấp phép riêng cho máy này",
+                                      }
                                     : row.lastPolicyResult && row.lastPolicyResult !== 1
                                       ? POLICY_META[row.lastPolicyResult]
                                       : undefined;
@@ -141,6 +144,11 @@ export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineU
                                         <td className="px-3 py-2 text-sm text-[#191c1e]">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span className="font-semibold">{usbName(row)}</span>
+                                                {row.isSharedSerial && (
+                                                    <span title="Serial chung của cả dòng box USB: cấp phép là cấp cho mọi box cùng loại">
+                                                        <Badge variant="warning">Serial chung</Badge>
+                                                    </span>
+                                                )}
                                                 {policy && (
                                                     <span title={policy.title}>
                                                         <Badge variant={policy.variant}>{policy.label}</Badge>

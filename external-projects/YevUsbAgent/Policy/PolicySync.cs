@@ -3,37 +3,40 @@ using Microsoft.Extensions.Options;
 
 namespace YevUsbAgent;
 
-// Heartbeat + policy pull: tells the server this agent is alive and fetches the block mode and approved USB list.
+// Heartbeat + policy pull: tells the server this agent is alive and fetches the block mode, approved USB lists,
+// agent settings and, when this PC is due one, an update to install.
 public sealed class PolicySync : BackgroundService
 {
-    private static readonly string AgentVersion = typeof(PolicySync).Assembly.GetName().Version?.ToString(3) ?? "";
+    public static readonly string AgentVersion = typeof(PolicySync).Assembly.GetName().Version?.ToString(3) ?? "";
 
     private readonly PolicyStore _store;
+    private readonly Updater _updater;
     private readonly AgentOptions _options;
     private readonly ILogger<PolicySync> _logger;
     private readonly HttpClient _http;
 
-    public PolicySync(PolicyStore store, IOptions<AgentOptions> options, ILogger<PolicySync> logger)
+    public PolicySync(PolicyStore store, Updater updater, IOptions<AgentOptions> options, ILogger<PolicySync> logger)
     {
         _store = store;
+        _updater = updater;
         _options = options.Value;
         _logger = logger;
-        _http = new HttpClient { BaseAddress = new Uri(_options.ServerUrl.TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(30) };
-        _http.DefaultRequestHeaders.Add("X-Agent-Key", _options.ApiKey);
+        _http = AgentHttp.Create(_options);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await SyncAsync(stoppingToken);
+            var update = await SyncAsync(stoppingToken);
+            if (update != null) await _updater.InstallAsync(update, stoppingToken);
 
             try { await Task.Delay(TimeSpan.FromSeconds(_options.SyncSeconds), stoppingToken); }
             catch (OperationCanceledException) { }
         }
     }
 
-    private async Task SyncAsync(CancellationToken ct)
+    private async Task<UpdateInfo?> SyncAsync(CancellationToken ct)
     {
         try
         {
@@ -42,16 +45,29 @@ public sealed class PolicySync : BackgroundService
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Policy sync failed with HTTP {Status}; keeping the cached policy.", (int)response.StatusCode);
-                return;
+                return null;
             }
 
             var envelope = await response.Content.ReadFromJsonAsync(AgentJson.Default.SyncEnvelope, ct);
-            if (envelope?.Data is { } data)
-                _store.Update(data.Mode, data.PolicyVersion, data.Approved);
+            if (envelope?.Data is not { } data) return null;
+
+            _store.Update(data);
+            return data.Update;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
             _logger.LogWarning("Policy sync failed ({Message}); keeping the cached policy.", ex.Message);
+            return null;
         }
+    }
+}
+
+internal static class AgentHttp
+{
+    public static HttpClient Create(AgentOptions options, int timeoutSeconds = 30)
+    {
+        var http = new HttpClient { BaseAddress = new Uri(options.ServerUrl.TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(timeoutSeconds) };
+        http.DefaultRequestHeaders.Add("X-Agent-Key", options.ApiKey);
+        return http;
     }
 }
