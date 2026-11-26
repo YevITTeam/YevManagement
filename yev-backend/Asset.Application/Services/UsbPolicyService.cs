@@ -16,6 +16,7 @@ namespace Asset.Application.Services
     public class UsbPolicyService : BaseService<IAssetUnitOfWork>, IUsbPolicyService
     {
         private const int StaleAgentHours = 24;
+        private const int DefaultSyncSeconds = 60;
         private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromMinutes(5);
         private static readonly TimeSpan SnapshotTtl = TimeSpan.FromSeconds(30);
 
@@ -28,10 +29,14 @@ namespace Asset.Application.Services
         private sealed record PolicySnapshot(
             UsbBlockMode Mode, HashSet<string> EnforceMachines, ApprovedList Global,
             Dictionary<string, ApprovedList> PerMachine, bool TrackCopyIn, string? PasswordHash,
-            UsbAgentUpdateDto? Update, HashSet<string> UpdateMachines, DateTime LoadedAt);
+            UsbAgentUpdateDto? Update, HashSet<string> UpdateMachines, int SyncSeconds, int? PurgeUninstalledDays, DateTime LoadedAt);
 
         // Every agent syncs about once a minute; a shared snapshot keeps that to one query per TTL (single IIS process).
         private static PolicySnapshot? _snapshot;
+
+        // Auto-purge of uninstalled agents piggybacks on agent syncs instead of a background job.
+        private static readonly TimeSpan PurgeEvery = TimeSpan.FromHours(1);
+        private static DateTime _lastPurgeAt;
 
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IAppReleaseFileStorage _fileStorage;
@@ -49,6 +54,12 @@ namespace Asset.Application.Services
             await TouchAgentAsync(machineName, Trunc(request.AgentVersion?.Trim(), 20), Trunc(request.WindowsUser?.Trim(), 150));
 
             var snapshot = await GetSnapshotAsync();
+            if (snapshot.PurgeUninstalledDays is { } days && DateTime.UtcNow - _lastPurgeAt > PurgeEvery)
+            {
+                _lastPurgeAt = DateTime.UtcNow;
+                await DeleteAgentsAsync(UninstalledBefore(Now().AddDays(-days)));
+            }
+
             var deviceCode = ComputerNameParser.Parse(machineName) ?? "";
             var mode = snapshot.Mode;
             if (mode == UsbBlockMode.Enforce && snapshot.EnforceMachines.Count > 0
@@ -73,6 +84,7 @@ namespace Asset.Application.Services
                 ReadOnly = current ? null : list.ReadOnlyKeys,
                 TrackCopyIn = snapshot.TrackCopyIn,
                 UninstallPasswordHash = snapshot.PasswordHash,
+                SyncSeconds = snapshot.SyncSeconds,
                 Update = wantsUpdate ? update : null
             };
         }
@@ -96,6 +108,8 @@ namespace Asset.Application.Services
                          s => s.MachineName == machineName && s.DisconnectedAt == null && s.ConnectedAt < cutoff))
                 stale.DisconnectedAt = cutoff;
 
+            // Re-matched on every write so a PC added to (or renamed in) asset Devices later still gets linked.
+            var deviceId = (await _unitOfWork.Devices.FirstOrDefaultAsync(UsbLogService.MatchesMachine(machineName)))?.Id;
             if (agent == null)
             {
                 await _unitOfWork.UsbAgents.AddAsync(new UsbAgent
@@ -104,7 +118,8 @@ namespace Asset.Application.Services
                     AgentVersion = version,
                     WindowsUser = windowsUser,
                     FirstSeenAt = now,
-                    LastSeenAt = now
+                    LastSeenAt = now,
+                    DeviceId = deviceId
                 });
             }
             else
@@ -112,6 +127,7 @@ namespace Asset.Application.Services
                 agent.AgentVersion = version;
                 agent.WindowsUser = windowsUser ?? agent.WindowsUser;
                 agent.LastSeenAt = now;
+                agent.DeviceId = deviceId;
             }
 
             await _unitOfWork.SaveChangesAsync();
@@ -157,6 +173,8 @@ namespace Asset.Application.Services
                 setting?.UsbUninstallPasswordHash,
                 update,
                 ParseMachines(setting?.UsbAgentUpdateMachines),
+                setting?.UsbAgentSyncSeconds ?? DefaultSyncSeconds,
+                setting?.UsbAgentPurgeUninstalledDays,
                 DateTime.UtcNow);
             _snapshot = cached;
             return cached;
@@ -204,14 +222,14 @@ namespace Asset.Application.Services
 
             return UsbExcel.Build("Thiết bị USB",
                 new[] { "Tên gợi nhớ", "Tên thiết bị", "Loại", "VID", "PID", "Serial", "Serial chung", "Dung lượng (GB)", "Cấp phép", "Quyền",
-                    "Bộ phận", "Người cấp", "Ngày cấp", "Ghi chú", "Lần đầu", "Lần cuối", "Số lần cắm", "Máy cắm gần nhất" },
+                    "Xưởng", "Bộ phận", "Người cấp", "Ngày cấp", "Ghi chú", "Lần đầu", "Lần cuối", "Số lần cắm", "Máy cắm gần nhất" },
                 rows.Data.Select(u => new object?[]
                 {
                     u.Alias, u.FriendlyName, u.DeviceClass, u.VendorId, u.ProductId, u.SerialNumber, u.IsSharedSerial ? "Có" : null,
                     u.CapacityBytes == null ? null : Math.Round(u.CapacityBytes.Value / 1e9, 1),
                     u.IsApproved ? "Mọi máy" : u.ApprovedMachines.Count > 0 ? string.Join(", ", u.ApprovedMachines.Select(m => m.DeviceCode)) : "Chưa cấp",
                     u.IsApproved || u.ApprovedMachines.Count > 0 ? UsbExcel.AccessLevelText(u.AccessLevel) : null,
-                    u.DepartmentName, u.ApprovedBy, u.ApprovedAt, u.ApprovalNote, u.FirstSeenAt, u.LastSeenAt, u.SessionCount, u.LastMachineName
+                    u.BranchName, u.DepartmentName, u.ApprovedBy, u.ApprovedAt, u.ApprovalNote, u.FirstSeenAt, u.LastSeenAt, u.SessionCount, u.LastMachineName
                 }),
                 rows.TotalCount);
         }
@@ -236,6 +254,9 @@ namespace Asset.Application.Services
             if (!string.IsNullOrWhiteSpace(filter.DeviceClass))
                 query = query.Where(u => u.DeviceClass == filter.DeviceClass);
 
+            if (filter.BranchId.HasValue)
+                query = query.Where(u => u.BranchId == filter.BranchId.Value);
+
             if (filter.DepartmentId.HasValue)
                 query = query.Where(u => u.DepartmentId == filter.DepartmentId.Value);
 
@@ -259,6 +280,8 @@ namespace Asset.Application.Services
                     ApprovalNote = u.ApprovalNote,
                     AccessLevel = u.AccessLevel,
                     IsSharedSerial = u.IsSharedSerial,
+                    BranchId = u.BranchId,
+                    BranchName = u.Branch != null ? u.Branch.BranchName : null,
                     DepartmentId = u.DepartmentId,
                     DepartmentName = u.Department != null ? u.Department.DepartmentName : null,
                     FirstSeenAt = u.FirstSeenAt,
@@ -273,6 +296,8 @@ namespace Asset.Application.Services
         public async Task ApproveAsync(int usbDeviceId, UsbApprovalRequest request)
         {
             var usb = await GetApprovableAsync(usbDeviceId);
+            if (await _unitOfWork.Branches.FirstOrDefaultAsync(b => b.Id == request.BranchId && !b.IsDeleted) == null)
+                throw new DomainException("Xưởng không còn tồn tại.");
             if (await _unitOfWork.DeviceDepartments.FirstOrDefaultAsync(d => d.Id == request.DepartmentId && !d.IsDeleted) == null)
                 throw new DomainException("Bộ phận không còn tồn tại.");
             var existing = await _unitOfWork.UsbDeviceMachines.FindAsync(m => m.UsbDeviceId == usbDeviceId);
@@ -296,6 +321,7 @@ namespace Asset.Application.Services
             }
 
             usb.AccessLevel = request.AccessLevel;
+            usb.BranchId = request.BranchId;
             usb.DepartmentId = request.DepartmentId;
             usb.ApprovedBy = CurrentUser();
             usb.ApprovedAt = Now();
@@ -334,7 +360,8 @@ namespace Asset.Application.Services
             if (approve && row == null)
             {
                 var device = (await _unitOfWork.Devices.FirstOrDefaultAsync(d => d.Id == deviceId && !d.IsDeleted)).OrThrowNotFound("Thiết bị", deviceId);
-                // Quick approval has no department picker: a USB without an owner takes the machine's department.
+                // Quick approval has no owner picker: a USB without an owner takes the machine's workshop and department.
+                usb.BranchId ??= device.BranchId;
                 usb.DepartmentId ??= device.DepartmentId
                     ?? throw new DomainException("Máy chưa có bộ phận; cấp phép ở tab Thiết bị USB để chọn bộ phận.");
                 await _unitOfWork.UsbDeviceMachines.AddAsync(NewMachineApproval(usbDeviceId)(deviceId));
@@ -353,9 +380,13 @@ namespace Asset.Application.Services
             _snapshot = null;
         }
 
-        public async Task<List<UsbDepartmentOptionDto>> GetDepartmentOptionsAsync()
-            => (await _unitOfWork.DeviceDepartments.SelectAsync(d => !d.IsDeleted, d => new UsbDepartmentOptionDto { Id = d.Id, Name = d.DepartmentName }))
-                .OrderBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        public async Task<UsbOwnerOptionsDto> GetOwnerOptionsAsync() => new()
+        {
+            Branches = (await _unitOfWork.Branches.SelectAsync(b => !b.IsDeleted, b => new UsbOwnerOptionDto { Id = b.Id, Name = b.BranchName }))
+                .OrderBy(b => b.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
+            Departments = (await _unitOfWork.DeviceDepartments.SelectAsync(d => !d.IsDeleted, d => new UsbOwnerOptionDto { Id = d.Id, Name = d.DepartmentName }))
+                .OrderBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
+        };
 
         public async Task<List<UsbMachineOptionDto>> GetMachineOptionsAsync()
         {
@@ -437,6 +468,12 @@ namespace Asset.Application.Services
             if (filter.StaleOnly)
                 query = query.Where(a => a.LastSeenAt < staleBefore);
 
+            if (filter.BranchId.HasValue)
+                query = query.Where(a => a.Device != null && a.Device.BranchId == filter.BranchId.Value);
+
+            if (filter.DepartmentId.HasValue)
+                query = query.Where(a => a.Device != null && a.Device.DepartmentId == filter.DepartmentId.Value);
+
             var events = _unitOfWork.UsbAgentEvents.GetQueryable(false);
             return await _unitOfWork.UsbAgents.ToPagedResponseAsync(
                 UsbSort.Apply(query, filter.SortBy, filter.SortDesc, AgentColumns,
@@ -452,6 +489,9 @@ namespace Asset.Application.Services
                     FirstSeenAt = a.FirstSeenAt,
                     LastSeenAt = a.LastSeenAt,
                     IsStale = a.LastSeenAt < staleBefore,
+                    DeviceCode = a.Device != null ? a.Device.DeviceCode : null,
+                    BranchName = a.Device != null ? a.Device.Branch.BranchName : null,
+                    DepartmentName = a.Device != null && a.Device.DeviceDepartment != null ? a.Device.DeviceDepartment.DepartmentName : null,
                     LastEventType = events.Where(e => e.MachineName == a.MachineName)
                         .OrderByDescending(e => e.OccurredAt).Select(e => (int?)e.EventType).FirstOrDefault(),
                     LastEventAt = events.Where(e => e.MachineName == a.MachineName)
@@ -470,6 +510,75 @@ namespace Asset.Application.Services
             return rows.Data.ToList();
         }
 
+        // An agent that is still running comes back on its next sync; only the list row goes, its history stays.
+        public async Task DeleteAgentAsync(int id)
+        {
+            var agent = (await _unitOfWork.UsbAgents.GetByIdAsync(id)).OrThrowNotFound("Agent", id);
+            _unitOfWork.UsbAgents.Delete(agent);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        public async Task<int> PurgeAgentsAsync(UsbAgentPurgeRequest request)
+        {
+            if (!request.Uninstalled && request.OfflineDays == null) throw new DomainException("Chọn loại máy cần xoá.");
+
+            var count = request.Uninstalled ? await DeleteAgentsAsync(UninstalledBefore(DateTime.MaxValue)) : 0;
+            if (request.OfflineDays is { } days)
+            {
+                var before = Now().AddDays(-days);
+                count += await DeleteAgentsAsync(a => a.LastSeenAt < before);
+            }
+            return count;
+        }
+
+        // Uninstalled = the newest lifecycle event is Uninstalled; a reinstall logs Installed after it.
+        private Expression<Func<UsbAgent, bool>> UninstalledBefore(DateTime before)
+        {
+            var events = _unitOfWork.UsbAgentEvents.GetQueryable(false);
+            return a => events.Where(e => e.MachineName == a.MachineName)
+                .OrderByDescending(e => e.OccurredAt).ThenByDescending(e => e.Id)
+                .Select(e => e.EventType == (int)UsbAgentEventType.Uninstalled && e.OccurredAt < before)
+                .FirstOrDefault();
+        }
+
+        private async Task<int> DeleteAgentsAsync(Expression<Func<UsbAgent, bool>> predicate)
+        {
+            var agents = await _unitOfWork.UsbAgents.FindAsync(predicate);
+            if (agents.Count == 0) return 0;
+            _unitOfWork.UsbAgents.RemoveRange(agents);
+            await _unitOfWork.SaveChangesAsync();
+            return agents.Count;
+        }
+
+        public async Task<UsbStatsDto> GetStatsAsync()
+        {
+            var now = Now();
+            var today = now.Date;
+            var liveAfter = now - UsbLogService.AgentLiveWindow;
+            var staleBefore = now.AddHours(-StaleAgentHours);
+            var agents = _unitOfWork.UsbAgents.GetQueryable(false);
+            var sessions = _unitOfWork.UsbSessions.GetQueryable(false);
+            var disks = _unitOfWork.UsbDevices.GetQueryable(false).Where(u => u.DeviceClass == UsbDeviceClasses.DiskDrive);
+            // An open session on a silent PC may have been unplugged long ago, so only live agents count as "now".
+            var liveNames = agents.Where(a => a.LastSeenAt >= liveAfter).Select(a => a.MachineName);
+            var openNow = sessions.Where(s => s.DisconnectedAt == null && liveNames.Contains(s.MachineName));
+            var todaySessions = sessions.Where(s => s.ConnectedAt >= today);
+            var blocked = (int)UsbPolicyResult.Blocked;
+
+            return new UsbStatsDto
+            {
+                AgentCount = await _unitOfWork.UsbAgents.CountAsync(agents),
+                AgentOnlineCount = await _unitOfWork.UsbAgents.CountAsync(agents, a => a.LastSeenAt >= liveAfter),
+                AgentStaleCount = await _unitOfWork.UsbAgents.CountAsync(agents, a => a.LastSeenAt < staleBefore),
+                MachinesConnectedNow = (await _unitOfWork.UsbSessions.GroupCountAsync(openNow, s => s.MachineName, g => g.Key)).Count,
+                BlockedNow = await _unitOfWork.UsbSessions.CountAsync(openNow, s => s.PolicyResult == blocked),
+                SessionsToday = await _unitOfWork.UsbSessions.CountAsync(todaySessions),
+                BlockedToday = await _unitOfWork.UsbSessions.CountAsync(todaySessions, s => s.PolicyResult == blocked),
+                StorageUsbCount = await _unitOfWork.UsbDevices.CountAsync(disks),
+                ApprovedUsbCount = await _unitOfWork.UsbDevices.CountAsync(disks, u => u.IsApproved || u.Machines.Any())
+            };
+        }
+
         public async Task<UsbAgentSettingDto> GetAgentSettingAsync()
         {
             var setting = (await _unitOfWork.AssetSettings.GetAllAsync()).FirstOrDefault();
@@ -478,7 +587,9 @@ namespace Asset.Application.Services
                 TrackCopyIn = setting?.UsbTrackCopyIn ?? false,
                 HasUninstallPassword = setting?.UsbUninstallPasswordHash != null,
                 TargetVersion = setting?.UsbAgentTargetVersion,
-                UpdateMachines = setting?.UsbAgentUpdateMachines
+                UpdateMachines = setting?.UsbAgentUpdateMachines,
+                SyncSeconds = setting?.UsbAgentSyncSeconds ?? DefaultSyncSeconds,
+                PurgeUninstalledDays = setting?.UsbAgentPurgeUninstalledDays
             };
         }
 
@@ -492,6 +603,9 @@ namespace Asset.Application.Services
             setting.UsbTrackCopyIn = request.TrackCopyIn;
             setting.UsbAgentTargetVersion = target;
             setting.UsbAgentUpdateMachines = string.IsNullOrWhiteSpace(request.UpdateMachines) ? null : request.UpdateMachines.Trim();
+            setting.UsbAgentSyncSeconds = request.SyncSeconds;
+            setting.UsbAgentPurgeUninstalledDays = request.PurgeUninstalledDays;
+            _lastPurgeAt = default;
             _unitOfWork.AssetSettings.Update(setting);
             await _unitOfWork.SaveChangesAsync();
             _snapshot = null;

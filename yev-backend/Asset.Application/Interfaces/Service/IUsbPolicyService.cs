@@ -18,7 +18,7 @@ namespace Asset.Application.Interfaces.Service
         Task SetMachineApprovalAsync(int usbDeviceId, int deviceId, bool approve);
 
         Task<List<UsbMachineOptionDto>> GetMachineOptionsAsync();
-        Task<List<UsbDepartmentOptionDto>> GetDepartmentOptionsAsync();
+        Task<UsbOwnerOptionsDto> GetOwnerOptionsAsync();
 
         Task<UsbPolicySettingDto> GetSettingAsync();
 
@@ -29,6 +29,12 @@ namespace Asset.Application.Interfaces.Service
         Task<byte[]> ExportDevicesAsync(UsbDeviceFilterRequest filter);
 
         Task<List<UsbAgentEventDto>> GetAgentEventsAsync(string machineName);
+
+        Task DeleteAgentAsync(int id);
+
+        Task<int> PurgeAgentsAsync(UsbAgentPurgeRequest request);
+
+        Task<UsbStatsDto> GetStatsAsync();
 
         Task<UsbAgentSettingDto> GetAgentSettingAsync();
 

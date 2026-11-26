@@ -152,7 +152,7 @@ internal static class Installer
             return new AgentOptions
             {
                 ServerUrl = agent.GetProperty("ServerUrl").GetString() ?? "",
-                ApiKey = agent.GetProperty("ApiKey").GetString() ?? ""
+                ApiKey = AgentSecret.Reveal(agent.GetProperty("ApiKey").GetString() ?? "")
             };
         }
         catch (Exception ex) when (ex is IOException or JsonException or KeyNotFoundException or UnauthorizedAccessException or InvalidOperationException)

@@ -14,6 +14,7 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 
 builder.Services.AddWindowsService(options => options.ServiceName = "YevUsbAgent");
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("Agent"));
+builder.Services.PostConfigure<AgentOptions>(o => o.ApiKey = AgentSecret.Reveal(o.ApiKey));
 var dataDir = (builder.Configuration.GetSection("Agent").Get<AgentOptions>() ?? new AgentOptions()).ResolveDataDir();
 builder.Services.AddSingleton(new EventQueue(dataDir));
 builder.Services.AddSingleton(new PolicyStore(dataDir));

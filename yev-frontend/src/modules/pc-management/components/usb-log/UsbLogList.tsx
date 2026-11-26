@@ -3,6 +3,7 @@
 import { Pagination } from "@/components/ui/Pagination";
 import { Fragment, useState } from "react";
 import { FilterX, RefreshCw, Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
 
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
@@ -11,7 +12,7 @@ import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh"
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Badge } from "@/components/ui/Badge";
 import UsbSessionFiles from "./UsbSessionFiles";
-import { DEVICE_CLASS_LABELS, POLICY_META, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
+import { POLICY_META, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 
 const PAGE_SIZE = 20;
 
@@ -31,6 +32,7 @@ interface UsbLogListProps {
 
 // USB plug-in sessions reported by the PC agent.
 export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLogListProps) {
+    const t = useTranslations("usbLog");
     const [rows, setRows] = useState<UsbSessionDto[]>([]);
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -65,7 +67,7 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
         },
-        "Không thể tải nhật ký USB.",
+        t("sessions.loadError"),
         (message) => toast.error(message),
         showMachine ? "usb-log" : undefined
     );
@@ -91,12 +93,12 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
             {showMachine && (
                 <>
                     <div className="flex items-center justify-between gap-3">
-                        <h1 className="text-lg font-semibold text-[#191c1e]">Nhật ký USB</h1>
+                        <h1 className="text-lg font-semibold text-[#191c1e]">{t("sessions.title")}</h1>
                         <button
                             onClick={() => refetch()}
                             disabled={isLoading}
-                            title="Làm mới"
-                            aria-label="Làm mới"
+                            title={t("common.refresh")}
+                            aria-label={t("common.refresh")}
                             className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <RefreshCw className="h-3.5 w-3.5" />
@@ -106,17 +108,17 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                     <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
                         <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-[calc(50%-0.25rem)] sm:[&>label]:w-40">
                             <label className="block max-sm:w-full! sm:w-64!">
-                                <span className={fieldLabelClassName}>Tìm kiếm</span>
+                                <span className={fieldLabelClassName}>{t("common.search")}</span>
                                 <input
                                     value={draft.keyword}
                                     onChange={(event) => setDraft({ ...draft, keyword: event.target.value })}
                                     onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                                    placeholder="Mã máy, user, tên/serial USB"
+                                    placeholder={t("sessions.searchPlaceholder")}
                                     className={fieldClassName}
                                 />
                             </label>
                             <label className="block">
-                                <span className={fieldLabelClassName}>Từ ngày</span>
+                                <span className={fieldLabelClassName}>{t("common.fromDate")}</span>
                                 <input
                                     type="date"
                                     value={draft.fromDate}
@@ -125,7 +127,7 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                 />
                             </label>
                             <label className="block">
-                                <span className={fieldLabelClassName}>Đến ngày</span>
+                                <span className={fieldLabelClassName}>{t("common.toDate")}</span>
                                 <input
                                     type="date"
                                     value={draft.toDate}
@@ -140,15 +142,15 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                     onChange={(event) => setDraft({ ...draft, unpermittedOnly: event.target.checked })}
                                     className="h-4 w-4 accent-[#e3000f]"
                                 />
-                                Chưa cấp phép
+                                {t("common.notApproved")}
                             </label>
 
                             <div className="flex items-center gap-1.5">
                                 <button
                                     onClick={handleSearch}
                                     disabled={isLoading}
-                                    title="Tìm kiếm"
-                                    aria-label="Tìm kiếm"
+                                    title={t("common.search")}
+                                    aria-label={t("common.search")}
                                     className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-[#e3000f] text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     <Search className="h-4 w-4" />
@@ -156,8 +158,8 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                 <button
                                     onClick={handleReset}
                                     disabled={isLoading}
-                                    title="Xoá lọc"
-                                    aria-label="Xoá lọc"
+                                    title={t("common.clearFilter")}
+                                    aria-label={t("common.clearFilter")}
                                     className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     <FilterX className="h-4 w-4" />
@@ -176,24 +178,24 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <SortableTh label="Cắm lúc" sortKey="connectedAt" sort={sort} onSort={handleSort} className="px-3 py-2" />
-                                <SortableTh label="Rút lúc" sortKey="disconnectedAt" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
-                                {showMachine && <SortableTh label="Máy" sortKey="machineName" sort={sort} onSort={handleSort} className="px-3 py-2" />}
-                                <SortableTh label="Người dùng" sortKey="windowsUser" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
+                                <SortableTh label={t("sessions.connectedAt")} sortKey="connectedAt" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <SortableTh label={t("sessions.disconnectedAt")} sortKey="disconnectedAt" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
+                                {showMachine && <SortableTh label={t("common.machine")} sortKey="machineName" sort={sort} onSort={handleSort} className="px-3 py-2" />}
+                                <SortableTh label={t("common.user")} sortKey="windowsUser" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
                                 {usbDeviceId === undefined ? (
                                     <SortableTh label="USB" sortKey="usb" sort={sort} onSort={handleSort} className="px-3 py-2" />
                                 ) : (
-                                    <th className="px-3 py-2">Ổ</th>
+                                    <th className="px-3 py-2">{t("sessions.drive")}</th>
                                 )}
-                                <SortableTh label="File" sortKey="fileEventCount" sort={sort} onSort={handleSort} className="px-3 py-2" />
-                                <th className="px-3 py-2 text-right">Chi tiết</th>
+                                <SortableTh label={t("common.file")} sortKey="fileEventCount" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <th className="px-3 py-2 text-right">{t("sessions.detail")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && rows.length === 0 && (
                                 <tr>
                                     <td colSpan={columnCount} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu.
+                                        {t("common.noData")}
                                     </td>
                                 </tr>
                             )}
@@ -205,9 +207,9 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                             {row.disconnectedAt ? (
                                                 formatDateTime(row.disconnectedAt)
                                             ) : row.agentOnline ? (
-                                                "Đang cắm"
+                                                t("common.connectedNow")
                                             ) : (
-                                                <span title="Agent trên máy không còn báo về (máy tắt, agent bị dừng hoặc gỡ) nên không biết lúc rút">Không rõ</span>
+                                                <span title={t("sessions.unknownTitle")}>{t("sessions.unknown")}</span>
                                             )}
                                         </td>
                                         {showMachine && (
@@ -216,10 +218,10 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                                     <span className="font-semibold">{row.deviceCode ?? row.machineName}</span>
                                                     {row.wasPermitted === false && (
                                                         <span
-                                                            title="Máy chưa bật Dùng USB trong Quản lý thiết bị khi cắm"
+                                                            title={t("common.unpermittedMachineTitle")}
                                                             className="shrink-0 rounded-full border border-[#f3d9b1] bg-[#fff8ee] px-2 py-0.5 text-[10px] font-semibold text-[#8a5a00]"
                                                         >
-                                                            Máy chưa bật USB
+                                                            {t("common.unpermittedMachine")}
                                                         </span>
                                                     )}
                                                 </div>
@@ -231,14 +233,14 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span>{usbDeviceId === undefined ? usbLabel({ ...row, alias: row.usbAlias }) : row.driveLetter || "-"}</span>
                                                 {row.policyResult !== null && POLICY_META[row.policyResult] && (
-                                                    <span title={POLICY_META[row.policyResult].title}>
-                                                        <Badge variant={POLICY_META[row.policyResult].variant}>{POLICY_META[row.policyResult].label}</Badge>
+                                                    <span title={t(`policy.${POLICY_META[row.policyResult].key}.title`)}>
+                                                        <Badge variant={POLICY_META[row.policyResult].variant}>{t(`policy.${POLICY_META[row.policyResult].key}.label`)}</Badge>
                                                     </span>
                                                 )}
                                             </div>
                                             <div className={usbDeviceId === undefined ? "break-all text-xs text-[#5e3f3a]" : "hidden"}>
                                                 {[
-                                                    row.deviceClass === "DiskDrive" ? null : DEVICE_CLASS_LABELS[row.deviceClass] ?? row.deviceClass,
+                                                    row.deviceClass === "DiskDrive" ? null : deviceClassLabel(t, row.deviceClass),
                                                     row.driveLetter,
                                                     row.serialNumber,
                                                     formatBytes(row.capacityBytes),
@@ -254,7 +256,7 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                                 disabled={row.fileEventCount === 0}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-40"
                                             >
-                                                {expandedId === row.id ? "Ẩn" : "Xem"}
+                                                {expandedId === row.id ? t("sessions.hide") : t("sessions.view")}
                                             </button>
                                         </td>
                                     </tr>
@@ -276,8 +278,8 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                     totalPages={totalPages}
                     onPageChange={setPageIndex}
                     disabled={isLoading}
-                    summary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} phiên`}
-                    compactSummary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} phiên`}
+                    summary={isLoading ? t("common.loadingData") : t("common.shownSessions", { shown: rows.length, total: totalCount })}
+                    compactSummary={isLoading ? t("common.loadingData") : t("common.shownSessions", { shown: rows.length, total: totalCount })}
                 />
             </section>
         </div>

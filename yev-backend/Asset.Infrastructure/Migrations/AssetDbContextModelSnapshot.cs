@@ -78,6 +78,14 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<int?>("ServerCheckBranchId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("UsbAgentPurgeUninstalledDays")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UsbAgentSyncSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(60);
+
                     b.Property<string>("UsbAgentTargetVersion")
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
@@ -1290,6 +1298,9 @@ namespace Asset.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<int?>("DeviceId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("FirstSeenAt")
                         .HasColumnType("datetime2");
 
@@ -1307,6 +1318,8 @@ namespace Asset.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("PK_UsbAgents");
+
+                    b.HasIndex("DeviceId");
 
                     b.HasIndex(new[] { "MachineName" }, "IX_UsbAgents_MachineName")
                         .IsUnique();
@@ -1434,6 +1447,9 @@ namespace Asset.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<int?>("BranchId")
+                        .HasColumnType("int");
+
                     b.Property<long?>("CapacityBytes")
                         .HasColumnType("bigint");
 
@@ -1480,6 +1496,8 @@ namespace Asset.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("PK_UsbDevices");
+
+                    b.HasIndex("BranchId");
 
                     b.HasIndex("DepartmentId");
 
@@ -1983,13 +2001,32 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("OldDevice");
                 });
 
+            modelBuilder.Entity("Asset.Domain.Entities.UsbAgent", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_UsbAgents_ThietBis_DeviceId");
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("Asset.Domain.Entities.UsbDevice", b =>
                 {
+                    b.HasOne("Asset.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_UsbDevices_ChiNhanhs_BranchId");
+
                     b.HasOne("Asset.Domain.Entities.DeviceDepartment", "Department")
                         .WithMany()
                         .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_UsbDevices_BoPhans_DepartmentId");
+
+                    b.Navigation("Branch");
 
                     b.Navigation("Department");
                 });

@@ -2,18 +2,20 @@ import { api, getForBlob } from "@/lib/client";
 import type {
     UsbAgentDto,
     UsbAgentEventDto,
+    UsbAgentPurgeRequest,
     UsbAgentReleaseDto,
     UsbAgentSettingDto,
     UsbAgentSettingRequest,
     UsbApprovalRequest,
     UsbMachineOptionDto,
-    UsbDepartmentOptionDto,
+    UsbOwnerOptionsDto,
     UsbDeviceDto,
     UsbFileEventDto,
     UsbMachineDto,
     UsbMachineUsbDto,
     UsbPolicySettingDto,
     UsbSessionDto,
+    UsbStatsDto,
 } from "@/modules/pc-management/types/usb-log.dto";
 import { ApiResponse, ApiResponseWithPageNation } from "@/types/api";
 
@@ -30,10 +32,13 @@ const ENDPOINTS = {
         machine: (id: number, deviceId: number) => `/UsbLog/devices/${id}/machines/${deviceId}`,
         alias: (id: number) => `/UsbLog/devices/${id}/alias`,
         machineOptions: "/UsbLog/machine-options",
-        departmentOptions: "/UsbLog/department-options",
+        ownerOptions: "/UsbLog/owner-options",
         policy: "/UsbLog/policy",
         getAgents: "/UsbLog/agents",
         agentEvents: (machineName: string) => `/UsbLog/agents/${encodeURIComponent(machineName)}/events`,
+        agent: (id: number) => `/UsbLog/agents/${id}`,
+        purgeAgents: "/UsbLog/agents/purge",
+        stats: "/UsbLog/stats",
         agentSettings: "/UsbLog/agent-settings",
         uninstallPassword: "/UsbLog/agent-settings/uninstall-password",
         releases: "/UsbLog/agent-releases",
@@ -50,6 +55,7 @@ export interface GetUsbDevicesParams {
     keyword?: string;
     isApproved?: boolean;
     deviceClass?: string;
+    branchId?: number;
     departmentId?: number;
     sortBy?: string;
     sortDesc?: boolean;
@@ -60,6 +66,8 @@ export interface GetUsbAgentsParams {
     pageSize?: number;
     keyword?: string;
     staleOnly?: boolean;
+    branchId?: number;
+    departmentId?: number;
     sortBy?: string;
     sortDesc?: boolean;
 }
@@ -83,6 +91,8 @@ export interface GetUsbSessionsParams {
     fromDate?: string;
     toDate?: string;
     unpermittedOnly?: boolean;
+    branchId?: number;
+    departmentId?: number;
     sortBy?: string;
     sortDesc?: boolean;
 }
@@ -94,42 +104,19 @@ export interface GetUsbMachinesParams {
     fromDate?: string;
     toDate?: string;
     connectedNowOnly?: boolean;
+    branchId?: number;
+    departmentId?: number;
     sortBy?: string;
     sortDesc?: boolean;
 }
 
 export const UsbLogApi = {
-    getMachines: async (params?: GetUsbMachinesParams) => {
-        const query = new URLSearchParams();
-        if (params?.pageIndex) query.set("pageIndex", String(params.pageIndex));
-        if (params?.pageSize) query.set("pageSize", String(params.pageSize));
-        if (params?.keyword) query.set("keyword", params.keyword);
-        if (params?.fromDate) query.set("fromDate", params.fromDate);
-        if (params?.toDate) query.set("toDate", params.toDate);
-        if (params?.connectedNowOnly) query.set("connectedNowOnly", "true");
-        if (params?.sortBy) query.set("sortBy", params.sortBy);
-        if (params?.sortDesc) query.set("sortDesc", "true");
-        const queryString = query.toString();
-        const url = queryString ? `${ENDPOINTS.USB_LOG.getMachines}?${queryString}` : ENDPOINTS.USB_LOG.getMachines;
-        const response = await api.get<ApiResponseWithPageNation<UsbMachineDto>>(url);
+    getMachines: async (params: GetUsbMachinesParams = {}) => {
+        const response = await api.get<ApiResponseWithPageNation<UsbMachineDto>>(withQuery(ENDPOINTS.USB_LOG.getMachines, { ...params }));
         return response.data;
     },
-    getSessions: async (params?: GetUsbSessionsParams) => {
-        const query = new URLSearchParams();
-        if (params?.pageIndex) query.set("pageIndex", String(params.pageIndex));
-        if (params?.pageSize) query.set("pageSize", String(params.pageSize));
-        if (params?.deviceId !== undefined) query.set("deviceId", String(params.deviceId));
-        if (params?.machineName) query.set("machineName", params.machineName);
-        if (params?.usbDeviceId !== undefined) query.set("usbDeviceId", String(params.usbDeviceId));
-        if (params?.keyword) query.set("keyword", params.keyword);
-        if (params?.fromDate) query.set("fromDate", params.fromDate);
-        if (params?.toDate) query.set("toDate", params.toDate);
-        if (params?.unpermittedOnly) query.set("unpermittedOnly", "true");
-        if (params?.sortBy) query.set("sortBy", params.sortBy);
-        if (params?.sortDesc) query.set("sortDesc", "true");
-        const queryString = query.toString();
-        const url = queryString ? `${ENDPOINTS.USB_LOG.getSessions}?${queryString}` : ENDPOINTS.USB_LOG.getSessions;
-        const response = await api.get<ApiResponseWithPageNation<UsbSessionDto>>(url);
+    getSessions: async (params: GetUsbSessionsParams = {}) => {
+        const response = await api.get<ApiResponseWithPageNation<UsbSessionDto>>(withQuery(ENDPOINTS.USB_LOG.getSessions, { ...params }));
         return response.data;
     },
     getSessionFiles: async (id: string, params?: { pageIndex?: number; pageSize?: number; sortBy?: string; sortDesc?: boolean }) => {
@@ -171,8 +158,8 @@ export const UsbLogApi = {
         const response = await api.get<ApiResponse<UsbMachineOptionDto[]>>(ENDPOINTS.USB_LOG.machineOptions);
         return response.data;
     },
-    getDepartmentOptions: async () => {
-        const response = await api.get<ApiResponse<UsbDepartmentOptionDto[]>>(ENDPOINTS.USB_LOG.departmentOptions);
+    getOwnerOptions: async () => {
+        const response = await api.get<ApiResponse<UsbOwnerOptionsDto>>(ENDPOINTS.USB_LOG.ownerOptions);
         return response.data;
     },
     revoke: async (id: number) => {
@@ -193,6 +180,18 @@ export const UsbLogApi = {
     },
     getAgentEvents: async (machineName: string) => {
         const response = await api.get<ApiResponse<UsbAgentEventDto[]>>(ENDPOINTS.USB_LOG.agentEvents(machineName));
+        return response.data;
+    },
+    deleteAgent: async (id: number) => {
+        const response = await api.delete<ApiResponse<boolean>>(ENDPOINTS.USB_LOG.agent(id));
+        return response.data;
+    },
+    purgeAgents: async (body: UsbAgentPurgeRequest) => {
+        const response = await api.post<ApiResponse<number>>(ENDPOINTS.USB_LOG.purgeAgents, body);
+        return response.data;
+    },
+    getStats: async () => {
+        const response = await api.get<ApiResponse<UsbStatsDto>>(ENDPOINTS.USB_LOG.stats);
         return response.data;
     },
     getAgentSetting: async () => {

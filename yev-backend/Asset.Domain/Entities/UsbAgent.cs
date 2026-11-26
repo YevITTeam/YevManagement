@@ -14,4 +14,9 @@ public partial class UsbAgent
     public DateTime FirstSeenAt { get; set; }
 
     public DateTime LastSeenAt { get; set; }
+
+    // Matched the way ingest matches a PC; null when the computer name is in no Device.
+    public int? DeviceId { get; set; }
+
+    public virtual Device? Device { get; set; }
 }

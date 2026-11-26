@@ -50,10 +50,13 @@ public sealed partial class UsbMonitor : BackgroundService
         public int? PolicyResult { get; set; }
         // Set while a block waits for open files to close; after BlockGrace the volume is locked anyway.
         public DateTime? BlockDeferredSince { get; set; }
+        // Only used while the disk is write-blocked because Windows refused to disable it.
+        public DateTime NextFullBlockAt { get; set; } = DateTime.UtcNow + FullBlockRetry;
         public bool Disabled => Drive?.Letter.Length == 0;
     }
 
     private static readonly TimeSpan BlockGrace = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan FullBlockRetry = TimeSpan.FromSeconds(30);
 
     public UsbMonitor(EventQueue queue, PolicyStore policy, IOptions<AgentOptions> options, ILogger<UsbMonitor> logger)
     {
@@ -194,6 +197,7 @@ public sealed partial class UsbMonitor : BackgroundService
             tracked.Watcher = StartWatcher(tracked.SessionId, tracked.Drive!);
 
         if (_policy.Revision != _appliedRevision || _reevaluationPending) Reevaluate(drives.Values);
+        RetryFullBlocks(drives.Values);
 
         var readable = _policy.Current.TrackCopyIn
             ? _sessions.Values.Where(t => t.Watcher != null).Select(t => new CopyInMonitor.UsbRoot(t.Drive!.Letter + "\\", t.SessionId)).ToList()
@@ -226,12 +230,7 @@ public sealed partial class UsbMonitor : BackgroundService
             if (outcome == LockOutcome.Deferred) return (false, null, false);
             if (outcome == LockOutcome.Done)
             {
-                _blocked[drive.PnpId] = new BlockedDisk
-                {
-                    PnpId = drive.PnpId, Key = key, VendorId = drive.Identity.VendorId, ProductId = drive.Identity.ProductId,
-                    Serial = drive.Identity.Serial, Model = drive.Model, SharedSerial = drive.SharedSerial
-                };
-                SaveBlocked();
+                RememberBlocked(drive);
                 return (true, PolicyResults.Blocked, true);
             }
             // Windows would not disable it (system disk, driver refusing): writes are still stopped below.
@@ -260,6 +259,56 @@ public sealed partial class UsbMonitor : BackgroundService
         _locked.Remove(key);
         SaveLocked();
         return (true, decision, false);
+    }
+
+    private void RememberBlocked(UsbDrive drive)
+    {
+        _blocked[drive.PnpId] = new BlockedDisk
+        {
+            PnpId = drive.PnpId, Key = drive.Identity.Key, VendorId = drive.Identity.VendorId, ProductId = drive.Identity.ProductId,
+            Serial = drive.Identity.Serial, Model = drive.Model, SharedSerial = drive.SharedSerial
+        };
+        SaveBlocked();
+    }
+
+    // Every volume of the disk is gone; one session stands for the disabled disk from now on.
+    private void MarkDisabled(string key, Tracked tracked, List<KeyValuePair<string, Tracked>> sameDisk, int? result)
+    {
+        foreach (var (otherKey, _) in sameDisk.Where(s => s.Key != key)) Close(otherKey);
+        _sessions.Remove(key);
+        _sessions[BlockedKey(tracked.Drive!.PnpId)] = new Tracked
+        {
+            SessionId = tracked.SessionId, Drive = tracked.Drive with { Letter = "" }, PolicyResult = result
+        };
+        SaveActiveSessions();
+    }
+
+    private List<KeyValuePair<string, Tracked>> SameDisk(UsbDrive drive)
+        => _sessions.Where(s => s.Value.Drive?.DiskIndex == drive.DiskIndex && !s.Value.Disabled).ToList();
+
+    // A disk Windows would not disable was only write-blocked; keep trying, a busy driver or open handle often lets go.
+    private void RetryFullBlocks(IReadOnlyCollection<UsbDrive> present)
+    {
+        foreach (var (key, tracked) in _sessions.ToList())
+        {
+            if (!_sessions.ContainsKey(key) || tracked.PolicyResult != PolicyResults.Blocked || tracked.Disabled
+                || tracked.Drive is not { } drive || drive.Identity.VendorId == "SD" || DateTime.UtcNow < tracked.NextFullBlockAt) continue;
+            tracked.NextFullBlockAt = DateTime.UtcNow + FullBlockRetry;
+
+            var sameDisk = SameDisk(drive);
+            foreach (var (_, t) in sameDisk)
+            {
+                t.Watcher?.Dispose();
+                t.Watcher = null;
+            }
+            var letters = present.Where(d => d.DiskIndex == drive.DiskIndex).Select(d => d.Letter).Distinct().ToList();
+            // Writes are already blocked, so forcing the volumes offline cannot lose unsaved work.
+            if (DeviceBlock.Disable(drive.PnpId, letters, force: true, _logger) != LockOutcome.Done) continue;
+
+            RememberBlocked(drive);
+            MarkDisabled(key, tracked, sameDisk, PolicyResults.Blocked);
+            _logger.LogInformation("USB {Letter} fully blocked on retry.", drive.Letter);
+        }
     }
 
     private void OpenDrive(string key, UsbDrive drive, IReadOnlyCollection<UsbDrive> present)
@@ -366,8 +415,7 @@ public sealed partial class UsbMonitor : BackgroundService
 
             // Our own watchers keep the volumes open and would make the volume lock fail every time.
             var touchesDisk = blocking || _locked.Contains(tracked.Drive.Identity.Key);
-            var sameDisk = touchesDisk ? _sessions.Where(s => s.Value.Drive?.DiskIndex == tracked.Drive.DiskIndex && !s.Value.Disabled).ToList()
-                : new List<KeyValuePair<string, Tracked>>();
+            var sameDisk = touchesDisk ? SameDisk(tracked.Drive) : new List<KeyValuePair<string, Tracked>>();
             foreach (var (_, t) in sameDisk)
             {
                 t.Watcher?.Dispose();
@@ -376,19 +424,12 @@ public sealed partial class UsbMonitor : BackgroundService
 
             var (done, result, disabled) = Enforce(tracked.Drive, decision, present, force);
 
-            if (disabled)
-            {
-                // Every volume of the disk is gone; one session stands for the disabled disk from now on.
-                foreach (var (otherKey, _) in sameDisk.Where(s => s.Key != key)) Close(otherKey);
-                _sessions.Remove(key);
-                _sessions[BlockedKey(tracked.Drive.PnpId)] = new Tracked
-                {
-                    SessionId = tracked.SessionId, Drive = tracked.Drive with { Letter = "" }, PolicyResult = result
-                };
-                SaveActiveSessions();
-            }
+            if (disabled) MarkDisabled(key, tracked, sameDisk, result);
             else
+            {
                 foreach (var (_, t) in sameDisk) t.Watcher = StartWatcher(t.SessionId, t.Drive!);
+                tracked.NextFullBlockAt = DateTime.UtcNow + FullBlockRetry;
+            }
 
             if (!done)
             {

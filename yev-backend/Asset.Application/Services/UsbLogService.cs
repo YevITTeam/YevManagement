@@ -28,12 +28,7 @@ namespace Asset.Application.Services
 
             var machineName = NormalizeMachineName(request.MachineName);
 
-            // The device code comes from the Computer Name naming rule, same as the Tanium import; names outside
-            // the managed families fall back to DeviceName (old rows may still carry the ".yev.vn" suffix).
-            var deviceCode = ComputerNameParser.Parse(machineName);
-            var device = await _unitOfWork.Devices.FirstOrDefaultAsync(
-                d => !d.IsDeleted && ((deviceCode != null && d.DeviceCode == deviceCode)
-                    || d.DeviceName == machineName || d.DeviceName == machineName + DomainSuffix));
+            var device = await _unitOfWork.Devices.FirstOrDefaultAsync(MatchesMachine(machineName));
 
             var sessionIds = request.Events.Select(e => e.SessionId).Distinct().ToList();
             var sessions = (await _unitOfWork.UsbSessions.FindAsync(s => sessionIds.Contains(s.Id)))
@@ -223,6 +218,8 @@ namespace Asset.Application.Services
                 query = query.Where(s => s.ConnectedAt < toExclusive);
             }
 
+            query = FilterOwner(query, filter.BranchId, filter.DepartmentId);
+
             // One row per PC; the result is bounded by the number of PCs, so filtering/paging runs in memory.
             var groups = await _unitOfWork.UsbSessions.GroupCountAsync(
                 query, s => s.MachineName,
@@ -253,10 +250,19 @@ namespace Asset.Application.Services
             var page = machines.Skip((filter.PageIndex - 1) * filter.PageSize).Take(filter.PageSize).ToList();
 
             var deviceIds = page.Where(m => m.DeviceId != null).Select(m => m.DeviceId!.Value).Distinct().ToList();
-            var codes = (await _unitOfWork.Devices.SelectAsync(d => deviceIds.Contains(d.Id), d => new { d.Id, d.DeviceCode }))
-                .ToDictionary(x => x.Id, x => x.DeviceCode);
+            var owners = (await _unitOfWork.Devices.SelectAsync(d => deviceIds.Contains(d.Id), d => new
+                {
+                    d.Id, d.DeviceCode, d.Branch.BranchName,
+                    DepartmentName = d.DeviceDepartment != null ? d.DeviceDepartment.DepartmentName : null
+                }))
+                .ToDictionary(x => x.Id);
             foreach (var machine in page)
-                if (machine.DeviceId != null) machine.DeviceCode = codes.GetValueOrDefault(machine.DeviceId.Value);
+            {
+                if (machine.DeviceId == null || !owners.TryGetValue(machine.DeviceId.Value, out var owner)) continue;
+                machine.DeviceCode = owner.DeviceCode;
+                machine.BranchName = owner.BranchName;
+                machine.DepartmentName = owner.DepartmentName;
+            }
 
             return new PagedResponse<UsbMachineDto>(page, machines.Count, filter.PageIndex, filter.PageSize);
         }
@@ -354,6 +360,8 @@ namespace Asset.Application.Services
 
             if (filter.UsbDeviceId.HasValue)
                 query = query.Where(s => s.UsbDeviceId == filter.UsbDeviceId.Value);
+
+            query = FilterOwner(query, filter.BranchId, filter.DepartmentId);
 
             return query;
         }
@@ -495,11 +503,28 @@ namespace Asset.Application.Services
             return ordered.ThenBy(m => m.MachineName).ToList();
         }
 
+        // Workshop/department of the PC as recorded in asset Devices; PCs matching no Device drop out.
+        private static IQueryable<UsbSession> FilterOwner(IQueryable<UsbSession> query, int? branchId, int? departmentId)
+        {
+            if (branchId.HasValue) query = query.Where(s => s.Device != null && s.Device.BranchId == branchId.Value);
+            if (departmentId.HasValue) query = query.Where(s => s.Device != null && s.Device.DepartmentId == departmentId.Value);
+            return query;
+        }
+
         private async Task<HashSet<string>> GetLiveMachinesAsync()
         {
             var cutoff = DateTime.UtcNow.AddHours(7) - AgentLiveWindow;
             var names = await _unitOfWork.UsbAgents.SelectAsync(a => a.LastSeenAt >= cutoff, a => a.MachineName);
             return names.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        // The device code comes from the Computer Name naming rule, same as the Tanium import; names outside
+        // the managed families fall back to DeviceName (old rows may still carry the ".yev.vn" suffix).
+        internal static System.Linq.Expressions.Expression<Func<Device, bool>> MatchesMachine(string machineName)
+        {
+            var deviceCode = ComputerNameParser.Parse(machineName);
+            return d => !d.IsDeleted && ((deviceCode != null && d.DeviceCode == deviceCode)
+                || d.DeviceName == machineName || d.DeviceName == machineName + DomainSuffix);
         }
 
         public static string NormalizeMachineName(string machineName)

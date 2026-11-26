@@ -90,6 +90,7 @@ public sealed class SyncResponse
     public List<string>? ReadOnly { get; set; }
     public bool TrackCopyIn { get; set; }
     public string? UninstallPasswordHash { get; set; }
+    public int SyncSeconds { get; set; }
     public UpdateInfo? Update { get; set; }
 }
 
@@ -114,6 +115,7 @@ public sealed class PolicyFile
     public bool TrackCopyIn { get; set; }
     // Read by Installer before an uninstall; the server hash format is "iterations.salt.hash".
     public string? UninstallPasswordHash { get; set; }
+    public int SyncSeconds { get; set; }
 }
 
 // Disks this agent disabled in Windows; kept on disk because a disabled disk has no letter left to find it by.

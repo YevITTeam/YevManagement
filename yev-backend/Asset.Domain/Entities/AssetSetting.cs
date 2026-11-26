@@ -33,5 +33,11 @@ public partial class AssetSetting
     // Machines that take TargetVersion first (same format as UsbEnforceMachines); empty = every agent.
     public string? UsbAgentUpdateMachines { get; set; }
 
+    // Seconds between agent syncs (agents 1.4+), i.e. how fast approvals and mode changes reach PCs. DB default 60.
+    public int UsbAgentSyncSeconds { get; set; }
+
+    // Agents whose last event is Uninstalled leave the agent list after this many days; null = keep them.
+    public int? UsbAgentPurgeUninstalledDays { get; set; }
+
     public virtual Branch? ServerCheckBranch { get; set; }
 }

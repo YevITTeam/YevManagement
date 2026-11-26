@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -17,6 +18,7 @@ interface UsbExportButtonProps {
 
 // Excel of whatever the list's applied filters select (BE caps it at 50,000 rows and says so in the sheet).
 export default function UsbExportButton({ label, title, fallbackFileName, download }: UsbExportButtonProps) {
+    const t = useTranslations("usbLog");
     const [busy, setBusy] = useState(false);
 
     const handleClick = async () => {
@@ -25,7 +27,7 @@ export default function UsbExportButton({ label, title, fallbackFileName, downlo
             const { blob, fileName } = await download();
             saveBlob(blob, fileName ?? fallbackFileName);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, "Xuất Excel thất bại."));
+            toast.error(getApiErrorMessage(err, t("common.exportFailed")));
         } finally {
             setBusy(false);
         }

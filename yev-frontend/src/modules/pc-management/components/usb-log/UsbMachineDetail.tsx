@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, ExternalLink } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Link } from "@/navigation";
 import UsbMachineUsbList from "./UsbMachineUsbList";
@@ -11,6 +12,7 @@ interface UsbMachineDetailProps {
 }
 
 export default function UsbMachineDetail({ machineName, deviceId }: UsbMachineDetailProps) {
+    const t = useTranslations("usbLog");
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -18,13 +20,13 @@ export default function UsbMachineDetail({ machineName, deviceId }: UsbMachineDe
                     <Link
                         href="/pc/usb-log"
                         prefetch={false}
-                        title="Quay lại"
-                        aria-label="Quay lại"
+                        title={t("machineDetail.back")}
+                        aria-label={t("machineDetail.back")}
                         className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6]"
                     >
                         <ArrowLeft className="h-4 w-4" />
                     </Link>
-                    <h1 className="text-lg font-semibold text-[#191c1e]">USB của máy {machineName}</h1>
+                    <h1 className="text-lg font-semibold text-[#191c1e]">{t("machineDetail.title", { machine: machineName })}</h1>
                 </div>
                 {deviceId && (
                     <Link
@@ -32,7 +34,7 @@ export default function UsbMachineDetail({ machineName, deviceId }: UsbMachineDe
                         prefetch={false}
                         className="flex items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
                     >
-                        Xem thiết bị
+                        {t("machineDetail.viewDevice")}
                         <ExternalLink className="h-3.5 w-3.5" />
                     </Link>
                 )}

@@ -14,6 +14,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public bool UnpermittedOnly { get; set; }
         public int? PolicyResult { get; set; }
         public int? UsbDeviceId { get; set; }
+        public int? BranchId { get; set; }
+        public int? DepartmentId { get; set; }
         public string? SortBy { get; set; }
         public bool SortDesc { get; set; }
     }
@@ -50,6 +52,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
         public bool ConnectedNowOnly { get; set; }
+        public int? BranchId { get; set; }
+        public int? DepartmentId { get; set; }
         public string? SortBy { get; set; }
         public bool SortDesc { get; set; }
     }
@@ -60,6 +64,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public string MachineName { get; set; } = null!;
         public int? DeviceId { get; set; }
         public string? DeviceCode { get; set; }
+        public string? BranchName { get; set; }
+        public string? DepartmentName { get; set; }
         public string? LastWindowsUser { get; set; }
         public int SessionCount { get; set; }
         public int UsbDeviceCount { get; set; }

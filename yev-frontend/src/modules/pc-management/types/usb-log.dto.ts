@@ -3,6 +3,8 @@ export interface UsbMachineDto {
     machineName: string;
     deviceId: number | null;
     deviceCode: string | null;
+    branchName: string | null;
+    departmentName: string | null;
     lastWindowsUser: string | null;
     sessionCount: number;
     usbDeviceCount: number;
@@ -82,6 +84,8 @@ export interface UsbDeviceDto {
     accessLevel: number;
     // The bridge chip's serial is shared by every unit of the model, so an approval covers all of them.
     isSharedSerial: boolean;
+    branchId: number | null;
+    branchName: string | null;
     departmentId: number | null;
     departmentName: string | null;
     firstSeenAt: string;
@@ -104,12 +108,19 @@ export interface UsbApprovalRequest {
     allMachines: boolean;
     deviceIds: number[];
     accessLevel: number;
+    branchId: number;
     departmentId: number;
 }
 
-export interface UsbDepartmentOptionDto {
+export interface UsbOwnerOptionDto {
     id: number;
     name: string;
+}
+
+// Branch = workshop (xưởng); the department catalog is company-wide, not per workshop.
+export interface UsbOwnerOptionsDto {
+    branches: UsbOwnerOptionDto[];
+    departments: UsbOwnerOptionDto[];
 }
 
 // mode: 0 Off, 1 Audit, 2 Enforce (only for enforceMachines when that list is not empty).
@@ -126,6 +137,9 @@ export interface UsbAgentDto {
     firstSeenAt: string;
     lastSeenAt: string;
     isStale: boolean;
+    deviceCode: string | null;
+    branchName: string | null;
+    departmentName: string | null;
     // AGENT_EVENT_META key of the latest lifecycle event; null for agents before 1.3.
     lastEventType: number | null;
     lastEventAt: string | null;
@@ -144,12 +158,36 @@ export interface UsbAgentSettingDto {
     // Version every agent (or only updateMachines when set) should run; null = no automatic update.
     targetVersion: string | null;
     updateMachines: string | null;
+    // Agents 1.4+ sync this often (15-600 s).
+    syncSeconds: number;
+    // Uninstalled agents leave the list after this many days; null = keep.
+    purgeUninstalledDays: number | null;
 }
 
 export interface UsbAgentSettingRequest {
     trackCopyIn: boolean;
     targetVersion: string | null;
     updateMachines: string | null;
+    syncSeconds: number;
+    purgeUninstalledDays: number | null;
+}
+
+// Either or both criteria; only the agent list rows go, USB history stays.
+export interface UsbAgentPurgeRequest {
+    uninstalled: boolean;
+    offlineDays: number | null;
+}
+
+export interface UsbStatsDto {
+    agentCount: number;
+    agentOnlineCount: number;
+    agentStaleCount: number;
+    machinesConnectedNow: number;
+    blockedNow: number;
+    sessionsToday: number;
+    blockedToday: number;
+    storageUsbCount: number;
+    approvedUsbCount: number;
 }
 
 export interface UsbAgentReleaseDto {

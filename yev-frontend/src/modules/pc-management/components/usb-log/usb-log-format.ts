@@ -3,31 +3,32 @@ export function formatDateTime(value: string | null) {
     return new Date(value).toLocaleString("vi-VN");
 }
 
-// UsbPolicyResult → badge. Shown on sessions; null (mode Off, phones) shows nothing.
-export const POLICY_META: Record<number, { label: string; variant: "success" | "danger" | "warning"; title: string }> = {
-    1: { label: "Đã cấp phép", variant: "success", title: "USB đã được cấp phép, ghi bình thường" },
-    2: { label: "Bị chặn", variant: "danger", title: "USB chưa cấp phép: agent 1.3 trở lên chặn hẳn, agent cũ chỉ chặn ghi" },
-    3: { label: "Chưa cấp phép", variant: "warning", title: "Chế độ Thử: USB này sẽ bị chặn nếu bật Chặn" },
-    4: { label: "Chặn thất bại", variant: "danger", title: "Agent không khoá được USB, xem Event Viewer trên máy" },
-    5: { label: "Chỉ đọc", variant: "warning", title: "USB được cấp phép chỉ đọc" },
+// UsbPolicyResult → badge; key points at usbLog.policy.<key>.label/title. Null (mode Off, phones) shows nothing.
+export const POLICY_META: Record<number, { key: string; variant: "success" | "danger" | "warning" }> = {
+    1: { key: "approved", variant: "success" },
+    2: { key: "blocked", variant: "danger" },
+    3: { key: "audit", variant: "warning" },
+    4: { key: "blockFailed", variant: "danger" },
+    5: { key: "readOnly", variant: "warning" },
 };
 
 export const USB_ACCESS_LEVEL = { ReadOnly: 1, ReadWrite: 2 } as const;
 
+// key points at usbLog.accessLevel.<key>.
 export const ACCESS_LEVEL_OPTIONS = [
-    { value: USB_ACCESS_LEVEL.ReadWrite, label: "Đọc và ghi" },
-    { value: USB_ACCESS_LEVEL.ReadOnly, label: "Chỉ đọc" },
+    { value: USB_ACCESS_LEVEL.ReadWrite, key: "readWrite" },
+    { value: USB_ACCESS_LEVEL.ReadOnly, key: "readOnly" },
 ];
 
-// UsbAgentEventType → badge on the Agent tab.
-export const AGENT_EVENT_META: Record<number, { label: string; variant: "success" | "danger" | "warning" | "neutral" | "info" }> = {
-    1: { label: "Cài đặt", variant: "info" },
-    2: { label: "Khởi động", variant: "success" },
-    3: { label: "Dừng", variant: "neutral" },
-    4: { label: "Dừng đột ngột", variant: "warning" },
-    5: { label: "Đã gỡ", variant: "danger" },
-    6: { label: "Gỡ sai mật khẩu", variant: "danger" },
-    7: { label: "Cập nhật lỗi", variant: "warning" },
+// UsbAgentEventType → badge on the Agent tab; key points at usbLog.agentEvent.<key>.
+export const AGENT_EVENT_META: Record<number, { key: string; variant: "success" | "danger" | "warning" | "neutral" | "info" }> = {
+    1: { key: "install", variant: "info" },
+    2: { key: "start", variant: "success" },
+    3: { key: "stop", variant: "neutral" },
+    4: { key: "crash", variant: "warning" },
+    5: { key: "uninstall", variant: "danger" },
+    6: { key: "uninstallDenied", variant: "danger" },
+    7: { key: "updateFailed", variant: "warning" },
 };
 
 export function saveBlob(blob: Blob, fileName: string) {
@@ -44,11 +45,12 @@ export function usbLabel(usb: { alias?: string | null; friendlyName: string | nu
     return usb.alias || usb.friendlyName || `${usb.vendorId}:${usb.productId}`;
 }
 
-export const DEVICE_CLASS_LABELS: Record<string, string> = {
-    DiskDrive: "Ổ lưu trữ",
-    WPD: "Điện thoại",
-    Image: "Máy ảnh / scan",
-};
+// Classes with a label in usbLog.deviceClass; any other class shows its raw name.
+export const DEVICE_CLASSES = ["DiskDrive", "WPD", "Image"];
+
+export function deviceClassLabel(t: (key: string) => string, deviceClass: string) {
+    return DEVICE_CLASSES.includes(deviceClass) ? t(`deviceClass.${deviceClass}`) : deviceClass;
+}
 
 export function formatBytes(value: number | null) {
     if (value === null || value === undefined) return "-";

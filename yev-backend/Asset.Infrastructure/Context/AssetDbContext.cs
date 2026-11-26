@@ -72,6 +72,7 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.UsbUninstallPasswordHash).HasMaxLength(200);
             entity.Property(e => e.UsbAgentTargetVersion).HasMaxLength(20);
             entity.Property(e => e.UsbAgentUpdateMachines).HasMaxLength(4000);
+            entity.Property(e => e.UsbAgentSyncSeconds).HasDefaultValue(60);
 
             entity.HasOne(d => d.ServerCheckBranch).WithMany()
                 .HasForeignKey(d => d.ServerCheckBranchId)
@@ -391,6 +392,11 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.ApprovalNote).HasMaxLength(255);
             entity.Property(e => e.AccessLevel).HasDefaultValue((int)UsbAccessLevel.ReadWrite);
 
+            entity.HasOne(d => d.Branch).WithMany()
+                .HasForeignKey(d => d.BranchId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_UsbDevices_ChiNhanhs_BranchId");
+
             entity.HasOne(d => d.Department).WithMany()
                 .HasForeignKey(d => d.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict)
@@ -422,6 +428,11 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.MachineName).HasMaxLength(100);
             entity.Property(e => e.AgentVersion).HasMaxLength(20);
             entity.Property(e => e.WindowsUser).HasMaxLength(150);
+
+            entity.HasOne(d => d.Device).WithMany()
+                .HasForeignKey(d => d.DeviceId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_UsbAgents_ThietBis_DeviceId");
         });
 
         modelBuilder.Entity<UsbAgentEvent>(entity =>

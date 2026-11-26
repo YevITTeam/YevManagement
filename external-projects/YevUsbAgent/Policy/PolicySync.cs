@@ -31,7 +31,9 @@ public sealed class PolicySync : BackgroundService
             var update = await SyncAsync(stoppingToken);
             if (update != null) await _updater.InstallAsync(update, stoppingToken);
 
-            try { await Task.Delay(TimeSpan.FromSeconds(_options.SyncSeconds), stoppingToken); }
+            // The server's interval wins once known; agents that never synced use their own setting.
+            var seconds = _store.Current.SyncSeconds > 0 ? _store.Current.SyncSeconds : _options.SyncSeconds;
+            try { await Task.Delay(TimeSpan.FromSeconds(seconds), stoppingToken); }
             catch (OperationCanceledException) { }
         }
     }

@@ -103,9 +103,9 @@ namespace Asset.Api.Controllers
         }
 
         [RequirePermission("Asset.UsbLog.View")]
-        [HttpGet("department-options")]
-        public async Task<ActionResult<ApiResponse<List<UsbDepartmentOptionDto>>>> GetDepartmentOptions()
-            => Success(await _usbPolicyService.GetDepartmentOptionsAsync());
+        [HttpGet("owner-options")]
+        public async Task<ActionResult<ApiResponse<UsbOwnerOptionsDto>>> GetOwnerOptions()
+            => Success(await _usbPolicyService.GetOwnerOptionsAsync());
 
         [RequirePermission("Asset.UsbLog.Approve")]
         [HttpGet("machine-options")]
@@ -146,6 +146,27 @@ namespace Asset.Api.Controllers
             var result = await _usbPolicyService.GetAgentEventsAsync(machineName);
             return Success(result);
         }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpDelete("agents/{id:int}")]
+        public async Task<ActionResult<ApiResponse<bool>>> DeleteAgent(int id)
+        {
+            await _usbPolicyService.DeleteAgentAsync(id);
+            return Success(true, "Đã xoá máy khỏi danh sách agent.");
+        }
+
+        [RequirePermission("Asset.UsbLog.Approve")]
+        [HttpPost("agents/purge")]
+        public async Task<ActionResult<ApiResponse<int>>> PurgeAgents([FromBody] UsbAgentPurgeRequest request)
+        {
+            var count = await _usbPolicyService.PurgeAgentsAsync(request);
+            return Success(count, $"Đã xoá {count} máy khỏi danh sách agent.");
+        }
+
+        [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("stats")]
+        public async Task<ActionResult<ApiResponse<UsbStatsDto>>> GetStats()
+            => Success(await _usbPolicyService.GetStatsAsync());
 
         [RequirePermission("Asset.UsbLog.View")]
         [HttpGet("agent-settings")]

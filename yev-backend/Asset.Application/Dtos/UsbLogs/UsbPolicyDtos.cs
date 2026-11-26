@@ -9,6 +9,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? Keyword { get; set; }
         public bool? IsApproved { get; set; }
         public string? DeviceClass { get; set; }
+        public int? BranchId { get; set; }
         public int? DepartmentId { get; set; }
         public string? SortBy { get; set; }
         public bool SortDesc { get; set; }
@@ -30,6 +31,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? ApprovalNote { get; set; }
         public int AccessLevel { get; set; }
         public bool IsSharedSerial { get; set; }
+        public int? BranchId { get; set; }
+        public string? BranchName { get; set; }
         public int? DepartmentId { get; set; }
         public string? DepartmentName { get; set; }
         public DateTime FirstSeenAt { get; set; }
@@ -56,14 +59,22 @@ namespace Asset.Application.Dtos.UsbLogs
         [Range(1, 2, ErrorMessage = "Quyền không hợp lệ.")]
         public int AccessLevel { get; set; } = 2;
         public List<int> DeviceIds { get; set; } = new();
+        [Range(1, int.MaxValue, ErrorMessage = "Chọn xưởng sở hữu USB.")]
+        public int BranchId { get; set; }
         [Range(1, int.MaxValue, ErrorMessage = "Chọn bộ phận sở hữu USB.")]
         public int DepartmentId { get; set; }
     }
 
-    public class UsbDepartmentOptionDto
+    public class UsbOwnerOptionDto
     {
         public int Id { get; set; }
         public string Name { get; set; } = null!;
+    }
+
+    public class UsbOwnerOptionsDto
+    {
+        public List<UsbOwnerOptionDto> Branches { get; set; } = new();
+        public List<UsbOwnerOptionDto> Departments { get; set; } = new();
     }
 
     // Empty or whitespace clears the alias.
@@ -97,6 +108,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public int PageSize { get; set; } = 20;
         public string? Keyword { get; set; }
         public bool StaleOnly { get; set; }
+        public int? BranchId { get; set; }
+        public int? DepartmentId { get; set; }
         public string? SortBy { get; set; }
         public bool SortDesc { get; set; }
     }
@@ -110,6 +123,9 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime FirstSeenAt { get; set; }
         public DateTime LastSeenAt { get; set; }
         public bool IsStale { get; set; }
+        public string? DeviceCode { get; set; }
+        public string? BranchName { get; set; }
+        public string? DepartmentName { get; set; }
         // UsbAgentEventType of the latest lifecycle event; null for agents before 1.3.
         public int? LastEventType { get; set; }
         public DateTime? LastEventAt { get; set; }
@@ -129,17 +145,48 @@ namespace Asset.Application.Dtos.UsbLogs
         public bool HasUninstallPassword { get; set; }
         public string? TargetVersion { get; set; }
         public string? UpdateMachines { get; set; }
+        public int SyncSeconds { get; set; }
+        public int? PurgeUninstalledDays { get; set; }
     }
 
     public class UsbAgentSettingRequest
     {
         public bool TrackCopyIn { get; set; }
 
+        // Capped at 10 minutes: an agent silent for 15 minutes counts as offline.
+        [Range(15, 600, ErrorMessage = "Chu kỳ đồng bộ từ 15 đến 600 giây.")]
+        public int SyncSeconds { get; set; } = 60;
+
+        [Range(1, 3650, ErrorMessage = "Số ngày từ 1 đến 3650.")]
+        public int? PurgeUninstalledDays { get; set; }
+
         [StringLength(20, ErrorMessage = "Phiên bản tối đa 20 ký tự.")]
         public string? TargetVersion { get; set; }
 
         [StringLength(4000, ErrorMessage = "Danh sách máy tối đa 4000 ký tự.")]
         public string? UpdateMachines { get; set; }
+    }
+
+    // Deletes agent rows matching either criterion; their lifecycle log and USB history stay.
+    public class UsbAgentPurgeRequest
+    {
+        public bool Uninstalled { get; set; }
+
+        [Range(1, 3650, ErrorMessage = "Số ngày từ 1 đến 3650.")]
+        public int? OfflineDays { get; set; }
+    }
+
+    public class UsbStatsDto
+    {
+        public int AgentCount { get; set; }
+        public int AgentOnlineCount { get; set; }
+        public int AgentStaleCount { get; set; }
+        public int MachinesConnectedNow { get; set; }
+        public int BlockedNow { get; set; }
+        public int SessionsToday { get; set; }
+        public int BlockedToday { get; set; }
+        public int StorageUsbCount { get; set; }
+        public int ApprovedUsbCount { get; set; }
     }
 
     // Empty clears the password.
@@ -181,6 +228,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public List<string>? ReadOnly { get; set; }
         public bool TrackCopyIn { get; set; }
         public string? UninstallPasswordHash { get; set; }
+        // Agents before 1.4 ignore it and keep their configured interval.
+        public int SyncSeconds { get; set; }
         // Set only when this machine should run another version.
         public UsbAgentUpdateDto? Update { get; set; }
     }

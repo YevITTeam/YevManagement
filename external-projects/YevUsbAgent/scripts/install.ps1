@@ -38,13 +38,20 @@ try {
     New-Item -ItemType Directory -Force $InstallDir | Out-Null
     # Running the installed copy itself (double-click in Program Files) needs no copy.
     if ($ExePath -ne "$InstallDir\YevUsbAgent.exe") { Copy-Item $ExePath $InstallDir -Force }
+    # Same format and entropy as AgentSecret.cs; an upgrade passes the already protected key through unchanged.
+    if (-not $ApiKey.StartsWith('dpapi:')) {
+        Add-Type -AssemblyName System.Security
+        $entropy = [Text.Encoding]::UTF8.GetBytes('YevUsbAgent.v1')
+        $bytes = [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($ApiKey), $entropy, 'LocalMachine')
+        $ApiKey = 'dpapi:' + [Convert]::ToBase64String($bytes)
+    }
     # The Windows event log provider ignores Information unless asked, and the USB connect/disconnect lines are Information.
     @{
         Agent   = @{ ServerUrl = $ServerUrl; ApiKey = $ApiKey }
         Logging = @{ EventLog = @{ LogLevel = @{ Default = 'Information' } } }
     } | ConvertTo-Json -Depth 5 |
         Set-Content "$InstallDir\appsettings.json" -Encoding UTF8
-    # The file holds the API key: only SYSTEM (the service) and Administrators may read it, not ordinary users.
+    # Defence in depth on top of DPAPI: only SYSTEM (the service) and Administrators may read it.
     & "$sys\icacls.exe" "$InstallDir\appsettings.json" /inheritance:r /grant:r '*S-1-5-18:(R)' '*S-1-5-32-544:(F)' | Out-Null
 
     # The service reports this as its "installed" event on start.

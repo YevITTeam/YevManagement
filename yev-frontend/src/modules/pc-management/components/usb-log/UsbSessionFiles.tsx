@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
 
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
@@ -21,6 +22,7 @@ const actionClasses: Record<number, string> = {
 };
 
 export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
+    const t = useTranslations("usbLog");
     const [rows, setRows] = useState<UsbFileEventDto[]>([]);
     const [pageIndex, setPageIndex] = useState(1);
     const [sort, setSort] = useState<SortState>(NO_SORT);
@@ -33,7 +35,7 @@ export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
             setRows(result.data);
             setTotalPages(result.totalPages);
         },
-        "Không thể tải danh sách file.",
+        t("files.loadError"),
         (message) => toast.error(message)
     );
 
@@ -43,7 +45,7 @@ export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
     };
 
     if (error) return <div className="text-sm text-[#930006]">{error}</div>;
-    if (!isLoading && rows.length === 0) return <div className="text-sm text-[#5e3f3a]">Không có thao tác file.</div>;
+    if (!isLoading && rows.length === 0) return <div className="text-sm text-[#5e3f3a]">{t("files.empty")}</div>;
 
     return (
         <div className="space-y-2">
@@ -51,10 +53,10 @@ export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
                 <table className="min-w-full text-left text-sm">
                     <thead>
                         <tr className="border-b border-[#e0e3e5] text-[11px] font-semibold tracking-[0.06em] text-[#5e3f3a]">
-                            <SortableTh label="Thời gian" sortKey="occurredAt" sort={sort} onSort={handleSort} className="py-1.5 pr-3" />
-                            <SortableTh label="Thao tác" sortKey="action" sort={sort} onSort={handleSort} className="py-1.5 pr-3" />
-                            <SortableTh label="File" sortKey="filePath" sort={sort} onSort={handleSort} className="py-1.5 pr-3" />
-                            <SortableTh label="Dung lượng" sortKey="sizeBytes" sort={sort} onSort={handleSort} className="py-1.5 text-right" />
+                            <SortableTh label={t("files.time")} sortKey="occurredAt" sort={sort} onSort={handleSort} className="py-1.5 pr-3" />
+                            <SortableTh label={t("common.actions")} sortKey="action" sort={sort} onSort={handleSort} className="py-1.5 pr-3" />
+                            <SortableTh label={t("common.file")} sortKey="filePath" sort={sort} onSort={handleSort} className="py-1.5 pr-3" />
+                            <SortableTh label={t("files.size")} sortKey="sizeBytes" sort={sort} onSort={handleSort} className="py-1.5 text-right" />
                         </tr>
                     </thead>
                     <tbody>
@@ -82,7 +84,7 @@ export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
                         disabled={pageIndex <= 1 || isLoading}
                         onClick={() => setPageIndex((current) => current - 1)}
                     >
-                        Trước
+                        {t("files.prev")}
                     </button>
                     <span className="font-semibold text-[#191c1e]">
                         {pageIndex} / {totalPages}
@@ -92,7 +94,7 @@ export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
                         disabled={pageIndex >= totalPages || isLoading}
                         onClick={() => setPageIndex((current) => current + 1)}
                     >
-                        Sau
+                        {t("files.next")}
                     </button>
                 </div>
             )}
