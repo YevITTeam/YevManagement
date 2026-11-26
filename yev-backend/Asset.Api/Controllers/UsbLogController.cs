@@ -102,6 +102,11 @@ namespace Asset.Api.Controllers
             return Success(true, "Đã thu hồi cấp phép USB ở máy này.");
         }
 
+        [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("department-options")]
+        public async Task<ActionResult<ApiResponse<List<UsbDepartmentOptionDto>>>> GetDepartmentOptions()
+            => Success(await _usbPolicyService.GetDepartmentOptionsAsync());
+
         [RequirePermission("Asset.UsbLog.Approve")]
         [HttpGet("machine-options")]
         public async Task<ActionResult<ApiResponse<List<UsbMachineOptionDto>>>> GetMachineOptions()

@@ -18,6 +18,7 @@ namespace Asset.Application.Interfaces.Service
         Task SetMachineApprovalAsync(int usbDeviceId, int deviceId, bool approve);
 
         Task<List<UsbMachineOptionDto>> GetMachineOptionsAsync();
+        Task<List<UsbDepartmentOptionDto>> GetDepartmentOptionsAsync();
 
         Task<UsbPolicySettingDto> GetSettingAsync();
 

@@ -1437,6 +1437,9 @@ namespace Asset.Infrastructure.Migrations
                     b.Property<long?>("CapacityBytes")
                         .HasColumnType("bigint");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("DeviceClass")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1477,6 +1480,8 @@ namespace Asset.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("PK_UsbDevices");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex(new[] { "VendorId", "ProductId", "SerialNumber" }, "IX_UsbDevices_Vid_Pid_Serial")
                         .IsUnique();
@@ -1976,6 +1981,17 @@ namespace Asset.Infrastructure.Migrations
                     b.Navigation("NewDevice");
 
                     b.Navigation("OldDevice");
+                });
+
+            modelBuilder.Entity("Asset.Domain.Entities.UsbDevice", b =>
+                {
+                    b.HasOne("Asset.Domain.Entities.DeviceDepartment", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_UsbDevices_BoPhans_DepartmentId");
+
+                    b.Navigation("Department");
                 });
 
             modelBuilder.Entity("Asset.Domain.Entities.UsbDeviceMachine", b =>

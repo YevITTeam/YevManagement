@@ -9,6 +9,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? Keyword { get; set; }
         public bool? IsApproved { get; set; }
         public string? DeviceClass { get; set; }
+        public int? DepartmentId { get; set; }
         public string? SortBy { get; set; }
         public bool SortDesc { get; set; }
     }
@@ -29,6 +30,8 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? ApprovalNote { get; set; }
         public int AccessLevel { get; set; }
         public bool IsSharedSerial { get; set; }
+        public int? DepartmentId { get; set; }
+        public string? DepartmentName { get; set; }
         public DateTime FirstSeenAt { get; set; }
         public DateTime LastSeenAt { get; set; }
         public int SessionCount { get; set; }
@@ -53,6 +56,14 @@ namespace Asset.Application.Dtos.UsbLogs
         [Range(1, 2, ErrorMessage = "Quyền không hợp lệ.")]
         public int AccessLevel { get; set; } = 2;
         public List<int> DeviceIds { get; set; } = new();
+        [Range(1, int.MaxValue, ErrorMessage = "Chọn bộ phận sở hữu USB.")]
+        public int DepartmentId { get; set; }
+    }
+
+    public class UsbDepartmentOptionDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = null!;
     }
 
     // Empty or whitespace clears the alias.

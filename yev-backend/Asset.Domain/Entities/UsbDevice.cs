@@ -42,6 +42,11 @@ public partial class UsbDevice
     // read, so an approval covers every such enclosure.
     public bool IsSharedSerial { get; set; }
 
+    // Owning department, chosen when approving; kept after a revoke so the stick's owner stays known.
+    public int? DepartmentId { get; set; }
+
+    public virtual DeviceDepartment? Department { get; set; }
+
     public virtual ICollection<UsbDeviceMachine> Machines { get; set; } = new List<UsbDeviceMachine>();
 }
 

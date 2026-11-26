@@ -204,14 +204,14 @@ namespace Asset.Application.Services
 
             return UsbExcel.Build("Thiết bị USB",
                 new[] { "Tên gợi nhớ", "Tên thiết bị", "Loại", "VID", "PID", "Serial", "Serial chung", "Dung lượng (GB)", "Cấp phép", "Quyền",
-                    "Người cấp", "Ngày cấp", "Ghi chú", "Lần đầu", "Lần cuối", "Số lần cắm", "Máy cắm gần nhất" },
+                    "Bộ phận", "Người cấp", "Ngày cấp", "Ghi chú", "Lần đầu", "Lần cuối", "Số lần cắm", "Máy cắm gần nhất" },
                 rows.Data.Select(u => new object?[]
                 {
                     u.Alias, u.FriendlyName, u.DeviceClass, u.VendorId, u.ProductId, u.SerialNumber, u.IsSharedSerial ? "Có" : null,
                     u.CapacityBytes == null ? null : Math.Round(u.CapacityBytes.Value / 1e9, 1),
                     u.IsApproved ? "Mọi máy" : u.ApprovedMachines.Count > 0 ? string.Join(", ", u.ApprovedMachines.Select(m => m.DeviceCode)) : "Chưa cấp",
                     u.IsApproved || u.ApprovedMachines.Count > 0 ? UsbExcel.AccessLevelText(u.AccessLevel) : null,
-                    u.ApprovedBy, u.ApprovedAt, u.ApprovalNote, u.FirstSeenAt, u.LastSeenAt, u.SessionCount, u.LastMachineName
+                    u.DepartmentName, u.ApprovedBy, u.ApprovedAt, u.ApprovalNote, u.FirstSeenAt, u.LastSeenAt, u.SessionCount, u.LastMachineName
                 }),
                 rows.TotalCount);
         }
@@ -236,6 +236,9 @@ namespace Asset.Application.Services
             if (!string.IsNullOrWhiteSpace(filter.DeviceClass))
                 query = query.Where(u => u.DeviceClass == filter.DeviceClass);
 
+            if (filter.DepartmentId.HasValue)
+                query = query.Where(u => u.DepartmentId == filter.DepartmentId.Value);
+
             return query;
         }
 
@@ -256,6 +259,8 @@ namespace Asset.Application.Services
                     ApprovalNote = u.ApprovalNote,
                     AccessLevel = u.AccessLevel,
                     IsSharedSerial = u.IsSharedSerial,
+                    DepartmentId = u.DepartmentId,
+                    DepartmentName = u.Department != null ? u.Department.DepartmentName : null,
                     FirstSeenAt = u.FirstSeenAt,
                     LastSeenAt = u.LastSeenAt,
                     SessionCount = sessions.Count(s => s.UsbDeviceId == u.Id),
@@ -268,6 +273,8 @@ namespace Asset.Application.Services
         public async Task ApproveAsync(int usbDeviceId, UsbApprovalRequest request)
         {
             var usb = await GetApprovableAsync(usbDeviceId);
+            if (await _unitOfWork.DeviceDepartments.FirstOrDefaultAsync(d => d.Id == request.DepartmentId && !d.IsDeleted) == null)
+                throw new DomainException("Bộ phận không còn tồn tại.");
             var existing = await _unitOfWork.UsbDeviceMachines.FindAsync(m => m.UsbDeviceId == usbDeviceId);
 
             if (request.AllMachines)
@@ -289,6 +296,7 @@ namespace Asset.Application.Services
             }
 
             usb.AccessLevel = request.AccessLevel;
+            usb.DepartmentId = request.DepartmentId;
             usb.ApprovedBy = CurrentUser();
             usb.ApprovedAt = Now();
             usb.ApprovalNote = Trunc(request.Note?.Trim(), 255);
@@ -325,7 +333,10 @@ namespace Asset.Application.Services
 
             if (approve && row == null)
             {
-                (await _unitOfWork.Devices.FirstOrDefaultAsync(d => d.Id == deviceId && !d.IsDeleted)).OrThrowNotFound("Thiết bị", deviceId);
+                var device = (await _unitOfWork.Devices.FirstOrDefaultAsync(d => d.Id == deviceId && !d.IsDeleted)).OrThrowNotFound("Thiết bị", deviceId);
+                // Quick approval has no department picker: a USB without an owner takes the machine's department.
+                usb.DepartmentId ??= device.DepartmentId
+                    ?? throw new DomainException("Máy chưa có bộ phận; cấp phép ở tab Thiết bị USB để chọn bộ phận.");
                 await _unitOfWork.UsbDeviceMachines.AddAsync(NewMachineApproval(usbDeviceId)(deviceId));
                 usb.ApprovedBy = CurrentUser();
                 usb.ApprovedAt = Now();
@@ -341,6 +352,10 @@ namespace Asset.Application.Services
             await _unitOfWork.SaveChangesAsync();
             _snapshot = null;
         }
+
+        public async Task<List<UsbDepartmentOptionDto>> GetDepartmentOptionsAsync()
+            => (await _unitOfWork.DeviceDepartments.SelectAsync(d => !d.IsDeleted, d => new UsbDepartmentOptionDto { Id = d.Id, Name = d.DepartmentName }))
+                .OrderBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
 
         public async Task<List<UsbMachineOptionDto>> GetMachineOptionsAsync()
         {

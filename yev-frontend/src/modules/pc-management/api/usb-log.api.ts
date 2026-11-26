@@ -7,6 +7,7 @@ import type {
     UsbAgentSettingRequest,
     UsbApprovalRequest,
     UsbMachineOptionDto,
+    UsbDepartmentOptionDto,
     UsbDeviceDto,
     UsbFileEventDto,
     UsbMachineDto,
@@ -29,6 +30,7 @@ const ENDPOINTS = {
         machine: (id: number, deviceId: number) => `/UsbLog/devices/${id}/machines/${deviceId}`,
         alias: (id: number) => `/UsbLog/devices/${id}/alias`,
         machineOptions: "/UsbLog/machine-options",
+        departmentOptions: "/UsbLog/department-options",
         policy: "/UsbLog/policy",
         getAgents: "/UsbLog/agents",
         agentEvents: (machineName: string) => `/UsbLog/agents/${encodeURIComponent(machineName)}/events`,
@@ -48,6 +50,7 @@ export interface GetUsbDevicesParams {
     keyword?: string;
     isApproved?: boolean;
     deviceClass?: string;
+    departmentId?: number;
     sortBy?: string;
     sortDesc?: boolean;
 }
@@ -166,6 +169,10 @@ export const UsbLogApi = {
     },
     getMachineOptions: async () => {
         const response = await api.get<ApiResponse<UsbMachineOptionDto[]>>(ENDPOINTS.USB_LOG.machineOptions);
+        return response.data;
+    },
+    getDepartmentOptions: async () => {
+        const response = await api.get<ApiResponse<UsbDepartmentOptionDto[]>>(ENDPOINTS.USB_LOG.departmentOptions);
         return response.data;
     },
     revoke: async (id: number) => {

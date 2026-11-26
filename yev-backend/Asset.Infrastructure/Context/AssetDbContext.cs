@@ -1,4 +1,4 @@
-﻿using Asset.Domain.Entities;
+using Asset.Domain.Entities;
 using Asset.Domain.Enums;
 using Asset.Domain.Models;
 using Microsoft.EntityFrameworkCore;
@@ -390,6 +390,11 @@ public partial class AssetDbContext : DbContext
             entity.Property(e => e.ApprovedBy).HasMaxLength(150);
             entity.Property(e => e.ApprovalNote).HasMaxLength(255);
             entity.Property(e => e.AccessLevel).HasDefaultValue((int)UsbAccessLevel.ReadWrite);
+
+            entity.HasOne(d => d.Department).WithMany()
+                .HasForeignKey(d => d.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_UsbDevices_BoPhans_DepartmentId");
         });
 
         modelBuilder.Entity<UsbDeviceMachine>(entity =>

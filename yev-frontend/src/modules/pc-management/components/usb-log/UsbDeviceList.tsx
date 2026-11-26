@@ -31,7 +31,7 @@ const iconButtonClassName =
 
 type ApprovalFilter = "" | "approved" | "notApproved";
 
-const emptyFilters = { keyword: "", approval: "" as ApprovalFilter, deviceClass: "" };
+const emptyFilters = { keyword: "", approval: "" as ApprovalFilter, deviceClass: "", departmentId: 0 };
 
 const APPROVAL_OPTIONS: { value: ApprovalFilter; label: string }[] = [
     { value: "", label: "Tất cả" },
@@ -71,6 +71,16 @@ export default function UsbDeviceList() {
     const [busy, setBusy] = useState(false);
     const [naming, setNaming] = useState<UsbDeviceDto | null>(null);
     const [alias, setAlias] = useState("");
+    const [departmentId, setDepartmentId] = useState(0);
+    const [departments, setDepartments] = useState<{ value: number; label: string }[]>([]);
+
+    useFetchEffect(
+        () => UsbLogApi.getDepartmentOptions(),
+        [],
+        (list) => setDepartments(list.map((d) => ({ value: d.id, label: d.name }))),
+        "Không tải được danh sách bộ phận.",
+        (message) => toast.error(message)
+    );
 
     const openAlias = (row: UsbDeviceDto) => {
         setAlias(row.alias ?? "");
@@ -101,6 +111,7 @@ export default function UsbDeviceList() {
                 keyword: applied.keyword || undefined,
                 isApproved: applied.approval === "" ? undefined : applied.approval === "approved",
                 deviceClass: applied.deviceClass || undefined,
+                departmentId: applied.departmentId || undefined,
                 ...sort,
             }),
         [pageIndex, applied, sort],
@@ -134,6 +145,7 @@ export default function UsbDeviceList() {
         keyword: applied.keyword || undefined,
         isApproved: applied.approval === "" ? undefined : applied.approval === "approved",
         deviceClass: applied.deviceClass || undefined,
+        departmentId: applied.departmentId || undefined,
     });
 
     const openApprove = (row: UsbDeviceDto) => {
@@ -141,6 +153,7 @@ export default function UsbDeviceList() {
         setScope(row.approvedMachines.length > 0 ? "machines" : "all");
         setMachineIds(row.approvedMachines.map((m) => m.deviceId));
         setAccessLevel(row.accessLevel || USB_ACCESS_LEVEL.ReadWrite);
+        setDepartmentId(row.departmentId ?? 0);
         setApproving(row);
         if (machineOptions === null) {
             UsbLogApi.getMachineOptions()
@@ -159,6 +172,10 @@ export default function UsbDeviceList() {
             toast.error("Chọn ít nhất 1 máy.");
             return;
         }
+        if (!departmentId) {
+            toast.error("Chọn bộ phận sở hữu USB.");
+            return;
+        }
         setBusy(true);
         try {
             await UsbLogApi.approve(approving.id, {
@@ -166,6 +183,7 @@ export default function UsbDeviceList() {
                 allMachines: scope === "all",
                 deviceIds: scope === "all" ? [] : machineIds,
                 accessLevel,
+                departmentId,
             });
             toast.success("Đã cấp phép USB.");
             setApproving(null);
@@ -228,6 +246,15 @@ export default function UsbDeviceList() {
                             triggerClassName={`${fieldClassName} pr-8`}
                         />
                     </label>
+                    <label className="block">
+                        <span className={fieldLabelClassName}>Bộ phận</span>
+                        <StyledSelect
+                            value={draft.departmentId}
+                            onChange={(departmentId) => setDraft({ ...draft, departmentId })}
+                            options={[{ value: 0, label: "Tất cả" }, ...departments]}
+                            triggerClassName={`${fieldClassName} pr-8`}
+                        />
+                    </label>
                     <div className="flex items-center gap-1.5">
                         <button
                             onClick={handleSearch}
@@ -264,6 +291,7 @@ export default function UsbDeviceList() {
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
                                 <SortableTh label="Thiết bị" sortKey="name" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <th className="hidden whitespace-nowrap px-3 py-2 md:table-cell">Bộ phận</th>
                                 <SortableTh label="Cấp phép" sortKey="isApproved" sort={sort} onSort={handleSort} className="whitespace-nowrap px-3 py-2" />
                                 <SortableTh label="Lần cuối" sortKey="lastSeenAt" sort={sort} onSort={handleSort} className="hidden whitespace-nowrap px-3 py-2 lg:table-cell" />
                                 <SortableTh label="Lần cắm" sortKey="sessionCount" sort={sort} onSort={handleSort} className="hidden whitespace-nowrap px-3 py-2 text-right lg:table-cell" />
@@ -273,7 +301,7 @@ export default function UsbDeviceList() {
                         <tbody>
                             {!isLoading && rows.length === 0 && (
                                 <tr>
-                                    <td colSpan={canApprove ? 5 : 4} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
+                                    <td colSpan={canApprove ? 6 : 5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
                                         Không có dữ liệu.
                                     </td>
                                 </tr>
@@ -314,6 +342,7 @@ export default function UsbDeviceList() {
                                                     .join(" · ")}
                                             </div>
                                         </td>
+                                        <td className="hidden px-3 py-2 text-sm text-[#191c1e] md:table-cell">{row.departmentName}</td>
                                         <td className="px-3 py-2 text-sm">
                                             {isApproved ? (
                                                 <div title={row.approvedBy ? `${row.approvedBy}, ${formatDateTime(row.approvedAt)}` : undefined}>
@@ -402,6 +431,15 @@ export default function UsbDeviceList() {
                 <p className="break-all text-sm text-[#5e3f3a]">
                     {approving && usbLabel(approving)} · {approving?.serialNumber}
                 </p>
+                <label className="block">
+                    <span className={fieldLabelClassName}>Bộ phận</span>
+                    <StyledSelect
+                        value={departmentId}
+                        onChange={setDepartmentId}
+                        options={[{ value: 0, label: "Chọn bộ phận" }, ...departments]}
+                        triggerClassName={`${fieldClassName} pr-8`}
+                    />
+                </label>
                 <label className="block">
                     <span className={fieldLabelClassName}>Phạm vi</span>
                     <StyledSelect value={scope} onChange={setScope} options={SCOPE_OPTIONS} triggerClassName={`${fieldClassName} pr-8`} />

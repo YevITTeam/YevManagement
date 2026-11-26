@@ -82,6 +82,8 @@ export interface UsbDeviceDto {
     accessLevel: number;
     // The bridge chip's serial is shared by every unit of the model, so an approval covers all of them.
     isSharedSerial: boolean;
+    departmentId: number | null;
+    departmentName: string | null;
     firstSeenAt: string;
     lastSeenAt: string;
     sessionCount: number;
@@ -102,6 +104,12 @@ export interface UsbApprovalRequest {
     allMachines: boolean;
     deviceIds: number[];
     accessLevel: number;
+    departmentId: number;
+}
+
+export interface UsbDepartmentOptionDto {
+    id: number;
+    name: string;
 }
 
 // mode: 0 Off, 1 Audit, 2 Enforce (only for enforceMachines when that list is not empty).
