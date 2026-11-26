@@ -15,6 +15,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbMachineUsbDto } from "@/modules/pc-management/types/usb-log.dto";
 import UsbLogList from "./UsbLogList";
+import { UsbFileCount } from "./UsbSessionFiles";
 import { POLICY_META, USB_ACCESS_LEVEL, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 
 const usbName = (row: UsbMachineUsbDto) => usbLabel(row);
@@ -179,7 +180,9 @@ export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineU
                                             </div>
                                         </td>
                                         <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.sessionCount}</td>
-                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.fileEventCount}</td>
+                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                            <UsbFileCount total={row.fileEventCount} sensitive={row.sensitiveFileCount} />
+                                        </td>
                                         <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{formatDateTime(row.lastConnectedAt)}</td>
                                         {canApprove && (
                                             <td className="whitespace-nowrap px-3 py-2 text-right text-sm" onClick={(event) => event.stopPropagation()}>

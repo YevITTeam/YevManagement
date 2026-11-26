@@ -22,6 +22,7 @@ export default function UsbStatsBar() {
         { label: t("stats.blockedNow"), value: stats.blockedNow, alert: stats.blockedNow > 0 },
         { label: t("stats.sessionsToday"), value: stats.sessionsToday },
         { label: t("stats.blockedToday"), value: stats.blockedToday, alert: stats.blockedToday > 0 },
+        { label: t("stats.sensitiveToday"), value: stats.sensitiveFilesToday, title: t("files.sensitiveTitle"), alert: stats.sensitiveFilesToday > 0 },
         { label: t("stats.approvedUsb"), value: `${stats.approvedUsbCount}/${stats.storageUsbCount}`, title: t("stats.approvedUsbTitle") },
     ];
 

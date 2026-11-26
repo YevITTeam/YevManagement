@@ -166,15 +166,17 @@ namespace Asset.Application.Services
             // A resend of an already stored event is a success for the agent, so it drops it from its queue.
             if (!knownEventIds.Add(ev.EventId)) return true;
 
+            var filePath = Trunc(ev.FilePath.Trim(), MaxPathLength)!;
             await _unitOfWork.UsbFileEvents.AddAsync(new UsbFileEvent
             {
                 EventId = ev.EventId,
                 SessionId = ev.SessionId,
                 Action = ev.Action,
-                FilePath = Trunc(ev.FilePath.Trim(), MaxPathLength)!,
+                FilePath = filePath,
                 OldFilePath = Trunc(ev.OldFilePath?.Trim(), MaxPathLength),
                 SizeBytes = ev.SizeBytes,
-                OccurredAt = occurredAt
+                OccurredAt = occurredAt,
+                IsSensitive = UsbFileActionExtensions.IsSensitiveFileEvent(ev.Action, filePath, ev.SizeBytes)
             });
             return true;
         }
@@ -220,6 +222,9 @@ namespace Asset.Application.Services
 
             query = FilterOwner(query, filter.BranchId, filter.DepartmentId);
 
+            if (filter.SensitiveOnly)
+                query = query.Where(s => s.FileEvents.Any(e => e.IsSensitive));
+
             // One row per PC; the result is bounded by the number of PCs, so filtering/paging runs in memory.
             var groups = await _unitOfWork.UsbSessions.GroupCountAsync(
                 query, s => s.MachineName,
@@ -231,6 +236,7 @@ namespace Asset.Application.Services
                     SessionCount = g.Count(),
                     UsbDeviceCount = g.Select(s => s.UsbDeviceId).Distinct().Count(),
                     FileEventCount = g.Sum(s => s.FileEvents.Count),
+                    SensitiveFileCount = g.Sum(s => s.FileEvents.Count(e => e.IsSensitive)),
                     LastConnectedAt = g.Max(s => s.ConnectedAt),
                     IsConnectedNow = g.Any(s => s.DisconnectedAt == null),
                     UnpermittedCount = g.Count(s => s.WasPermitted == false),
@@ -284,11 +290,11 @@ namespace Asset.Application.Services
                 SessionQuery(filter).OrderByDescending(s => s.ConnectedAt).ThenBy(s => s.Id), 1, UsbExcel.MaxRows, ToSessionDto(new List<string>()));
 
             return UsbExcel.Build("Phiên cắm USB",
-                new[] { "Giờ cắm", "Giờ rút", "Máy", "Mã thiết bị", "Người dùng", "USB", "Tên thiết bị", "Serial", "Ổ", "Nhãn ổ", "Kết quả", "Số thao tác file" },
+                new[] { "Giờ cắm", "Giờ rút", "Máy", "Mã thiết bị", "Người dùng", "USB", "Tên thiết bị", "Serial", "Ổ", "Nhãn ổ", "Kết quả", "Số thao tác file", "File nhạy cảm" },
                 rows.Data.Select(s => new object?[]
                 {
                     s.ConnectedAt, s.DisconnectedAt, s.MachineName, s.DeviceCode, s.WindowsUser, s.UsbAlias ?? s.FriendlyName, s.FriendlyName,
-                    s.SerialNumber, s.DriveLetter, s.VolumeLabel, UsbExcel.PolicyResultText(s.PolicyResult), s.FileEventCount
+                    s.SerialNumber, s.DriveLetter, s.VolumeLabel, UsbExcel.PolicyResultText(s.PolicyResult), s.FileEventCount, s.SensitiveFileCount
                 }),
                 rows.TotalCount);
         }
@@ -297,23 +303,25 @@ namespace Asset.Application.Services
         public async Task<byte[]> ExportFileEventsAsync(UsbSessionFilterRequest filter)
         {
             var sessionIds = SessionQuery(filter).Select(s => s.Id);
+            var files = _unitOfWork.UsbFileEvents.GetQueryable(false).Where(e => sessionIds.Contains(e.SessionId));
+            if (filter.SensitiveOnly) files = files.Where(e => e.IsSensitive);
             var rows = await _unitOfWork.UsbFileEvents.ToPagedResponseAsync(
-                _unitOfWork.UsbFileEvents.GetQueryable(false).Where(e => sessionIds.Contains(e.SessionId))
+                files
                     .OrderByDescending(e => e.OccurredAt).ThenBy(e => e.Id),
                 1, UsbExcel.MaxRows,
                 e => new
                 {
                     e.OccurredAt, e.Session.MachineName, e.Session.WindowsUser,
                     Usb = e.Session.UsbDevice.Alias ?? e.Session.UsbDevice.FriendlyName, e.Session.UsbDevice.SerialNumber,
-                    e.Action, e.FilePath, e.OldFilePath, e.SizeBytes
+                    e.Action, e.FilePath, e.OldFilePath, e.SizeBytes, e.IsSensitive
                 });
 
             return UsbExcel.Build("Thao tác file USB",
-                new[] { "Thời gian", "Máy", "Người dùng", "USB", "Serial", "Thao tác", "Đường dẫn", "Đường dẫn cũ / nguồn trên USB", "Kích thước (byte)" },
+                new[] { "Thời gian", "Máy", "Người dùng", "USB", "Serial", "Thao tác", "Đường dẫn", "Đường dẫn cũ / nguồn trên USB", "Kích thước (byte)", "Nhạy cảm" },
                 rows.Data.Select(e => new object?[]
                 {
                     e.OccurredAt, e.MachineName, e.WindowsUser, e.Usb, e.SerialNumber, e.Action.GetUsbFileActionText(),
-                    e.FilePath, e.OldFilePath, e.SizeBytes
+                    e.FilePath, e.OldFilePath, e.SizeBytes, e.IsSensitive ? "Có" : null
                 }),
                 rows.TotalCount);
         }
@@ -358,6 +366,9 @@ namespace Asset.Application.Services
             if (filter.PolicyResult.HasValue)
                 query = query.Where(s => s.PolicyResult == filter.PolicyResult.Value);
 
+            if (filter.SensitiveOnly)
+                query = query.Where(s => s.FileEvents.Any(e => e.IsSensitive));
+
             if (filter.UsbDeviceId.HasValue)
                 query = query.Where(s => s.UsbDeviceId == filter.UsbDeviceId.Value);
 
@@ -390,7 +401,8 @@ namespace Asset.Application.Services
                     DeviceClass = s.UsbDevice.DeviceClass,
                     IsApproved = s.UsbDevice.IsApproved,
                     AgentOnline = liveMachines.Contains(s.MachineName),
-                    FileEventCount = s.FileEvents.Count
+                    FileEventCount = s.FileEvents.Count,
+                    SensitiveFileCount = s.FileEvents.Count(e => e.IsSensitive)
                 };
 
         public async Task<List<UsbMachineUsbDto>> GetMachineUsbsAsync(string machineName)
@@ -406,6 +418,7 @@ namespace Asset.Application.Services
                     UsbDeviceId = g.Key,
                     SessionCount = g.Count(),
                     FileEventCount = g.Sum(s => s.FileEvents.Count),
+                    SensitiveFileCount = g.Sum(s => s.FileEvents.Count(e => e.IsSensitive)),
                     LastConnectedAt = g.Max(s => s.ConnectedAt),
                     IsConnectedNow = g.Any(s => s.DisconnectedAt == null),
                     LastPolicyResult = g.OrderByDescending(s => s.ConnectedAt).Select(s => s.PolicyResult).FirstOrDefault()
@@ -442,7 +455,7 @@ namespace Asset.Application.Services
         }
 
         public async Task<PagedResponse<UsbFileEventDto>> GetSessionFilesPagedAsync(
-            Guid sessionId, int pageIndex, int pageSize, string? keyword, string? sortBy, bool sortDesc)
+            Guid sessionId, int pageIndex, int pageSize, string? keyword, string? sortBy, bool sortDesc, bool sensitiveOnly)
         {
             (await _unitOfWork.UsbSessions.GetByIdAsync(sessionId)).OrThrowNotFound("Phiên USB", sessionId);
 
@@ -453,6 +466,9 @@ namespace Asset.Application.Services
                 var k = keyword.Trim();
                 query = query.Where(e => e.FilePath.Contains(k) || (e.OldFilePath != null && e.OldFilePath.Contains(k)));
             }
+
+            if (sensitiveOnly)
+                query = query.Where(e => e.IsSensitive);
 
             return await _unitOfWork.UsbFileEvents.ToPagedResponseAsync(
                 UsbSort.Apply(query, sortBy, sortDesc, FileColumns, q => q.OrderBy(e => e.OccurredAt).ThenBy(e => e.Id), e => e.Id),
@@ -465,7 +481,8 @@ namespace Asset.Application.Services
                     FilePath = e.FilePath,
                     OldFilePath = e.OldFilePath,
                     SizeBytes = e.SizeBytes,
-                    OccurredAt = e.OccurredAt
+                    OccurredAt = e.OccurredAt,
+                    IsSensitive = e.IsSensitive
                 });
         }
 

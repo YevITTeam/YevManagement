@@ -485,6 +485,7 @@ public partial class AssetDbContext : DbContext
             entity.HasIndex(e => e.SessionId, "IX_UsbFileEvents_SessionId");
             entity.Property(e => e.FilePath).HasMaxLength(1000);
             entity.Property(e => e.OldFilePath).HasMaxLength(1000);
+            entity.HasIndex(e => new { e.OccurredAt, e.IsSensitive }, "IX_UsbFileEvents_OccurredAt_IsSensitive");
 
             entity.HasOne(d => d.Session).WithMany(p => p.FileEvents)
                 .HasForeignKey(d => d.SessionId)

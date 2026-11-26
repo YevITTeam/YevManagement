@@ -1558,6 +1558,9 @@ namespace Asset.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<bool>("IsSensitive")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime>("OccurredAt")
                         .HasColumnType("datetime2");
 
@@ -1576,6 +1579,8 @@ namespace Asset.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "EventId" }, "IX_UsbFileEvents_EventId")
                         .IsUnique();
+
+                    b.HasIndex(new[] { "OccurredAt", "IsSensitive" }, "IX_UsbFileEvents_OccurredAt_IsSensitive");
 
                     b.HasIndex(new[] { "SessionId" }, "IX_UsbFileEvents_SessionId");
 

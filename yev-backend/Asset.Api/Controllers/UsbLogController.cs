@@ -147,6 +147,11 @@ namespace Asset.Api.Controllers
             return Success(result);
         }
 
+        [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("agents/export")]
+        public async Task<IActionResult> ExportAgents([FromQuery] UsbAgentFilterRequest filter)
+            => File(await _usbPolicyService.ExportAgentsAsync(filter), XlsxType, $"AgentUSB_{Stamp()}.xlsx");
+
         [RequirePermission("Asset.UsbLog.Approve")]
         [HttpDelete("agents/{id:int}")]
         public async Task<ActionResult<ApiResponse<bool>>> DeleteAgent(int id)
@@ -275,9 +280,9 @@ namespace Asset.Api.Controllers
         [HttpGet("sessions/{id:guid}/files")]
         public async Task<ActionResult<ApiResponse<PagedResponse<UsbFileEventDto>>>> GetSessionFiles(
             Guid id, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 50, [FromQuery] string? keyword = null,
-            [FromQuery] string? sortBy = null, [FromQuery] bool sortDesc = false)
+            [FromQuery] string? sortBy = null, [FromQuery] bool sortDesc = false, [FromQuery] bool sensitiveOnly = false)
         {
-            var result = await _usbLogService.GetSessionFilesPagedAsync(id, pageIndex, pageSize, keyword, sortBy, sortDesc);
+            var result = await _usbLogService.GetSessionFilesPagedAsync(id, pageIndex, pageSize, keyword, sortBy, sortDesc, sensitiveOnly);
             return Success(result);
         }
 

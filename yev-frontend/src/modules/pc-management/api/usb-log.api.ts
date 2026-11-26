@@ -46,6 +46,7 @@ const ENDPOINTS = {
         exportDevices: "/UsbLog/devices/export",
         exportSessions: "/UsbLog/sessions/export",
         exportFiles: "/UsbLog/files/export",
+        exportAgents: "/UsbLog/agents/export",
     },
 } as const;
 
@@ -91,6 +92,7 @@ export interface GetUsbSessionsParams {
     fromDate?: string;
     toDate?: string;
     unpermittedOnly?: boolean;
+    sensitiveOnly?: boolean;
     branchId?: number;
     departmentId?: number;
     sortBy?: string;
@@ -104,6 +106,7 @@ export interface GetUsbMachinesParams {
     fromDate?: string;
     toDate?: string;
     connectedNowOnly?: boolean;
+    sensitiveOnly?: boolean;
     branchId?: number;
     departmentId?: number;
     sortBy?: string;
@@ -119,15 +122,11 @@ export const UsbLogApi = {
         const response = await api.get<ApiResponseWithPageNation<UsbSessionDto>>(withQuery(ENDPOINTS.USB_LOG.getSessions, { ...params }));
         return response.data;
     },
-    getSessionFiles: async (id: string, params?: { pageIndex?: number; pageSize?: number; sortBy?: string; sortDesc?: boolean }) => {
-        const query = new URLSearchParams();
-        if (params?.pageIndex) query.set("pageIndex", String(params.pageIndex));
-        if (params?.pageSize) query.set("pageSize", String(params.pageSize));
-        if (params?.sortBy) query.set("sortBy", params.sortBy);
-        if (params?.sortDesc) query.set("sortDesc", "true");
-        const queryString = query.toString();
-        const base = ENDPOINTS.USB_LOG.getSessionFiles(id);
-        const response = await api.get<ApiResponseWithPageNation<UsbFileEventDto>>(queryString ? `${base}?${queryString}` : base);
+    getSessionFiles: async (
+        id: string,
+        params: { pageIndex?: number; pageSize?: number; sortBy?: string; sortDesc?: boolean; sensitiveOnly?: boolean } = {}
+    ) => {
+        const response = await api.get<ApiResponseWithPageNation<UsbFileEventDto>>(withQuery(ENDPOINTS.USB_LOG.getSessionFiles(id), { ...params }));
         return response.data;
     },
     getMachineUsbs: async (machineName: string) => {
@@ -227,6 +226,7 @@ export const UsbLogApi = {
     // Same filter as the session list; files = file operations of those sessions.
     exportSessions: (params: GetUsbSessionsParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportSessions, { ...params })),
     exportFiles: (params: GetUsbSessionsParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportFiles, { ...params })),
+    exportAgents: (params: GetUsbAgentsParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportAgents, { ...params })),
 };
 
 export { ENDPOINTS };

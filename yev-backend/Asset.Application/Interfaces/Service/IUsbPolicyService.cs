@@ -25,6 +25,7 @@ namespace Asset.Application.Interfaces.Service
         Task<UsbPolicySettingDto> UpdateSettingAsync(UsbPolicySettingDto request);
 
         Task<PagedResponse<UsbAgentDto>> GetAgentsPagedAsync(UsbAgentFilterRequest filter);
+        Task<byte[]> ExportAgentsAsync(UsbAgentFilterRequest filter);
 
         Task<byte[]> ExportDevicesAsync(UsbDeviceFilterRequest filter);
 

@@ -13,6 +13,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime? ToDate { get; set; }
         public bool UnpermittedOnly { get; set; }
         public int? PolicyResult { get; set; }
+        public bool SensitiveOnly { get; set; }
         public int? UsbDeviceId { get; set; }
         public int? BranchId { get; set; }
         public int? DepartmentId { get; set; }
@@ -39,6 +40,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public List<string> DriveLetters { get; set; } = new();
         public int SessionCount { get; set; }
         public int FileEventCount { get; set; }
+        public int SensitiveFileCount { get; set; }
         public DateTime LastConnectedAt { get; set; }
         public bool IsConnectedNow { get; set; }
         public int? LastPolicyResult { get; set; }
@@ -52,6 +54,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
         public bool ConnectedNowOnly { get; set; }
+        public bool SensitiveOnly { get; set; }
         public int? BranchId { get; set; }
         public int? DepartmentId { get; set; }
         public string? SortBy { get; set; }
@@ -70,6 +73,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public int SessionCount { get; set; }
         public int UsbDeviceCount { get; set; }
         public int FileEventCount { get; set; }
+        public int SensitiveFileCount { get; set; }
         public DateTime LastConnectedAt { get; set; }
         public bool IsConnectedNow { get; set; }
         public int UnpermittedCount { get; set; }
@@ -101,6 +105,7 @@ namespace Asset.Application.Dtos.UsbLogs
         // False = the PC's agent has gone silent, so an open session's real unplug time is unknown.
         public bool AgentOnline { get; set; }
         public int FileEventCount { get; set; }
+        public int SensitiveFileCount { get; set; }
     }
 
     public class UsbFileEventDto
@@ -112,5 +117,6 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? OldFilePath { get; set; }
         public long? SizeBytes { get; set; }
         public DateTime OccurredAt { get; set; }
+        public bool IsSensitive { get; set; }
     }
 }

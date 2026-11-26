@@ -2874,7 +2874,8 @@
       "sessionsToday": "本日の接続回数",
       "blockedToday": "本日のブロック",
       "approvedUsb": "許可済みUSB",
-      "approvedUsbTitle": "これまでに接続されたストレージUSBの総数に対して"
+      "approvedUsbTitle": "これまでに接続されたストレージUSBの総数に対して",
+      "sensitiveToday": "本日の要注意ファイル"
     },
     "owner": {
       "loadError": "工場・部署一覧を読み込めませんでした。"
@@ -2927,7 +2928,11 @@
       "time": "日時",
       "size": "サイズ",
       "prev": "前へ",
-      "next": "次へ"
+      "next": "次へ",
+      "sensitive": "要注意",
+      "sensitiveOnly": "要注意ファイルのみ",
+      "sensitiveCount": "要注意 {count}",
+      "sensitiveTitle": "文書・図面・DB・圧縮・鍵ファイルまたは10 MB以上のファイルをUSBへ書き込み、またはUSBから実行可能ファイルをPCへコピー"
     },
     "devices": {
       "loadError": "USBデバイス一覧を読み込めませんでした。",
@@ -3005,7 +3010,8 @@
       "purgeOffline": "通信なしが",
       "purgeOfflineDays": "日を超えたPC",
       "offlineDaysAria": "通信なしの日数",
-      "purgeNote": "USB履歴とエージェントログは残ります。"
+      "purgeNote": "USB履歴とエージェントログは残ります。",
+      "exportTitle": "フィルター条件でエージェント一覧をExcel出力"
     },
     "settings": {
       "loadError": "エージェント設定を読み込めませんでした。",

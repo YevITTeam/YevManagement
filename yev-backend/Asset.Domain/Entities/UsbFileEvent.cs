@@ -19,5 +19,8 @@ public partial class UsbFileEvent
 
     public DateTime OccurredAt { get; set; }
 
+    // Stored at ingest (UsbFileActionExtensions.IsSensitiveFileEvent) so filters and counts stay index-friendly.
+    public bool IsSensitive { get; set; }
+
     public virtual UsbSession Session { get; set; } = null!;
 }

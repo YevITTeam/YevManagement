@@ -12,6 +12,7 @@ import type { UsbMachineDto } from "@/modules/pc-management/types/usb-log.dto";
 import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import UsbExportButton from "./UsbExportButton";
+import { UsbFileCount } from "./UsbSessionFiles";
 import { formatDateTime } from "./usb-log-format";
 import { UsbOwnerCell, UsbOwnerFilterFields, useUsbOwnerOptions } from "./UsbOwnerFilter";
 
@@ -21,7 +22,7 @@ const fieldLabelClassName = "mb-1 block text-xs font-semibold text-[#5e3f3a]";
 const fieldClassName =
     "h-9 w-full rounded-md border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
-const emptyFilters = { keyword: "", fromDate: "", toDate: "", connectedNowOnly: false, branchId: 0, departmentId: 0 };
+const emptyFilters = { keyword: "", fromDate: "", toDate: "", connectedNowOnly: false, sensitiveOnly: false, branchId: 0, departmentId: 0 };
 
 // PCs with USB activity.
 export default function UsbMachineList() {
@@ -38,6 +39,7 @@ export default function UsbMachineList() {
         toDate: applied.toDate || undefined,
         branchId: applied.branchId || undefined,
         departmentId: applied.departmentId || undefined,
+        sensitiveOnly: applied.sensitiveOnly,
     });
 
     const [pageIndex, setPageIndex] = useState(1);
@@ -54,6 +56,7 @@ export default function UsbMachineList() {
                 fromDate: applied.fromDate || undefined,
                 toDate: applied.toDate || undefined,
                 connectedNowOnly: applied.connectedNowOnly,
+                sensitiveOnly: applied.sensitiveOnly,
                 branchId: applied.branchId || undefined,
                 departmentId: applied.departmentId || undefined,
                 ...sort,
@@ -132,6 +135,15 @@ export default function UsbMachineList() {
                             className="h-4 w-4 accent-[#e3000f]"
                         />
                         {t("common.connectedNow")}
+                    </label>
+                    <label title={t("files.sensitiveTitle")} className="flex h-9 w-auto! cursor-pointer items-center gap-2 text-sm text-[#191c1e]">
+                        <input
+                            type="checkbox"
+                            checked={draft.sensitiveOnly}
+                            onChange={(event) => setDraft({ ...draft, sensitiveOnly: event.target.checked })}
+                            className="h-4 w-4 accent-[#e3000f]"
+                        />
+                        {t("files.sensitive")}
                     </label>
 
                     <div className="flex items-center gap-1.5">
@@ -243,7 +255,9 @@ export default function UsbMachineList() {
                                     <td className="hidden px-3 py-2 text-sm text-[#5e3f3a] lg:table-cell">{row.lastWindowsUser || "-"}</td>
                                     <td className="hidden lg:table-cell px-3 py-2 text-right text-sm text-[#191c1e]">{row.usbDeviceCount}</td>
                                     <td className="px-3 py-2 text-right text-sm text-[#191c1e]">{row.sessionCount}</td>
-                                    <td className="hidden lg:table-cell px-3 py-2 text-right text-sm text-[#191c1e]">{row.fileEventCount}</td>
+                                    <td className="hidden lg:table-cell px-3 py-2 text-right text-sm text-[#191c1e]">
+                                        <UsbFileCount total={row.fileEventCount} sensitive={row.sensitiveFileCount} />
+                                    </td>
                                     <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{formatDateTime(row.lastConnectedAt)}</td>
                                 </tr>
                             ))}

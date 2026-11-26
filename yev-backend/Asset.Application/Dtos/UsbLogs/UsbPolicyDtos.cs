@@ -185,6 +185,7 @@ namespace Asset.Application.Dtos.UsbLogs
         public int BlockedNow { get; set; }
         public int SessionsToday { get; set; }
         public int BlockedToday { get; set; }
+        public int SensitiveFilesToday { get; set; }
         public int StorageUsbCount { get; set; }
         public int ApprovedUsbCount { get; set; }
     }

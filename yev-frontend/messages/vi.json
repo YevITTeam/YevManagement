@@ -2874,7 +2874,8 @@
       "sessionsToday": "Lần cắm hôm nay",
       "blockedToday": "Bị chặn hôm nay",
       "approvedUsb": "USB đã cấp phép",
-      "approvedUsbTitle": "Trên tổng số USB lưu trữ đã từng cắm"
+      "approvedUsbTitle": "Trên tổng số USB lưu trữ đã từng cắm",
+      "sensitiveToday": "File nhạy cảm hôm nay"
     },
     "owner": {
       "loadError": "Không tải được danh sách xưởng, bộ phận."
@@ -2927,7 +2928,11 @@
       "time": "Thời gian",
       "size": "Dung lượng",
       "prev": "Trước",
-      "next": "Sau"
+      "next": "Sau",
+      "sensitive": "Nhạy cảm",
+      "sensitiveOnly": "Chỉ file nhạy cảm",
+      "sensitiveCount": "{count} nhạy cảm",
+      "sensitiveTitle": "Ghi ra USB file tài liệu, bản vẽ, CSDL, file nén, khoá hoặc file từ 10 MB; hoặc chép file chạy được từ USB vào máy"
     },
     "devices": {
       "loadError": "Không thể tải danh sách thiết bị USB.",
@@ -3005,7 +3010,8 @@
       "purgeOffline": "Mất liên lạc quá",
       "purgeOfflineDays": "ngày",
       "offlineDaysAria": "Số ngày mất liên lạc",
-      "purgeNote": "Lịch sử USB và nhật ký agent vẫn giữ."
+      "purgeNote": "Lịch sử USB và nhật ký agent vẫn giữ.",
+      "exportTitle": "Xuất Excel danh sách agent theo bộ lọc"
     },
     "settings": {
       "loadError": "Không thể tải cài đặt agent.",

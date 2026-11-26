@@ -11,7 +11,7 @@ import type { UsbSessionDto } from "@/modules/pc-management/types/usb-log.dto";
 import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Badge } from "@/components/ui/Badge";
-import UsbSessionFiles from "./UsbSessionFiles";
+import UsbSessionFiles, { UsbFileCount } from "./UsbSessionFiles";
 import { POLICY_META, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 
 const PAGE_SIZE = 20;
@@ -249,7 +249,9 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                                     .join(" · ")}
                                             </div>
                                         </td>
-                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.fileEventCount}</td>
+                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                            <UsbFileCount total={row.fileEventCount} sensitive={row.sensitiveFileCount} />
+                                        </td>
                                         <td className="px-3 py-2 text-right">
                                             <button
                                                 onClick={() => setExpandedId((current) => (current === row.id ? null : row.id))}
@@ -263,7 +265,7 @@ export default function UsbLogList({ deviceId, machineName, usbDeviceId }: UsbLo
                                     {expandedId === row.id && (
                                         <tr className="border-b border-[#f1f5f9] bg-[#f8fafc]">
                                             <td colSpan={columnCount} className="px-3 py-2">
-                                                <UsbSessionFiles sessionId={row.id} />
+                                                <UsbSessionFiles sessionId={row.id} sensitiveCount={row.sensitiveFileCount} />
                                             </td>
                                         </tr>
                                     )}

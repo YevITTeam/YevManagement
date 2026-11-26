@@ -455,6 +455,32 @@ namespace Asset.Application.Services
         public async Task<PagedResponse<UsbAgentDto>> GetAgentsPagedAsync(UsbAgentFilterRequest filter)
         {
             var staleBefore = DateTime.UtcNow.AddHours(7 - StaleAgentHours);
+            return await _unitOfWork.UsbAgents.ToPagedResponseAsync(
+                UsbSort.Apply(AgentQuery(filter, staleBefore), filter.SortBy, filter.SortDesc, AgentColumns,
+                    q => q.OrderBy(a => a.LastSeenAt < staleBefore ? 0 : 1).ThenBy(a => a.MachineName), a => a.Id),
+                filter.PageIndex,
+                filter.PageSize,
+                ToAgentDto(staleBefore));
+        }
+
+        public async Task<byte[]> ExportAgentsAsync(UsbAgentFilterRequest filter)
+        {
+            var staleBefore = DateTime.UtcNow.AddHours(7 - StaleAgentHours);
+            var rows = await _unitOfWork.UsbAgents.ToPagedResponseAsync(
+                AgentQuery(filter, staleBefore).OrderBy(a => a.MachineName).ThenBy(a => a.Id), 1, UsbExcel.MaxRows, ToAgentDto(staleBefore));
+
+            return UsbExcel.Build("Agent USB",
+                new[] { "Máy", "Mã thiết bị", "Xưởng", "Bộ phận", "Phiên bản", "Người dùng", "Lần đầu", "Lần cuối báo về", "Mất liên lạc", "Sự kiện gần nhất", "Lúc" },
+                rows.Data.Select(a => new object?[]
+                {
+                    a.MachineName, a.DeviceCode, a.BranchName, a.DepartmentName, a.AgentVersion, a.WindowsUser, a.FirstSeenAt, a.LastSeenAt,
+                    a.IsStale ? "Có" : null, UsbExcel.AgentEventText(a.LastEventType), a.LastEventAt
+                }),
+                rows.TotalCount);
+        }
+
+        private IQueryable<UsbAgent> AgentQuery(UsbAgentFilterRequest filter, DateTime staleBefore)
+        {
             var query = _unitOfWork.UsbAgents.GetQueryable(false);
 
             if (!string.IsNullOrWhiteSpace(filter.Keyword))
@@ -474,13 +500,13 @@ namespace Asset.Application.Services
             if (filter.DepartmentId.HasValue)
                 query = query.Where(a => a.Device != null && a.Device.DepartmentId == filter.DepartmentId.Value);
 
+            return query;
+        }
+
+        private Expression<Func<UsbAgent, UsbAgentDto>> ToAgentDto(DateTime staleBefore)
+        {
             var events = _unitOfWork.UsbAgentEvents.GetQueryable(false);
-            return await _unitOfWork.UsbAgents.ToPagedResponseAsync(
-                UsbSort.Apply(query, filter.SortBy, filter.SortDesc, AgentColumns,
-                    q => q.OrderBy(a => a.LastSeenAt < staleBefore ? 0 : 1).ThenBy(a => a.MachineName), a => a.Id),
-                filter.PageIndex,
-                filter.PageSize,
-                a => new UsbAgentDto
+            return a => new UsbAgentDto
                 {
                     Id = a.Id,
                     MachineName = a.MachineName,
@@ -496,7 +522,7 @@ namespace Asset.Application.Services
                         .OrderByDescending(e => e.OccurredAt).Select(e => (int?)e.EventType).FirstOrDefault(),
                     LastEventAt = events.Where(e => e.MachineName == a.MachineName)
                         .OrderByDescending(e => e.OccurredAt).Select(e => (DateTime?)e.OccurredAt).FirstOrDefault()
-                });
+                };
         }
 
         public async Task<List<UsbAgentEventDto>> GetAgentEventsAsync(string machineName)
@@ -574,6 +600,8 @@ namespace Asset.Application.Services
                 BlockedNow = await _unitOfWork.UsbSessions.CountAsync(openNow, s => s.PolicyResult == blocked),
                 SessionsToday = await _unitOfWork.UsbSessions.CountAsync(todaySessions),
                 BlockedToday = await _unitOfWork.UsbSessions.CountAsync(todaySessions, s => s.PolicyResult == blocked),
+                SensitiveFilesToday = await _unitOfWork.UsbFileEvents.CountAsync(
+                    _unitOfWork.UsbFileEvents.GetQueryable(false), e => e.IsSensitive && e.OccurredAt >= today),
                 StorageUsbCount = await _unitOfWork.UsbDevices.CountAsync(disks),
                 ApprovedUsbCount = await _unitOfWork.UsbDevices.CountAsync(disks, u => u.IsApproved || u.Machines.Any())
             };

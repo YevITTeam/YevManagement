@@ -18,6 +18,6 @@ namespace Asset.Application.Interfaces.Service
         Task<List<UsbMachineUsbDto>> GetMachineUsbsAsync(string machineName);
 
         Task<PagedResponse<UsbFileEventDto>> GetSessionFilesPagedAsync(
-            Guid sessionId, int pageIndex, int pageSize, string? keyword, string? sortBy, bool sortDesc);
+            Guid sessionId, int pageIndex, int pageSize, string? keyword, string? sortBy, bool sortDesc, bool sensitiveOnly);
     }
 }

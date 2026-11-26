@@ -17,6 +17,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbAgentDto, UsbAgentEventDto } from "@/modules/pc-management/types/usb-log.dto";
 import UsbAgentSettings from "./UsbAgentSettings";
+import UsbExportButton from "./UsbExportButton";
 import { AGENT_EVENT_META, formatDateTime } from "./usb-log-format";
 import { UsbOwnerCell, UsbOwnerFilterFields, useUsbOwnerOptions } from "./UsbOwnerFilter";
 
@@ -185,16 +186,31 @@ export default function UsbAgentList() {
                             <RefreshCw className="h-4 w-4" />
                         </button>
                     </div>
-                    {canEdit && (
-                        <button
-                            onClick={() => setPurgeOpen(true)}
-                            title={t("agents.purgeButtonTitle")}
-                            className="inline-flex h-9 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f2f4f6] sm:ml-auto"
-                        >
-                            <Eraser className="h-4 w-4" />
-                            {t("agents.purge")}
-                        </button>
-                    )}
+                    <div className="flex items-center gap-1.5 sm:ml-auto">
+                        {canEdit && (
+                            <button
+                                onClick={() => setPurgeOpen(true)}
+                                title={t("agents.purgeButtonTitle")}
+                                className="inline-flex h-9 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                            >
+                                <Eraser className="h-4 w-4" />
+                                {t("agents.purge")}
+                            </button>
+                        )}
+                        <UsbExportButton
+                            label="Excel"
+                            title={t("agents.exportTitle")}
+                            fallbackFileName="AgentUSB.xlsx"
+                            download={() =>
+                                UsbLogApi.exportAgents({
+                                    keyword: applied.keyword || undefined,
+                                    staleOnly: applied.staleOnly,
+                                    branchId: applied.branchId || undefined,
+                                    departmentId: applied.departmentId || undefined,
+                                })
+                            }
+                        />
+                    </div>
                 </div>
             </section>
 

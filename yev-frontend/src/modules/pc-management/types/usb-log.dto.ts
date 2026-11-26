@@ -9,6 +9,7 @@ export interface UsbMachineDto {
     sessionCount: number;
     usbDeviceCount: number;
     fileEventCount: number;
+    sensitiveFileCount: number;
     lastConnectedAt: string;
     isConnectedNow: boolean;
     unpermittedCount: number;
@@ -41,6 +42,7 @@ export interface UsbSessionDto {
     // False = the PC's agent went silent, so an open session's unplug time is unknown.
     agentOnline: boolean;
     fileEventCount: number;
+    sensitiveFileCount: number;
 }
 
 // One USB on one PC, its sessions there rolled up.
@@ -61,6 +63,7 @@ export interface UsbMachineUsbDto {
     driveLetters: string[];
     sessionCount: number;
     fileEventCount: number;
+    sensitiveFileCount: number;
     lastConnectedAt: string;
     isConnectedNow: boolean;
     lastPolicyResult: number | null;
@@ -186,6 +189,7 @@ export interface UsbStatsDto {
     blockedNow: number;
     sessionsToday: number;
     blockedToday: number;
+    sensitiveFilesToday: number;
     storageUsbCount: number;
     approvedUsbCount: number;
 }
@@ -208,4 +212,6 @@ export interface UsbFileEventDto {
     oldFilePath: string | null;
     sizeBytes: number | null;
     occurredAt: string;
+    // Sensitive type or >= 10 MB written to USB, or an executable copied in.
+    isSensitive: boolean;
 }

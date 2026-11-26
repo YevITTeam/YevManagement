@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { TriangleAlert } from "lucide-react";
 import { toast } from "react-toastify";
 
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
@@ -21,16 +22,32 @@ const actionClasses: Record<number, string> = {
     5: "border border-[#e0e3e5] bg-[#f2f4f6] text-[#5e3f3a]",
 };
 
-export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
+// File count with the sensitive part in red; shared by every list that shows a file count.
+export function UsbFileCount({ total, sensitive }: { total: number; sensitive: number }) {
+    const t = useTranslations("usbLog");
+    return (
+        <span className="whitespace-nowrap">
+            {total}
+            {sensitive > 0 && (
+                <span title={t("files.sensitiveTitle")} className="ml-1.5 text-xs font-semibold text-[#e3000f]">
+                    {t("files.sensitiveCount", { count: sensitive })}
+                </span>
+            )}
+        </span>
+    );
+}
+
+export default function UsbSessionFiles({ sessionId, sensitiveCount = 0 }: { sessionId: string; sensitiveCount?: number }) {
     const t = useTranslations("usbLog");
     const [rows, setRows] = useState<UsbFileEventDto[]>([]);
     const [pageIndex, setPageIndex] = useState(1);
     const [sort, setSort] = useState<SortState>(NO_SORT);
     const [totalPages, setTotalPages] = useState(1);
+    const [sensitiveOnly, setSensitiveOnly] = useState(false);
 
     const { isLoading, error } = useFetchEffect(
-        () => UsbLogApi.getSessionFiles(sessionId, { pageIndex, pageSize: PAGE_SIZE, ...sort }),
-        [sessionId, pageIndex, sort],
+        () => UsbLogApi.getSessionFiles(sessionId, { pageIndex, pageSize: PAGE_SIZE, sensitiveOnly, ...sort }),
+        [sessionId, pageIndex, sort, sensitiveOnly],
         (result) => {
             setRows(result.data);
             setTotalPages(result.totalPages);
@@ -49,6 +66,20 @@ export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
 
     return (
         <div className="space-y-2">
+            {sensitiveCount > 0 && (
+                <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-[#191c1e]">
+                    <input
+                        type="checkbox"
+                        checked={sensitiveOnly}
+                        onChange={(event) => {
+                            setPageIndex(1);
+                            setSensitiveOnly(event.target.checked);
+                        }}
+                        className="h-4 w-4 accent-[#e3000f]"
+                    />
+                    {t("files.sensitiveOnly")}
+                </label>
+            )}
             <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
                     <thead>
@@ -69,6 +100,11 @@ export default function UsbSessionFiles({ sessionId }: { sessionId: string }) {
                                     </span>
                                 </td>
                                 <td className="break-all py-1.5 pr-3 text-[#191c1e]">
+                                    {row.isSensitive && (
+                                        <span title={t("files.sensitiveTitle")}>
+                                            <TriangleAlert className="mr-1 inline h-3.5 w-3.5 text-[#e3000f]" aria-label={t("files.sensitive")} />
+                                        </span>
+                                    )}
                                     {row.oldFilePath ? `${row.oldFilePath} → ${row.filePath}` : row.filePath}
                                 </td>
                                 <td className="whitespace-nowrap py-1.5 text-right text-xs text-[#5e3f3a]">{formatBytes(row.sizeBytes)}</td>

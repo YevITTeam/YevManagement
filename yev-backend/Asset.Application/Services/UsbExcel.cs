@@ -53,6 +53,18 @@ namespace Asset.Application.Services
             return stream.ToArray();
         }
 
+        public static string? AgentEventText(int? type) => type switch
+        {
+            (int)UsbAgentEventType.Installed => "Cài đặt",
+            (int)UsbAgentEventType.Started => "Khởi động",
+            (int)UsbAgentEventType.Stopped => "Dừng",
+            (int)UsbAgentEventType.AbnormalStop => "Dừng đột ngột",
+            (int)UsbAgentEventType.Uninstalled => "Đã gỡ",
+            (int)UsbAgentEventType.UninstallDenied => "Gỡ sai mật khẩu",
+            (int)UsbAgentEventType.UpdateFailed => "Cập nhật lỗi",
+            _ => null
+        };
+
         public static string AccessLevelText(int level) => level == (int)UsbAccessLevel.ReadOnly ? "Chỉ đọc" : "Đọc-ghi";
 
         public static string? PolicyResultText(int? result) => result switch
