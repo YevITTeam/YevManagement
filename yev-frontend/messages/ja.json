@@ -38,7 +38,8 @@
     "windows": "Windowsアカウントでログイン",
     "ssoNote": "シングルサインオン(SSO)が設定されたPCでのみ使用できます。",
     "failed": "ログインに失敗しました。もう一度お試しください。",
-    "windowsFailed": "Windowsアカウントでのログインに失敗しました。もう一度お試しください。"
+    "windowsFailed": "Windowsアカウントでのログインに失敗しました。もう一度お試しください。",
+    "guide": "ログイン情報の確認・利用ガイド"
   },
   "LocalAccount": {
     "prefixes": "プレフィックス",
@@ -127,6 +128,7 @@
     "otSignature": "自分の署名",
     "otSecondaryPassword": "第2パスワード",
     "otAuditTrail": "システムログ",
+    "otGuide": "利用ガイド",
     "adminManagerTagline": "システム管理",
     "adminOverview": "概要",
     "adminUsers": "ユーザー",
@@ -2764,5 +2766,12 @@
       "deleteTitle": "サプライヤーを削除",
       "deleteMessage": "サプライヤー <b>{name}</b> を削除してもよろしいですか？この操作は取り消せません。"
     }
+  },
+  "Guide": {
+    "userId": "ログインUserIdの確認",
+    "secondaryPassword": "第2パスワード・署名の設定",
+    "createOt": "残業申請の作成",
+    "approveOt": "残業申請の承認",
+    "openNewTab": "新しいタブで開く"
   }
 }

@@ -38,7 +38,8 @@
     "windows": "Đăng nhập bằng tài khoản Windows",
     "ssoNote": "Chỉ dùng được trên máy đã cấu hình đăng nhập một chạm (SSO).",
     "failed": "Đăng nhập thất bại. Vui lòng thử lại.",
-    "windowsFailed": "Đăng nhập bằng tài khoản Windows thất bại. Vui lòng thử lại."
+    "windowsFailed": "Đăng nhập bằng tài khoản Windows thất bại. Vui lòng thử lại.",
+    "guide": "Hướng dẫn lấy thông tin đăng nhập"
   },
   "LocalAccount": {
     "prefixes": "Tiền tố",
@@ -127,6 +128,7 @@
     "otSignature": "Chữ ký của tôi",
     "otSecondaryPassword": "Mật khẩu cấp 2",
     "otAuditTrail": "Nhật ký hệ thống",
+    "otGuide": "Hướng dẫn sử dụng",
     "adminManagerTagline": "Quản trị",
     "adminOverview": "Tổng quan",
     "adminUsers": "Người dùng",
@@ -2764,5 +2766,12 @@
       "deleteTitle": "Xoá nhà cung cấp",
       "deleteMessage": "Bạn có chắc muốn xoá nhà cung cấp <b>{name}</b> không? Hành động này không thể hoàn tác."
     }
+  },
+  "Guide": {
+    "userId": "Lấy UserId đăng nhập",
+    "secondaryPassword": "Tạo mật khẩu cấp 2 & chữ ký",
+    "createOt": "Tạo đơn tăng ca",
+    "approveOt": "Duyệt đơn tăng ca",
+    "openNewTab": "Mở tab mới"
   }
 }

@@ -16,6 +16,8 @@ const PUBLIC_CONFIRM_PATHS = [
     "/xac-nhan-mat-khau-cap-2",
     "/xac-nhan-chu-ky-quy-trinh",
     "/xac-nhan-don-quy-trinh",
+    // User guides must open before login (how to find the login UserId).
+    "/huong-dan",
 ];
 
 const isPublicConfirmPath = (pathname: string) =>

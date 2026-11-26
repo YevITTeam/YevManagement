@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Eye, EyeOff, LogIn, Monitor } from "lucide-react";
+import { BookOpen, Eye, EyeOff, LogIn, Monitor } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { useRouter } from "@/navigation";
+import { Link, useRouter } from "@/navigation";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { getApiErrorMessage } from "@/lib/apiError";
 import BrandLogo from "@/components/common/BrandLogo";
@@ -163,6 +163,16 @@ export default function LoginForm() {
                     <Monitor className="h-4 w-4 text-[#5e3f3a]" />
                     {isWindowsLoggingIn ? t("submitting") : t("windows")}
                 </button>
+
+                <Link
+                    href="/huong-dan"
+                    target="_blank"
+                    prefetch={false}
+                    className="mt-5 flex items-center justify-center gap-1.5 text-sm font-medium text-[#5e3f3a] transition hover:text-[#e3000f]"
+                >
+                    <BookOpen className="h-4 w-4" />
+                    {t("guide")}
+                </Link>
             </div>
         </div>
     );

@@ -285,6 +285,9 @@ Nguồn chân lý kiến trúc/code. `POST /api/AttendanceAiChat/stream` (`Atten
 - **Email** (`AttendanceMailLog`): mọi mail Attendance đi qua `IAttendanceMailLogService.SendAsync(recipientUserName, email, subject, html)` (thay gọi thẳng `IEmailService` ở `OtFormNotificationService`, `UserSignatureService`, `SecondaryPasswordService`). Ghi 1 dòng `Queued` trong **scope DbContext riêng** (không flush thay đổi dở của luồng gọi) rồi xếp hàng outbox với `trackingId = attendance-mail:{Id}`; outbox báo lại → `Sent` (+`SentAt`), lỗi tạm → vẫn `Queued` kèm `LastError`/`Attempts` (FE hiện "Đang thử lại"), lỗi vĩnh viễn/hết lượt → `Failed`; không xếp được hàng → `Failed` ngay. Người nhận không có email → `LogSkippedAsync` ghi `Skipped`. Không lưu nội dung HTML (có link token). `RequestedBy` theo luật `ChangedBy` ở trên.
 - FE: mục "Nhật ký hệ thống" (`OtManagerSidebar`, `otRoutePermissions`) → `AttendanceAuditTrailPage` 2 tab: "Thao tác dữ liệu" dùng lại `pc-management/.../AuditTrailList` (prop `fetchPage`/`header`/placeholder) + `AuditTrailDiffView`; "Email" = `AttendanceMailLogList` (lọc từ khoá người nhận/email/tiêu đề, trạng thái, khoảng ngày). Text màn này chỉ tiếng Việt như màn PC (màn quản trị).
 
+### §Tài liệu hướng dẫn người dùng (PDF)
+PDF tĩnh ở `yev-frontend/public/guides/` (thay file cùng tên là cập nhật, không cần sửa code), danh sách trong `GuideViewer` (`modules/common`). Hiện ở 2 nơi: trang public `/huong-dan` (trong `PUBLIC_CONFIRM_PATHS` của `AuthGuard`, mở từ link dưới form đăng nhập) và mục sidebar `/ot/guide` (không cần permission riêng).
+
 ### §Chuẩn giao diện chung của màn OT
 Màn Cây duyệt, `SearchableSelect`, `MealTicketTypeBadge`, khung cuộn modal Import: xem §Giao diện & song ngữ OT Form. Màu warning (`#fff4e5`/`#f5d0a9`/`#9a5b00`) ở `DESIGN_SYSTEM.md §1`.
 
