@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Download, FileSpreadsheet, FileText, Loader2, Search } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -23,9 +23,9 @@ import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import type { ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
-import { StyledSelect } from "@/components/ui/StyledSelect";
 import ActionMenu from "@/components/ui/ActionMenu";
 import InfoTooltip from "@/components/ui/InfoTooltip";
+import { IconButton, TableStatusRows, fieldClassName, theadRowClassName } from "@/components/ui/ListToolbar";
 
 // Fixed shift order matching the 22-08.pdf template (A, B, C, H), not alphabetical.
 const CA_ORDER = ["A", "B", "C", "H"];
@@ -110,9 +110,6 @@ function lastDayOfMonth(month: string) {
     return `${month}-${String(new Date(year, monthIndex, 0).getDate()).padStart(2, "0")}`;
 }
 
-const labelClassName = "mb-1.5 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
-const fieldClassName =
-    "h-10 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
 function formatDateVn(iso: string) {
     const [y, m, d] = iso.split("-");
@@ -281,6 +278,7 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
     ref
 ) {
     const t = useTranslations("Attendance.ProductionOtReport");
+    const locale = useLocale();
     const [period, setPeriod] = useState<"day" | "month">("day");
     const [month, setMonth] = useState(() => todayIso().slice(0, 7));
     const [date, setDate] = useState(todayIso());
@@ -405,21 +403,24 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         }
     };
 
+    const localName = (vn: string, jp: string | null) => (locale === "ja" ? jp || vn : vn);
     const departmentOptions: SelectOption[] = departments.map((dept) => ({
         value: dept.id,
-        label: dept.departmentNameVn,
-        searchText: `${dept.departmentNameVn} ${dept.departmentCode}`.toLowerCase(),
+        label: localName(dept.departmentNameVn, dept.departmentNameJp),
+        searchText: `${dept.departmentNameVn} ${dept.departmentNameJp ?? ""} ${dept.departmentCode}`.toLowerCase(),
     }));
 
     const isBusy = isExporting || isExportingTickets;
-    const exportMenuLabel = isExportingTickets
+    const exportProgress = isExportingTickets
         ? ticketExportProgress
             ? t("exportTicketZipProgress", { done: ticketExportProgress.done, total: ticketExportProgress.total })
             : t("exportTicketZipPreparing")
         : isExporting
           ? t("exporting")
-          : t("exportMenuLabel");
+          : null;
     const excelIcon = <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />;
+    const pdfIcon = <FileText className="h-3.5 w-3.5 shrink-0" />;
+    const dayOnlyTitle = isDay ? undefined : t("dayOnlySuffix");
     // The General Affairs file has its own fixed layout and ignores the group filter.
     const exportItems = [
         {
@@ -431,158 +432,147 @@ const ProductionOtReportPanel = forwardRef<ListHandle, ListToolbarProps>(functio
         { label: t("exportTimesButton"), onClick: () => exportExcel(ProductionOtReportApi.exportTimesReportExcel, "SoLuotTangCa", "exportTimesError"), icon: excelIcon },
         { label: t("exportDetailButton"), onClick: () => exportExcel(ProductionOtReportApi.exportQryExportExcel, "Qry_EXPORT_EXCEL", "exportDetailError"), icon: excelIcon },
         { label: t("exportSummaryButton"), onClick: () => exportExcel(ProductionOtReportApi.exportSumExportData, "SUM_EXPORT_DATA", "exportSummaryError"), icon: excelIcon },
-        {
-            label: isDay ? t("exportTicketZipButton") : `${t("exportTicketZipButton")} (${t("dayOnlySuffix")})`,
-            onClick: handleExportTicketZip,
-            icon: <FileText className="h-3.5 w-3.5 shrink-0" />,
-            disabled: !isDay,
-        },
+        { label: t("exportTicketZipButton"), onClick: handleExportTicketZip, icon: pdfIcon, disabled: !isDay, title: dayOnlyTitle },
+        // Drawn from the report on screen, so it needs a day search first.
+        { label: t("exportPdfButton"), onClick: handleExportPdf, icon: pdfIcon, disabled: !isDay || !report?.rows.length, title: dayOnlyTitle },
     ];
 
+    // Old rows are hidden while a new search runs so the skeleton shows instead of stale data.
+    const rows = isLoading ? [] : (report?.rows ?? []);
+    const cellClassName = "px-3 py-1.5";
+    const numberCellClassName = `${cellClassName} text-right tabular-nums text-[#5e3f3a]`;
+
     return (
-        <div className="space-y-4">
-            <div className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
-                {/* Top-aligned because the group picker grows with its chips; action buttons offset by one label height. */}
-                <div className="flex flex-wrap items-start gap-3">
-                    <div>
-                        <span className={labelClassName}>
-                            {t("fieldDateLabel")}
-                            <InfoTooltip text={t("searchHint")} />
-                        </span>
-                        <div className="flex gap-2">
-                            <StyledSelect
-                                value={period}
-                                onChange={(value) => {
-                                    setPeriod(value as "day" | "month");
-                                    setReport(null);
-                                }}
-                                triggerClassName={`${fieldClassName} w-32 pr-8`}
-                                options={[
-                                    { value: "day", label: t("periodDay") },
-                                    { value: "month", label: t("periodMonth") },
-                                ]}
-                            />
-                            {isDay ? (
-                                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label={t("fieldDateLabel")} className={`${fieldClassName} w-40`} />
-                            ) : (
-                                <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label={t("periodMonth")} className={`${fieldClassName} w-40`} />
-                            )}
-                        </div>
-                    </div>
-                    <label className="block w-44">
-                        <span className={labelClassName}>{t("fieldWorkshopLabel")}</span>
-                        <SearchableSelect
-                            options={workshops.map((w) => ({ value: w.id, label: w.workshopNameVn, searchText: w.workshopNameVn.toLowerCase() }))}
-                            value={workshopId}
-                            onChange={setWorkshopId}
-                            placeholder={t("filterAllWorkshop")}
-                        />
-                    </label>
-                    <label className="block w-56">
-                        <span className={labelClassName}>{t("fieldDepartmentLabel")}</span>
-                        <SearchableSelect options={departmentOptions} value={departmentId} onChange={setDepartmentId} placeholder={t("filterAllDepartment")} />
-                    </label>
-                    <div className="w-64">
-                        <span className={labelClassName}>{t("fieldGroupLabel")}</span>
-                        <MultiSelect
-                            options={groups.map((g) => ({ value: g.id, label: g.nameVn ?? g.code, searchText: `${g.nameVn ?? ""} ${g.code}`.toLowerCase() }))}
-                            values={groupIds}
-                            onChange={setGroupIds}
-                            placeholder={t("filterAllDepartment")}
-                        />
-                    </div>
-                    <div className="mt-[22px] flex gap-2">
-                        {isDay && (
-                            <button
-                                type="button"
-                                onClick={handleSearch}
-                                disabled={isLoading || !date}
-                                className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <Search className="h-3.5 w-3.5" /> {isLoading ? t("searching") : t("searchButton")}
-                            </button>
-                        )}
-                        <ActionMenu
-                            label={exportMenuLabel}
-                            icon={isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                            items={exportItems}
-                            disabled={isBusy || !hasPeriod}
-                        />
-                    </div>
+        <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+            {/* Top-aligned because the group picker grows with its chips. */}
+            <div className="flex flex-wrap items-start gap-2 border-b border-[#e0e3e5] px-3 py-2.5">
+                <div role="radiogroup" aria-label={t("fieldDateLabel")} className="inline-flex h-9 shrink-0 rounded-lg border border-[#e0e3e5] bg-[#f2f4f6] p-0.5">
+                    {(["day", "month"] as const).map((value) => (
+                        <button
+                            key={value}
+                            type="button"
+                            role="radio"
+                            aria-checked={period === value}
+                            onClick={() => {
+                                setPeriod(value);
+                                setReport(null);
+                            }}
+                            className={`cursor-pointer whitespace-nowrap rounded-md px-3 text-sm font-semibold transition ${
+                                period === value ? "bg-white text-[#e3000f] shadow-sm" : "text-[#5e3f3a] hover:text-[#191c1e]"
+                            }`}
+                        >
+                            {value === "day" ? t("periodDay") : t("periodMonth")}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex h-9 items-center gap-1">
+                    {isDay ? (
+                        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label={t("fieldDateLabel")} className={`${fieldClassName} w-36`} />
+                    ) : (
+                        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label={t("periodMonth")} className={`${fieldClassName} w-36`} />
+                    )}
+                    <InfoTooltip text={t("searchHint")} />
+                </div>
+                <div className="w-44">
+                    <SearchableSelect
+                        options={workshops.map((w) => ({
+                            value: w.id,
+                            label: localName(w.workshopNameVn, w.workshopNameJp),
+                            searchText: `${w.workshopNameVn} ${w.workshopNameJp ?? ""}`.toLowerCase(),
+                        }))}
+                        value={workshopId}
+                        onChange={setWorkshopId}
+                        placeholder={t("filterAllWorkshop")}
+                        ariaLabel={t("fieldWorkshopLabel")}
+                        triggerClassName={`${fieldClassName} w-full pr-8`}
+                    />
+                </div>
+                <div className="w-56">
+                    <SearchableSelect
+                        options={departmentOptions}
+                        value={departmentId}
+                        onChange={setDepartmentId}
+                        placeholder={t("filterAllDepartment")}
+                        ariaLabel={t("fieldDepartmentLabel")}
+                        triggerClassName={`${fieldClassName} w-full pr-8`}
+                    />
+                </div>
+                <div className="w-64">
+                    <MultiSelect
+                        options={groups.map((g) => ({ value: g.id, label: g.nameVn ?? g.code, searchText: `${g.nameVn ?? ""} ${g.code}`.toLowerCase() }))}
+                        values={groupIds}
+                        onChange={setGroupIds}
+                        placeholder={t("filterAllGroup")}
+                        ariaLabel={t("fieldGroupLabel")}
+                    />
+                </div>
+                <div className="flex items-center gap-1.5 sm:ml-auto">
+                    {exportProgress && <span className="whitespace-nowrap text-xs text-[#5e3f3a]">{exportProgress}</span>}
+                    {isDay && <IconButton icon={isLoading ? Loader2 : Search} label={t("searchButton")} onClick={handleSearch} disabled={isLoading || !date} variant="primary" />}
+                    <ActionMenu
+                        iconOnly
+                        label={t("exportMenuLabel")}
+                        icon={isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        items={exportItems}
+                        disabled={isBusy || !hasPeriod}
+                    />
                 </div>
             </div>
 
-            {isDay && report && (
-                <div className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3">
-                        <div className="flex flex-wrap gap-6 text-sm text-[#5e3f3a]">
-                            <span>
-                                {t("summarySecondaryLabel")} <strong className="text-[#191c1e]">{report.totalSecondaryTicketCount}</strong>
-                            </span>
-                            <span>
-                                {t("summaryMainLabel")} <strong className="text-[#191c1e]">{report.totalMainTicketCount}</strong>
-                            </span>
-                            <span>
-                                {t("summaryMilkLabel")} <strong className="text-[#191c1e]">{report.totalMilkCount}</strong>
-                            </span>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleExportPdf}
-                            disabled={report.rows.length === 0}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Download className="h-3.5 w-3.5" /> {t("exportPdfButton")}
-                        </button>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full border-collapse text-left">
-                            <thead>
-                                <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    <th className="whitespace-nowrap px-3 py-2">{t("colDepartment")}</th>
-                                    <th className="whitespace-nowrap px-3 py-2">{t("colCa")}</th>
-                                    <th className="whitespace-nowrap px-3 py-2">{t("colTeam")}</th>
-                                    <th className="whitespace-nowrap px-3 py-2">{t("colLine")}</th>
-                                    <th className="whitespace-nowrap px-3 py-2 text-right">{t("colSecondary")}</th>
-                                    <th className="whitespace-nowrap px-3 py-2 text-right">{t("colMain")}</th>
-                                    <th className="whitespace-nowrap px-3 py-2 text-right">{t("colMilk")}</th>
-                                    <th className="whitespace-nowrap px-3 py-2 text-right">{t("colHours")}</th>
-                                    <th className="whitespace-nowrap px-3 py-2">{t("colStartTime")}</th>
-                                    <th className="whitespace-nowrap px-3 py-2">{t("colEndTime")}</th>
+            {isDay && (report || isLoading) && (
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse text-left text-sm">
+                        <thead>
+                            <tr className={theadRowClassName}>
+                                <th className={cellClassName}>{t("colDepartment")}</th>
+                                <th className={cellClassName}>{t("colCa")}</th>
+                                <th className={cellClassName}>{t("colTeam")}</th>
+                                <th className={cellClassName}>{t("colLine")}</th>
+                                <th className={`${cellClassName} text-right`}>{t("colSecondary")}</th>
+                                <th className={`${cellClassName} text-right`}>{t("colMain")}</th>
+                                <th className={`${cellClassName} text-right`}>{t("colMilk")}</th>
+                                <th className={`${cellClassName} text-right`}>{t("colHours")}</th>
+                                <th className={cellClassName}>{t("colTime")}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <TableStatusRows loading={isLoading} empty={rows.length === 0} columns={9} emptyText={t("noData")} />
+                            {rows.map((row, index) => (
+                                <tr
+                                    key={`${row.congDoan}-${row.ca}-${row.team}-${row.lineCa}-${row.startTime}-${index}`}
+                                    className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
+                                >
+                                    <td className={`${cellClassName} text-[#191c1e]`}>{row.congDoan}</td>
+                                    <td className={`${cellClassName} text-[#191c1e]`}>{row.ca}</td>
+                                    <td className={`${cellClassName} text-[#191c1e]`}>{row.team}</td>
+                                    <td className={`${cellClassName} text-[#191c1e]`}>{row.lineCa}</td>
+                                    <td className={numberCellClassName}>{row.secondaryTicketCount}</td>
+                                    <td className={numberCellClassName}>{row.mainTicketCount}</td>
+                                    <td className={numberCellClassName}>{row.milkCount}</td>
+                                    <td className={numberCellClassName}>{row.totalHour}</td>
+                                    <td className={`${cellClassName} whitespace-nowrap tabular-nums text-[#5e3f3a]`}>
+                                        {row.startTime.slice(0, 5)}–{row.endTime.slice(0, 5)}
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                {report.rows.length === 0 && (
-                                    <tr>
-                                        <td colSpan={10} className="px-4 py-8 text-center text-sm text-[#5e3f3a]">
-                                            {t("noData")}
-                                        </td>
-                                    </tr>
-                                )}
-                                {report.rows.map((row, index) => (
-                                    <tr
-                                        key={`${row.congDoan}-${row.ca}-${row.team}-${row.lineCa}-${row.startTime}-${index}`}
-                                        className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
-                                    >
-                                        <td className="px-3 py-2 text-sm text-[#191c1e]">{row.congDoan}</td>
-                                        <td className="px-3 py-2 text-sm text-[#191c1e]">{row.ca}</td>
-                                        <td className="px-3 py-2 text-sm text-[#191c1e]">{row.team}</td>
-                                        <td className="px-3 py-2 text-sm text-[#191c1e]">{row.lineCa}</td>
-                                        <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{row.secondaryTicketCount}</td>
-                                        <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{row.mainTicketCount}</td>
-                                        <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{row.milkCount}</td>
-                                        <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{row.totalHour}</td>
-                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.startTime.slice(0, 5)}</td>
-                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.endTime.slice(0, 5)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                            ))}
+                        </tbody>
+                        {report && rows.length > 0 && (
+                            <tfoot>
+                                <tr className="border-t border-[#e0e3e5] bg-[#f8fafc] font-semibold text-[#191c1e]">
+                                    <td colSpan={4} className={cellClassName}>
+                                        {t("totalRow")}
+                                    </td>
+                                    <td className={`${cellClassName} text-right tabular-nums`}>{report.totalSecondaryTicketCount}</td>
+                                    <td className={`${cellClassName} text-right tabular-nums`}>{report.totalMainTicketCount}</td>
+                                    <td className={`${cellClassName} text-right tabular-nums`}>{report.totalMilkCount}</td>
+                                    <td colSpan={2} />
+                                </tr>
+                            </tfoot>
+                        )}
+                    </table>
                 </div>
             )}
-        </div>
+        </section>
     );
 });
 

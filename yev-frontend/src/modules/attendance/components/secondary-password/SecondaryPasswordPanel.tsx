@@ -1,19 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, Clock } from "lucide-react";
+import { AlertTriangle, Check, Clock, Mail } from "lucide-react";
 import { toast } from "react-toastify";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
 import type { SecondaryPasswordStatusDto } from "@/modules/attendance/types/secondary-password.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // PUT /me only sends a confirmation email; the old password stays valid until the user confirms via the link.
 export default function SecondaryPasswordPanel() {
     const t = useTranslations("Attendance.SecondaryPassword");
-    const tCommon = useTranslations("Common");
+    const locale = useLocale();
     const [status, setStatus] = useState<SecondaryPasswordStatusDto | null>(null);
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
@@ -59,30 +60,26 @@ export default function SecondaryPasswordPanel() {
 
             <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                 {isLoading ? (
-                    <div className="py-8 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
+                    <Skeleton className="h-24 w-full" />
                 ) : (
                     <>
-                        <div>
-                            <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                {t("currentStatusLabel")}
-                            </div>
-                            {status?.isRegistered ? (
-                                <p className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                                    <Check className="h-4 w-4 shrink-0" />
-                                    {status.updatedAt
-                                        ? t("registeredWithDate", { date: new Date(status.updatedAt).toLocaleString("vi-VN") })
-                                        : t("registered")}
-                                </p>
-                            ) : (
-                                <p className="flex items-center gap-1.5 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-sm text-[#9a5b00]">
-                                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                                    {t("notRegistered")}
-                                </p>
-                            )}
-                        </div>
+                        {status?.isRegistered ? (
+                            <p
+                                title={status.updatedAt ? new Date(status.updatedAt).toLocaleString(locale) : undefined}
+                                className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-600"
+                            >
+                                <Check className="h-4 w-4 shrink-0" />
+                                {status.updatedAt ? t("registeredWithDate", { date: new Date(status.updatedAt).toLocaleDateString(locale) }) : t("registered")}
+                            </p>
+                        ) : (
+                            <p className="flex items-center gap-1.5 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-sm text-[#9a5b00]">
+                                <AlertTriangle className="h-4 w-4 shrink-0" />
+                                {t("notRegistered")}
+                            </p>
+                        )}
 
                         {confirmationSent ? (
-                            <div className="flex items-center gap-1.5 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
+                            <div title={t("confirmationSentHint")} className="flex items-center gap-1.5 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-sm text-[#9a5b00]">
                                 <Clock className="h-4 w-4 shrink-0" />
                                 {t("confirmationSentMessage")}
                             </div>
@@ -98,6 +95,7 @@ export default function SecondaryPasswordPanel() {
                                         onChange={(event) => setPassword(event.target.value)}
                                         disabled={isSaving}
                                         autoComplete="new-password"
+                                        placeholder={t("passwordHint")}
                                         className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
                                     />
                                 </label>
@@ -118,8 +116,9 @@ export default function SecondaryPasswordPanel() {
                                     <button
                                         onClick={handleSave}
                                         disabled={isSaving}
-                                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                     >
+                                        <Mail className="h-4 w-4" />
                                         {isSaving ? t("sending") : t("sendConfirmButton")}
                                     </button>
                                 </div>

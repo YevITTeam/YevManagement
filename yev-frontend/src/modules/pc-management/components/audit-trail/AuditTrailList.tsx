@@ -4,6 +4,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Fragment, useState, type ReactNode } from "react";
 import { FilterX, RefreshCw, Search } from "lucide-react";
 import { toast } from "react-toastify";
+import { useTranslations } from "next-intl";
 
 import { AuditTrailApi, type GetAuditTrailPageNationParams } from "@/modules/pc-management/api/audit-trail.api";
 import type { AuditTrailDto } from "@/modules/pc-management/types/audit-trail.dto";
@@ -42,8 +43,10 @@ export default function AuditTrailList({
     cacheKey = "audit-trail",
     header,
     tablePlaceholder = "Device, Branch...",
-    recordPlaceholder = "Mã máy, IP...",
+    recordPlaceholder,
 }: AuditTrailListProps = {}) {
+    const t = useTranslations("Asset.AuditTrail");
+    const tCommon = useTranslations("Common");
     const [rows, setRows] = useState<AuditTrailDto[]>([]);
     const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -89,7 +92,7 @@ export default function AuditTrailList({
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
         },
-        "Không thể tải lịch sử thao tác.",
+        t("loadError"),
         (message) => toast.error(message),
         cacheKey
     );
@@ -122,12 +125,12 @@ export default function AuditTrailList({
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
-                {header ?? <h1 className="text-lg font-semibold text-[#191c1e]">Lịch sử thao tác</h1>}
+                {header ?? <h1 className="text-lg font-semibold text-[#191c1e]">{t("title")}</h1>}
                 <button
                     onClick={() => fetchRows()}
                     disabled={isLoading}
-                    title="Làm mới"
-                    aria-label="Làm mới"
+                    title={tCommon("refresh")}
+                    aria-label={tCommon("refresh")}
                     className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <RefreshCw className="h-3.5 w-3.5" />
@@ -137,7 +140,7 @@ export default function AuditTrailList({
             <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
                 <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-[calc(50%-0.25rem)] sm:[&>label]:w-36">
                     <label className="block">
-                        <span className={fieldLabelClassName}>Bảng dữ liệu</span>
+                        <span className={fieldLabelClassName}>{t("fieldTable")}</span>
                         <input
                             value={tableName}
                             onChange={(event) => setTableName(event.target.value)}
@@ -147,36 +150,36 @@ export default function AuditTrailList({
                         />
                     </label>
                     <label className="block">
-                        <span className={fieldLabelClassName}>Đối tượng</span>
+                        <span className={fieldLabelClassName}>{t("fieldRecord")}</span>
                         <input
                             value={recordName}
                             onChange={(event) => setRecordName(event.target.value)}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder={recordPlaceholder}
+                            placeholder={recordPlaceholder ?? t("recordPlaceholder")}
                             className={fieldClassName}
                         />
                     </label>
                     <label className="block sm:w-28!">
-                        <span className={fieldLabelClassName}>Id bản ghi</span>
+                        <span className={fieldLabelClassName}>{t("fieldRecordId")}</span>
                         <input
                             value={recordId}
                             onChange={(event) => setRecordId(event.target.value.replace(/[^0-9]/g, ""))}
                             onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="VD 16925"
+                            placeholder={t("recordIdPlaceholder")}
                             className={fieldClassName}
                         />
                     </label>
                     <label className="block sm:w-32!">
-                        <span className={fieldLabelClassName}>Hành động</span>
+                        <span className={fieldLabelClassName}>{t("fieldAction")}</span>
                         <StyledSelect
                             value={action}
                             onChange={setAction}
                             triggerClassName={`${fieldClassName} pr-8`}
-                            options={[{ value: "", label: "Tất cả" }, ...Object.entries(auditActionLabels).map(([value, label]) => ({ value, label }))]}
+                            options={[{ value: "", label: t("allActions") }, ...Object.entries(auditActionLabels).map(([value, label]) => ({ value, label }))]}
                         />
                     </label>
                     <label className="block">
-                        <span className={fieldLabelClassName}>Người thao tác</span>
+                        <span className={fieldLabelClassName}>{t("fieldChangedBy")}</span>
                         <input
                             value={changedBy}
                             onChange={(event) => setChangedBy(event.target.value)}
@@ -186,11 +189,11 @@ export default function AuditTrailList({
                         />
                     </label>
                     <label className="block sm:w-40!">
-                        <span className={fieldLabelClassName}>Từ ngày</span>
+                        <span className={fieldLabelClassName}>{tCommon("fromDate")}</span>
                         <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className={fieldClassName} />
                     </label>
                     <label className="block sm:w-40!">
-                        <span className={fieldLabelClassName}>Đến ngày</span>
+                        <span className={fieldLabelClassName}>{tCommon("toDate")}</span>
                         <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className={fieldClassName} />
                     </label>
 
@@ -198,8 +201,8 @@ export default function AuditTrailList({
                         <button
                             onClick={handleSearch}
                             disabled={isLoading}
-                            title="Tìm kiếm"
-                            aria-label="Tìm kiếm"
+                            title={tCommon("search")}
+                            aria-label={tCommon("search")}
                             className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-[#e3000f] text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <Search className="h-4 w-4" />
@@ -207,8 +210,8 @@ export default function AuditTrailList({
                         <button
                             onClick={handleReset}
                             disabled={isLoading}
-                            title="Xoá lọc"
-                            aria-label="Xoá lọc"
+                            title={tCommon("clearFilter")}
+                            aria-label={tCommon("clearFilter")}
                             className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <FilterX className="h-4 w-4" />
@@ -225,19 +228,19 @@ export default function AuditTrailList({
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="hidden lg:table-cell px-3 py-2">Bảng</th>
-                                <th className="px-3 py-2">Đối tượng</th>
-                                <th className="px-3 py-2">Hành động</th>
-                                <th className="px-3 py-2">Người thao tác</th>
-                                <th className="px-3 py-2">Thời gian</th>
-                                <th className="px-3 py-2 text-right">Chi tiết</th>
+                                <th className="hidden lg:table-cell px-3 py-2">{t("colTable")}</th>
+                                <th className="px-3 py-2">{t("fieldRecord")}</th>
+                                <th className="px-3 py-2">{t("fieldAction")}</th>
+                                <th className="px-3 py-2">{t("fieldChangedBy")}</th>
+                                <th className="px-3 py-2">{t("colTime")}</th>
+                                <th className="px-3 py-2 text-right">{t("colDetail")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {!isLoading && rows.length === 0 && (
                                 <tr>
                                     <td colSpan={6} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu.
+                                        {tCommon("noData")}
                                     </td>
                                 </tr>
                             )}
@@ -270,7 +273,7 @@ export default function AuditTrailList({
                                                 onClick={() => setExpandedId((current) => (current === row.id ? null : row.id))}
                                                 className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
                                             >
-                                                {expandedId === row.id ? "Ẩn" : "Xem"}
+                                                {expandedId === row.id ? t("hide") : t("view")}
                                             </button>
                                         </td>
                                     </tr>
@@ -298,8 +301,8 @@ export default function AuditTrailList({
                     totalPages={totalPages}
                     onPageChange={setPageIndex}
                     disabled={isLoading}
-                    summary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} bản ghi`}
-                    compactSummary={isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} bản ghi`}
+                    summary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: rows.length, total: totalCount })}
+                    compactSummary={isLoading ? tCommon("loading") : tCommon("showingRecords", { shown: rows.length, total: totalCount })}
                 />
             </section>
         </div>

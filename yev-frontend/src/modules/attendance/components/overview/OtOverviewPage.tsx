@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
-import { AlertTriangle, ClipboardList, Clock, Users } from "lucide-react";
+import { AlertTriangle, ClipboardList, Clock, SearchX, Users } from "lucide-react";
 
 import { OtOverviewApi } from "@/modules/attendance/api/ot-overview.api";
 import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
@@ -15,6 +15,9 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { Pagination } from "@/components/ui/Pagination";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/common/EmptyState";
+import { theadRowClassName } from "@/components/ui/ListToolbar";
 import { BarChart, ChartCard, Donut, EmptyChart, HBarList } from "./OverviewCharts";
 
 const now = new Date();
@@ -81,10 +84,12 @@ export default function OtOverviewPage() {
     const currentRiskPage = Math.min(riskPage, riskTotalPages);
     const riskRows = riskEmployees.slice((currentRiskPage - 1) * riskPageSize, currentRiskPage * riskPageSize);
 
-    const renderRiskRow =(row: OtOverviewEmployeeRowDto) => (
+    const renderRiskRow = (row: OtOverviewEmployeeRowDto) => (
         <tr key={row.employeeId} className="border-b border-[#f1f5f9] last:border-0">
-            <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{row.code}</td>
-            <td className="px-3 py-2 text-sm font-medium text-[#191c1e]">{row.fullName}</td>
+            <td className="px-3 py-2 text-sm">
+                <div className="font-medium text-[#191c1e]">{row.fullName}</div>
+                <div className="text-xs text-[#8a8f94]">{row.code}</div>
+            </td>
             <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.departmentNameVn ? pick(row.departmentNameVn, row.departmentNameJp) : "-"}</td>
             <td className="px-3 py-2">
                 <LimitBar value={row.monthHours} limit={row.monthlyLimit} over={row.isOverMonthly} />
@@ -122,7 +127,19 @@ export default function OtOverviewPage() {
             </div>
 
             {error && <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
-            {isLoading && !data && <div className="py-12 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>}
+            {isLoading && !data && (
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        {Array.from({ length: 4 }, (_, index) => (
+                            <Skeleton key={index} className="h-24 rounded-xl" />
+                        ))}
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <Skeleton className="h-52 rounded-xl" />
+                        <Skeleton className="h-52 rounded-xl" />
+                    </div>
+                </div>
+            )}
 
             {data && (
                 <div className={`space-y-4 transition-opacity ${isLoading ? "opacity-60" : ""}`}>
@@ -138,14 +155,30 @@ export default function OtOverviewPage() {
                             icon={<ClipboardList className="h-4 w-4" />}
                             label={t("kpiForms")}
                             value={data.formsCompleted + data.formsInApproval + data.formsRejected}
-                            sub={`${enumLabels.otFormStatus[1]} ${data.formsCompleted} · ${enumLabels.otFormStatus[0]} ${data.formsInApproval} · ${enumLabels.otFormStatus[2]} ${data.formsRejected}`}
+                            sub={
+                                <span className="flex items-center gap-3">
+                                    {(
+                                        [
+                                            [enumLabels.otFormStatus[1], data.formsCompleted, "bg-emerald-500"],
+                                            [enumLabels.otFormStatus[0], data.formsInApproval, "bg-[#9a5b00]"],
+                                            [enumLabels.otFormStatus[2], data.formsRejected, "bg-[#e3000f]"],
+                                        ] as const
+                                    ).map(([label, count, dot]) => (
+                                        <span key={label} title={label} className="inline-flex items-center gap-1">
+                                            <span className={`h-2 w-2 rounded-full ${dot}`} />
+                                            <span className="sr-only">{label}</span>
+                                            {count}
+                                        </span>
+                                    ))}
+                                </span>
+                            }
                         />
                         <KpiCard
                             icon={<AlertTriangle className="h-4 w-4" />}
                             tone={data.overAnyCount > 0 ? "danger" : "default"}
                             label={t("kpiOverLimit")}
                             value={data.overAnyCount}
-                            sub={t("kpiOverLimitSub", { monthly: data.overMonthlyCount, yearly: data.overYearlyCount, near: data.nearLimitCount })}
+                            sub={<span title={t("kpiNearHint")}>{t("kpiOverLimitSub", { monthly: data.overMonthlyCount, yearly: data.overYearlyCount, near: data.nearLimitCount })}</span>}
                         />
                     </div>
 
@@ -160,15 +193,6 @@ export default function OtOverviewPage() {
                                 highlightIndex={data.month - 1}
                             />
                         </ChartCard>
-                        <ChartCard title={t("chartStatus")}>
-                            <Donut
-                                slices={[
-                                    { label: enumLabels.otFormStatus[1], value: data.formsCompleted, color: "#16a34a" },
-                                    { label: enumLabels.otFormStatus[0], value: data.formsInApproval, color: "#f59e0b" },
-                                    { label: enumLabels.otFormStatus[2], value: data.formsRejected, color: "#dc2626" },
-                                ]}
-                            />
-                        </ChartCard>
                         <ChartCard title={t("chartOtCase")}>
                             {data.byOtCase.length === 0 ? (
                                 <EmptyChart text={t("empty")} />
@@ -176,12 +200,8 @@ export default function OtOverviewPage() {
                                 <Donut slices={data.byOtCase.map((c, i) => ({ label: c.code, value: c.formCount, color: ["#3b82f6", "#8b5cf6", "#14b8a6", "#ec4899", "#f97316", "#64748b"][i % 6] }))} />
                             )}
                         </ChartCard>
-                        {/* Without the workshop chart the department bars take the leftover slots so no card sits alone on a row. */}
-                        <ChartCard
-                            title={t("chartDepartment")}
-                            hint={t("chartDailyHint")}
-                            className={data.byWorkshop.length > 1 ? "" : "lg:col-span-2"}
-                        >
+                        {/* Spans are picked so no card sits alone on a row at either breakpoint. */}
+                        <ChartCard title={t("chartDepartment")} hint={t("chartDailyHint")} className={data.byWorkshop.length > 1 ? "2xl:col-span-2" : "2xl:col-span-3"}>
                             {data.byDepartment.length === 0 ? (
                                 <EmptyChart text={t("empty")} />
                             ) : (
@@ -195,22 +215,23 @@ export default function OtOverviewPage() {
                             )}
                         </ChartCard>
                         {data.byWorkshop.length > 1 && (
-                            <ChartCard title={t("chartWorkshop")} hint={t("chartDailyHint")}>
+                            <ChartCard title={t("chartWorkshop")} hint={t("chartDailyHint")} className="lg:col-span-2 2xl:col-span-1">
                                 <HBarList rows={data.byWorkshop.map((w) => ({ label: pick(w.nameVn, w.nameJp), value: w.hours }))} />
                             </ChartCard>
                         )}
                     </div>
 
                     <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                        <div className="border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-[#191c1e]">{t("riskTitle")}</div>
+                        <div className="border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-sm font-semibold text-[#191c1e]">
+                            {t("riskTitle", { count: data.riskEmployees.length })}
+                        </div>
                         {data.riskEmployees.length === 0 ? (
-                            <EmptyChart text={t("empty")} />
+                            <EmptyState icon={SearchX} title={t("empty")} />
                         ) : (
                             <div className="overflow-x-auto">
                                 <table className="min-w-full border-collapse text-left">
                                     <thead>
-                                        <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                            <th className="px-3 py-2">{t("colCode")}</th>
+                                        <tr className={theadRowClassName}>
                                             <th className="px-3 py-2">{t("colName")}</th>
                                             <th className="px-3 py-2">{t("colDepartment")}</th>
                                             <th className="px-3 py-2">{t("colMonth")}</th>

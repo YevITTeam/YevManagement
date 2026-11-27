@@ -1,21 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, Clock } from "lucide-react";
+import { AlertTriangle, Check, Clock, Mail } from "lucide-react";
 import { toast } from "react-toastify";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import type { UserSignatureDto } from "@/modules/attendance/types/user-signature.dto";
 import SignatureUpload from "./SignatureUpload";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // BE uses this signature when creating/approving forms. PUT /me only sends a confirmation email;
 // the old signature stays valid until the user confirms via the link.
 export default function UserSignaturePanel() {
     const t = useTranslations("Attendance.UserSignature");
-    const tCommon = useTranslations("Common");
+    const locale = useLocale();
     const [signature, setSignature] = useState<UserSignatureDto | null>(null);
     const [draftBase64, setDraftBase64] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -56,7 +57,7 @@ export default function UserSignaturePanel() {
 
             <section className="max-w-xl space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                 {isLoading ? (
-                    <div className="py-8 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
+                    <Skeleton className="h-24 w-full" />
                 ) : (
                     <>
                         <div>
@@ -71,9 +72,9 @@ export default function UserSignaturePanel() {
                                         alt={t("currentSignatureAlt")}
                                         className="h-24 w-full rounded-lg border border-[#e0e3e5] bg-white object-contain"
                                     />
-                                    <p className="mt-1.5 flex items-center gap-1 text-xs text-emerald-700">
+                                    <p className="mt-1.5 flex items-center gap-1 text-xs text-emerald-600" title={new Date(signature.updatedAt).toLocaleString(locale)}>
                                         <Check className="h-3.5 w-3.5 shrink-0" />
-                                        {t("lastUpdated", { date: new Date(signature.updatedAt).toLocaleString("vi-VN") })}
+                                        {t("lastUpdated", { date: new Date(signature.updatedAt).toLocaleDateString(locale) })}
                                     </p>
                                 </>
                             ) : (
@@ -85,7 +86,7 @@ export default function UserSignaturePanel() {
                         </div>
 
                         {confirmationSent ? (
-                            <div className="flex items-center gap-1.5 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
+                            <div title={t("confirmationSentHint")} className="flex items-center gap-1.5 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-3 py-2 text-sm text-[#9a5b00]">
                                 <Clock className="h-4 w-4 shrink-0" />
                                 {t("confirmationSentMessage")}
                             </div>
@@ -101,8 +102,9 @@ export default function UserSignaturePanel() {
                                     <button
                                         onClick={handleSave}
                                         disabled={isSaving}
-                                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                                     >
+                                        <Mail className="h-4 w-4" />
                                         {isSaving ? t("sending") : t("sendConfirmButton")}
                                     </button>
                                 </div>

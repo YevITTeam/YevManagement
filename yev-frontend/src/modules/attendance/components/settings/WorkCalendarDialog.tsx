@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "react-toastify";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { WorkCalendarApi } from "@/modules/attendance/api/work-calendar.api";
 import { WorkCalendarDayType, type WorkCalendarDayDto } from "@/modules/attendance/types/work-calendar.dto";
@@ -35,6 +35,7 @@ export default function WorkCalendarDialog({
     onClose: () => void;
 }) {
     const t = useTranslations("Attendance.AttendanceSetting");
+    const locale = useLocale();
     const [editing, setEditing] = useState<EditingDay | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -54,6 +55,8 @@ export default function WorkCalendarDialog({
     };
 
     const displayDate = (date: string) => date.split("-").reverse().join("/");
+    const dialogDate = (date: string) =>
+        new Intl.DateTimeFormat(locale, { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
 
     const handleSave = async () => {
         if (!editing) return;
@@ -113,7 +116,7 @@ export default function WorkCalendarDialog({
 
             <FormDialog
                 isOpen={editing !== null}
-                title={editing ? displayDate(editing.date) : ""}
+                title={editing ? dialogDate(editing.date) : ""}
                 onClose={() => setEditing(null)}
                 onSubmit={handleSave}
                 loading={isSaving}
@@ -126,12 +129,14 @@ export default function WorkCalendarDialog({
                             value={editing.dayType}
                             onChange={(dayType) => setEditing({ ...editing, dayType })}
                             options={typeOptions}
+                            ariaLabel={t("calendarDayType")}
                             triggerClassName={`${fieldClassName} w-44 pr-8`}
                         />
                         <input
                             value={editing.note}
                             onChange={(event) => setEditing({ ...editing, note: event.target.value })}
                             placeholder={t("calendarNote")}
+                            aria-label={t("calendarNote")}
                             maxLength={255}
                             disabled={editing.dayType === WORKING_DAY}
                             className={`${fieldClassName} w-full`}

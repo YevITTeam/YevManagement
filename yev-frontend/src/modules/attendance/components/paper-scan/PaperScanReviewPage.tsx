@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "react-toastify";
-import { FileText, RefreshCw } from "lucide-react";
+import { Check, FileText, RefreshCw, Undo2 } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import FormDialog from "@/components/common/FormDialog";
 import { TableSkeletonRows } from "@/components/common/TableSkeletonRows";
 import { RequiredMark } from "@/components/ui/RequiredMark";
+import { IconButton } from "@/components/ui/ListToolbar";
 import { Tabs } from "@/components/ui/Tabs";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
@@ -23,10 +24,19 @@ type StatusKey = "0" | "1" | "2";
 const inputClassName =
     "w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 const labelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]";
-const smallButtonClassName = "cursor-pointer whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition";
+const smallButtonClassName = "inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition";
+
+const pad = (n: number) => String(n).padStart(2, "0");
+// Short dd/MM HH:mm for table cells; the full timestamp goes in the title.
+function shortDateTime(value: string) {
+    const date = new Date(value);
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 export default function PaperScanReviewPage() {
     const t = useTranslations("Attendance.PaperScan");
+    const tCommon = useTranslations("Common");
+    const locale = useLocale();
     const [status, setStatus] = useState<StatusKey>("0");
     const [items, setItems] = useState<OtFormPaperScanListItemDto[]>([]);
     const [review, setReview] = useState<{ formId: number; approve: boolean } | null>(null);
@@ -72,21 +82,12 @@ export default function PaperScanReviewPage() {
 
     return (
         <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <h1 className="text-lg font-semibold text-[#191c1e]">{t("title")}</h1>
-                <button
-                    type="button"
-                    onClick={() => void refetch()}
-                    className={`${smallButtonClassName} inline-flex items-center gap-2 border border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]`}
-                >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    {t("refresh")}
-                </button>
-            </div>
+            <h1 className="text-lg font-semibold text-[#191c1e]">{t("title")}</h1>
 
             <section className="rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="overflow-x-auto border-b border-[#e0e3e5] px-4 py-2.5">
-                    <Tabs<StatusKey>
+                <div className="flex items-center gap-2 border-b border-[#e0e3e5] px-4 py-2.5">
+                    <div className="min-w-0 flex-1 overflow-x-auto">
+                        <Tabs<StatusKey>
                         tabs={[
                             { key: "0", label: t("statusPending") },
                             { key: "1", label: t("statusApproved") },
@@ -94,7 +95,9 @@ export default function PaperScanReviewPage() {
                         ]}
                         activeKey={status}
                         onChange={setStatus}
-                    />
+                        />
+                    </div>
+                    <IconButton icon={RefreshCw} label={tCommon("refresh")} onClick={() => void refetch()} disabled={isLoading} />
                 </div>
 
                 {error && <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-2 text-sm text-[#930006]">{error}</div>}
@@ -109,7 +112,9 @@ export default function PaperScanReviewPage() {
                                 <th className="px-4 py-2.5">{t("colCase")}</th>
                                 <th className="px-4 py-2.5">{t("colSender")}</th>
                                 <th className="px-4 py-2.5">{t("colFile")}</th>
-                                <th className="px-4 py-2.5">{isPending ? <span className="sr-only">{t("approve")}</span> : t("colResult")}</th>
+                                <th className="px-4 py-2.5" aria-label={isPending ? t("approve") : undefined}>
+                                    {isPending ? null : t("colResult")}
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -130,7 +135,7 @@ export default function PaperScanReviewPage() {
                                             </Link>
                                         </td>
                                         <td className="whitespace-nowrap px-4 py-2.5 text-[#191c1e]">
-                                            <div>{new Date(item.date).toLocaleDateString("vi-VN")}</div>
+                                            <div>{new Date(item.date).toLocaleDateString(locale)}</div>
                                             <div className="text-xs text-[#5e3f3a]">
                                                 <TimeRange start={item.startTime.slice(0, 5)} end={item.endTime.slice(0, 5)} />
                                             </div>
@@ -142,35 +147,39 @@ export default function PaperScanReviewPage() {
                                         <td className="px-4 py-2.5 text-[#5e3f3a]">{item.otCaseCode}</td>
                                         <td className="whitespace-nowrap px-4 py-2.5 text-[#191c1e]">
                                             <div>{item.uploadedByFullName ?? item.uploadedByUserName}</div>
-                                            <div className="text-xs text-[#5e3f3a]">{new Date(item.uploadedAt).toLocaleString("vi-VN")}</div>
+                                            <div className="text-xs text-[#5e3f3a]" title={new Date(item.uploadedAt).toLocaleString(locale)}>
+                                                {shortDateTime(item.uploadedAt)}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-2.5">
                                             <button
                                                 type="button"
                                                 title={item.fileName}
+                                                aria-label={t("viewFile")}
                                                 onClick={() => openPaperScan(item.otFormId, t("openError"))}
-                                                className={`${smallButtonClassName} inline-flex items-center gap-1.5 border border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]`}
+                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                             >
                                                 <FileText className="h-3.5 w-3.5" />
-                                                {t("viewFile")}
                                             </button>
                                         </td>
                                         <td className="px-4 py-2.5">
                                             {isPending ? (
                                                 <div className="flex gap-2">
                                                     <button type="button" onClick={() => openReview(item.otFormId, true)} className={`${smallButtonClassName} bg-[#e3000f] text-white hover:bg-[#b40009]`}>
+                                                        <Check className="h-3.5 w-3.5" />
                                                         {t("approve")}
                                                     </button>
                                                     <button type="button" onClick={() => openReview(item.otFormId, false)} className={`${smallButtonClassName} border border-[#e0e3e5] bg-white text-[#930006] hover:bg-[#f2f4f6]`}>
+                                                        <Undo2 className="h-3.5 w-3.5" />
                                                         {t("reject")}
                                                     </button>
                                                 </div>
                                             ) : (
                                                 <div className="min-w-48 leading-5">
                                                     <div className="text-[#191c1e]">{item.reviewComment}</div>
-                                                    <div className="text-xs text-[#5e3f3a]">
+                                                    <div className="text-xs text-[#5e3f3a]" title={item.reviewedAt ? new Date(item.reviewedAt).toLocaleString(locale) : undefined}>
                                                         {item.reviewedByFullName}
-                                                        {item.reviewedAt && ` · ${new Date(item.reviewedAt).toLocaleString("vi-VN")}`}
+                                                        {item.reviewedAt && ` · ${shortDateTime(item.reviewedAt)}`}
                                                     </div>
                                                 </div>
                                             )}

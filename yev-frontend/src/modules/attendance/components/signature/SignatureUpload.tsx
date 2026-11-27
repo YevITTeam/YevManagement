@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { ImageUp, X } from "lucide-react";
 import { cutOutSignature } from "@/lib/signatureCutout";
 
 interface SignatureUploadProps {
@@ -36,39 +37,37 @@ export default function SignatureUpload({ initialImage, onChange, disabled = fal
     };
 
     return (
-        <div className="space-y-2">
-            {preview ? (
-                // eslint-disable-next-line @next/next/no-img-element -- base64 data URI; next/image can't optimize it and needs fixed width/height
-                <img
-                    src={`data:image/png;base64,${preview}`}
-                    alt={t("newImageAlt")}
-                    className="h-24 w-full rounded-lg border border-[#e0e3e5] bg-white object-contain"
-                />
-            ) : (
-                <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-[#e0e3e5] bg-[#f8fafc] text-xs text-[#5e3f3a]">
-                    {t("noImageSelected")}
-                </div>
-            )}
-            <div className="flex items-center justify-between gap-3">
-                <input
-                    ref={inputRef}
-                    type="file"
-                    accept="image/*"
-                    disabled={disabled}
-                    onChange={handleFileChange}
-                    className="block w-full cursor-pointer text-xs text-[#5e3f3a] file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-[#eceef0] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#191c1e] hover:file:bg-[#e0e3e5] disabled:cursor-not-allowed disabled:opacity-50"
-                />
-                {preview && (
-                    <button
-                        type="button"
-                        onClick={handleClear}
-                        disabled={disabled}
-                        className="cursor-pointer whitespace-nowrap text-xs font-semibold text-[#930006] transition hover:text-[#e3000f] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        {tCommon("delete")}
-                    </button>
+        // The dashed box is the picker itself: the native input shows browser-language "No file chosen" text.
+        <div className="relative">
+            <label
+                title={t("uploadHint")}
+                className={`flex h-24 cursor-pointer items-center justify-center rounded-lg border text-xs text-[#5e3f3a] transition focus-within:border-[#e3000f] focus-within:ring-2 focus-within:ring-[#ffe0e3] ${
+                    preview ? "border-[#e0e3e5] bg-white" : "border-dashed border-[#e0e3e5] bg-[#f8fafc] hover:border-[#e3000f] hover:text-[#e3000f]"
+                } ${disabled ? "pointer-events-none opacity-50" : ""}`}
+            >
+                {preview ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- base64 data URI; next/image can't optimize it and needs fixed width/height
+                    <img src={`data:image/png;base64,${preview}`} alt={t("newImageAlt")} className="h-full w-full rounded-lg object-contain" />
+                ) : (
+                    <span className="inline-flex items-center gap-1.5 font-semibold">
+                        <ImageUp className="h-4 w-4" />
+                        {t("noImageSelected")}
+                    </span>
                 )}
-            </div>
+                <input ref={inputRef} type="file" accept="image/*" disabled={disabled} onChange={handleFileChange} className="sr-only" />
+            </label>
+            {preview && (
+                <button
+                    type="button"
+                    onClick={handleClear}
+                    disabled={disabled}
+                    title={tCommon("delete")}
+                    aria-label={tCommon("delete")}
+                    className="absolute right-1.5 top-1.5 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#930006] transition hover:bg-[#fff4f2] hover:text-[#e3000f] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    <X className="h-3.5 w-3.5" />
+                </button>
+            )}
         </div>
     );
 }

@@ -7,13 +7,13 @@ import { WorkCalendarDayType, type WorkCalendarDayDto } from "@/modules/attendan
 
 const DAY_TYPE_CELL_CLASS: Record<WorkCalendarDayType, string> = {
     [WorkCalendarDayType.PublicHoliday]: "bg-[#bfdbfe] font-semibold text-[#1e3a8a]",
-    [WorkCalendarDayType.SpecialHoliday]: "bg-[#fde68a] font-semibold text-[#78350f]",
+    [WorkCalendarDayType.SpecialHoliday]: "bg-[#f5d0a9] font-semibold text-[#9a5b00]",
     [WorkCalendarDayType.Sunday]: "font-semibold text-[#e3000f]",
 };
 
 const LEGEND_SWATCH_CLASS: Record<WorkCalendarDayType, string> = {
     [WorkCalendarDayType.PublicHoliday]: "bg-[#bfdbfe]",
-    [WorkCalendarDayType.SpecialHoliday]: "bg-[#fde68a]",
+    [WorkCalendarDayType.SpecialHoliday]: "bg-[#f5d0a9]",
     [WorkCalendarDayType.Sunday]: "bg-white ring-1 ring-[#e3000f]",
 };
 
@@ -65,7 +65,7 @@ export default function WorkCalendarView({ year, days, onDayClick }: { year: num
                 ))}
             </div>
 
-            {days.length === 0 && <p className="mb-3 text-xs text-[#5e3f3a]">{t("calendarEmpty", { year })}</p>}
+            {days.length === 0 && <p className="mb-3 text-xs text-[#9a5b00]">{t("calendarEmpty", { year })}</p>}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {Array.from({ length: 12 }, (_, monthIndex) => {

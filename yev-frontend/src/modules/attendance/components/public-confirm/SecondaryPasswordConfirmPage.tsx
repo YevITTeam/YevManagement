@@ -2,12 +2,20 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Clock } from "lucide-react";
 
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
 import type { SecondaryPasswordConfirmationPreviewDto } from "@/modules/attendance/types/secondary-password.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { createBilingualTranslator } from "@/modules/attendance/lib/bilingual";
+
+// Bilingual page, so one fixed dd/MM HH:mm format instead of either locale's.
+function formatShortDateTime(value: string) {
+    const date = new Date(value);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 // Public route secured by the URL token; always bilingual (VN/JP) regardless of the /vi or /ja segment.
 // BE never returns the password, so only account + expiry are shown.
@@ -64,8 +72,9 @@ export default function SecondaryPasswordConfirmPage() {
                         <p className="text-sm text-[#5e3f3a]">
                             {t("accountLabel", { userName: preview.userName })}
                         </p>
-                        <p className="text-sm text-[#191c1e]">
-                            {t("confirmQuestion", { expiresAt: new Date(preview.expiresAt).toLocaleString("vi-VN") })}
+                        <p className="flex items-center gap-1.5 text-xs text-[#5e3f3a]" title={new Date(preview.expiresAt).toLocaleString("vi-VN")}>
+                            <Clock className="h-3.5 w-3.5 shrink-0" />
+                            {t("expiresLabel", { expiresAt: formatShortDateTime(preview.expiresAt) })}
                         </p>
                         {confirmError && (
                             <p className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">

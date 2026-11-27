@@ -1,69 +1,75 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { FilterX, RefreshCw, Search } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { toast } from "react-toastify";
+import { useLocale, useTranslations } from "next-intl";
 
 import { AttendanceAuditTrailApi } from "@/modules/attendance/api/attendance-audit-trail.api";
 import type { AttendanceMailLogDto } from "@/modules/attendance/types/attendance-audit-trail.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { StyledSelect } from "@/components/ui/StyledSelect";
+import { Badge, type BadgeVariant } from "@/components/ui/Badge";
+import { Pagination } from "@/components/ui/Pagination";
+import { TableScroll } from "@/components/ui/TableScroll";
+import {
+    DateRange,
+    ErrorBar,
+    FilterActions,
+    IconFlag,
+    ListToolbar,
+    SearchField,
+    TableStatusRows,
+    fieldClassName,
+    rowClassName,
+    theadRowClassName,
+} from "@/components/ui/ListToolbar";
 
 const PAGE_SIZE = 20;
 
-const fieldLabelClassName = "mb-1 block text-xs font-semibold text-[#5e3f3a]";
-const fieldClassName =
-    "h-9 w-full rounded-md border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
-
-const statusLabels: Record<number, string> = { 0: "Đang chờ gửi", 1: "Đã gửi", 2: "Lỗi", 3: "Bỏ qua" };
-
-const statusClasses: Record<number, string> = {
-    0: "border border-[#cfe0fb] bg-[#eef4ff] text-[#1d4ed8]",
-    1: "border border-emerald-200 bg-emerald-50 text-emerald-600",
-    2: "border border-[#e9bcb6] bg-[#fff4f2] text-[#930006]",
-    3: "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]",
+const STATUS_META: Record<number, { key: "statusPending" | "statusSent" | "statusFailed" | "statusSkipped"; variant: BadgeVariant }> = {
+    0: { key: "statusPending", variant: "info" },
+    1: { key: "statusSent", variant: "success" },
+    2: { key: "statusFailed", variant: "danger" },
+    3: { key: "statusSkipped", variant: "neutral" },
 };
-
-function formatDateTime(value: string | null) {
-    return value ? new Date(value).toLocaleString("vi-VN") : "-";
-}
 
 const emptyFilters = { keyword: "", status: "", fromDate: "", toDate: "" };
 
 export default function AttendanceMailLogList({ header }: { header?: ReactNode }) {
+    const t = useTranslations("Attendance.MailLog");
+    const locale = useLocale();
     const [rows, setRows] = useState<AttendanceMailLogDto[]>([]);
     const [filters, setFilters] = useState(emptyFilters);
     const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:attendance/audit-trail/mail-log", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [hasNextPage, setHasNextPage] = useState(false);
-    const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
     const { isLoading, error, refetch } = useFetchEffect(
         () =>
             AttendanceAuditTrailApi.getMailLogPageNation({
                 pageIndex,
-                pageSize: PAGE_SIZE,
+                pageSize,
                 keyword: appliedFilters.keyword || undefined,
                 status: appliedFilters.status === "" ? undefined : Number(appliedFilters.status),
                 fromDate: appliedFilters.fromDate || undefined,
                 toDate: appliedFilters.toDate || undefined,
             }),
-        [pageIndex, appliedFilters],
+        [pageIndex, pageSize, appliedFilters],
         (result) => {
             setRows(result.data);
             setTotalCount(result.totalCount);
             setTotalPages(result.totalPages);
-            setHasNextPage(result.hasNextPage);
-            setHasPreviousPage(result.hasPreviousPage);
         },
-        "Không thể tải nhật ký email.",
+        t("loadError"),
         (message) => toast.error(message),
         "attendance-mail-log"
     );
 
-    const setFilter = (key: keyof typeof emptyFilters, value: string) => setFilters((current) => ({ ...current, [key]: value }));
+    const formatDateTime = (value: string | null) => (value ? new Date(value).toLocaleString(locale) : "-");
 
     const handleSearch = () => {
         setPageIndex(1);
@@ -76,144 +82,79 @@ export default function AttendanceMailLogList({ header }: { header?: ReactNode }
         setAppliedFilters(emptyFilters);
     };
 
+    const summary = t("summary", { shown: rows.length, total: totalCount });
+
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-                {header}
-                <button
-                    onClick={() => refetch()}
-                    disabled={isLoading}
-                    title="Làm mới"
-                    aria-label="Làm mới"
-                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                </button>
-            </div>
-
-            <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
-                <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-full sm:[&>label]:w-40">
-                    <label className="block sm:w-56!">
-                        <span className={fieldLabelClassName}>Từ khoá</span>
-                        <input
-                            value={filters.keyword}
-                            onChange={(event) => setFilter("keyword", event.target.value)}
-                            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder="Người nhận, email, tiêu đề..."
-                            className={fieldClassName}
-                        />
-                    </label>
-                    <label className="block sm:w-36!">
-                        <span className={fieldLabelClassName}>Trạng thái</span>
-                        <StyledSelect
-                            value={filters.status}
-                            onChange={(value) => setFilter("status", value)}
-                            triggerClassName={`${fieldClassName} pr-8`}
-                            options={[{ value: "", label: "Tất cả" }, ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))]}
-                        />
-                    </label>
-                    <label className="block">
-                        <span className={fieldLabelClassName}>Từ ngày</span>
-                        <input type="date" value={filters.fromDate} onChange={(event) => setFilter("fromDate", event.target.value)} className={fieldClassName} />
-                    </label>
-                    <label className="block">
-                        <span className={fieldLabelClassName}>Đến ngày</span>
-                        <input type="date" value={filters.toDate} onChange={(event) => setFilter("toDate", event.target.value)} className={fieldClassName} />
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                        <button
-                            onClick={handleSearch}
-                            disabled={isLoading}
-                            title="Tìm kiếm"
-                            aria-label="Tìm kiếm"
-                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-[#e3000f] text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Search className="h-4 w-4" />
-                        </button>
-                        <button
-                            onClick={handleReset}
-                            disabled={isLoading}
-                            title="Xoá lọc"
-                            aria-label="Xoá lọc"
-                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <FilterX className="h-4 w-4" />
-                        </button>
-                    </div>
-                </div>
-            </section>
+            {header}
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="border-b border-[#e0e3e5] bg-[#f8fafc] p-4 text-sm text-[#5e3f3a]">
-                    {isLoading ? "Đang tải dữ liệu..." : `Hiển thị ${rows.length} / ${totalCount} email`}
-                </div>
+                <ListToolbar actions={<FilterActions onSearch={handleSearch} onReset={handleReset} onRefresh={() => refetch()} disabled={isLoading} />}>
+                    <SearchField value={filters.keyword} onChange={(keyword) => setFilters((f) => ({ ...f, keyword }))} onEnter={handleSearch} placeholder={t("keywordPlaceholder")} wide />
+                    <StyledSelect
+                        value={filters.status}
+                        onChange={(status) => setFilters((f) => ({ ...f, status }))}
+                        ariaLabel={t("colStatus")}
+                        triggerClassName={`${fieldClassName} w-40 pr-8`}
+                        options={[{ value: "", label: t("allStatus") }, ...Object.entries(STATUS_META).map(([value, meta]) => ({ value, label: t(meta.key) }))]}
+                    />
+                    <DateRange from={filters.fromDate} to={filters.toDate} onChange={(range) => setFilters((f) => ({ ...f, ...range }))} title={t("dateRange")} />
+                </ListToolbar>
 
-                {error && <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
+                <ErrorBar message={error} />
 
-                <div className="overflow-x-auto">
-                    <table className="min-w-full border-collapse text-left">
+                <TableScroll>
+                    <table className="min-w-full border-collapse text-left text-sm">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="px-3 py-2">Thời gian</th>
-                                <th className="px-3 py-2">Người nhận</th>
-                                <th className="px-3 py-2">Tiêu đề</th>
-                                <th className="px-3 py-2">Trạng thái</th>
-                                <th className="px-3 py-2">Gửi lúc</th>
-                                <th className="px-3 py-2">Người thao tác</th>
+                            <tr className={theadRowClassName}>
+                                <th className="px-3 py-2">{t("colTime")}</th>
+                                <th className="px-3 py-2">{t("colRecipient")}</th>
+                                <th className="px-3 py-2">{t("colSubject")}</th>
+                                <th className="px-3 py-2">{t("colStatus")}</th>
+                                <th className="hidden px-3 py-2 lg:table-cell">{t("colRequestedBy")}</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && rows.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        Không có dữ liệu.
-                                    </td>
-                                </tr>
-                            )}
+                            <TableStatusRows loading={isLoading} empty={rows.length === 0} columns={5} emptyText={t("empty")} />
                             {rows.map((row) => {
+                                const meta = STATUS_META[row.status];
                                 const retrying = row.status === 0 && row.lastError;
+                                const createdAt = formatDateTime(row.createdAt);
+                                const sentAt = row.sentAt ? formatDateTime(row.sentAt) : null;
                                 return (
-                                    <tr key={row.id} className="border-b border-[#f1f5f9] align-top">
-                                        <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{formatDateTime(row.createdAt)}</td>
-                                        <td className="px-3 py-2 text-sm text-[#191c1e]">
-                                            <div className="font-semibold">{row.recipientUserName ?? "-"}</div>
-                                            <div className="text-xs text-[#5e3f3a]">{row.toEmail ?? "-"}</div>
+                                    <tr key={row.id} className={rowClassName}>
+                                        <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
+                                            {createdAt}
+                                            {sentAt && sentAt !== createdAt && <div className="text-xs text-[#8a8f94]">{t("sentAtLine", { time: sentAt })}</div>}
                                         </td>
-                                        <td className="px-3 py-2 text-sm text-[#191c1e]">{row.subject}</td>
+                                        <td className="px-3 py-2 font-semibold text-[#191c1e]" title={row.toEmail ?? undefined}>
+                                            {row.recipientUserName ?? row.toEmail ?? "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-[#191c1e]">{row.subject}</td>
                                         <td className="px-3 py-2">
-                                            <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[row.status]}`}>
-                                                {retrying ? `Đang thử lại (${row.attempts})` : statusLabels[row.status]}
+                                            <span className="inline-flex items-center gap-1.5">
+                                                {meta && <Badge variant={meta.variant}>{retrying ? t("statusRetrying", { attempts: row.attempts }) : t(meta.key)}</Badge>}
+                                                {row.lastError && <IconFlag icon={AlertCircle} label={row.lastError} tone="danger" />}
                                             </span>
-                                            {row.lastError && <div className="mt-1 max-w-xs text-xs text-[#930006]">{row.lastError}</div>}
                                         </td>
-                                        <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{formatDateTime(row.sentAt)}</td>
-                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.requestedBy}</td>
+                                        <td className="hidden px-3 py-2 text-[#5e3f3a] lg:table-cell">{row.requestedBy}</td>
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
-                <div className="flex items-center justify-between border-t border-[#e0e3e5] p-4">
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasPreviousPage || isLoading}
-                        onClick={() => setPageIndex((current) => Math.max(1, current - 1))}
-                    >
-                        Trang trước
-                    </button>
-                    <div className="flex h-8 items-center px-3 text-sm font-semibold text-[#191c1e]">
-                        Trang {pageIndex} / {totalPages}
-                    </div>
-                    <button
-                        className="cursor-pointer text-sm text-[#5e3f3a] disabled:opacity-50"
-                        disabled={!hasNextPage || isLoading}
-                        onClick={() => setPageIndex((current) => current + 1)}
-                    >
-                        Trang sau
-                    </button>
-                </div>
+                <Pagination
+                    pageIndex={pageIndex}
+                    totalPages={totalPages}
+                    onPageChange={setPageIndex}
+                    disabled={isLoading}
+                    summary={summary}
+                    compactSummary={summary}
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
+                />
             </section>
         </div>
     );

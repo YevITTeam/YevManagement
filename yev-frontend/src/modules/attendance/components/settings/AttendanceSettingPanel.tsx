@@ -19,6 +19,8 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import TimePicker24h from "@/components/ui/TimePicker24h";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import { IconButton } from "@/components/ui/ListToolbar";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // BE sends TimeOnly as "HH:mm:ss"; TimePicker24h reads and writes "HH:mm". Trimmed and re-appended at
 // the UI boundary so the DTO keeps its shape.
@@ -30,8 +32,9 @@ function fromTimeInputValue(value: string): string {
 }
 
 const fieldLabelClassName = "mb-1 block whitespace-nowrap text-[11px]! font-semibold! uppercase tracking-[0.06em] text-[#5e3f3a]";
-const secondaryButtonClassName =
-    "inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 text-xs! font-semibold! text-[#191c1e] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50";
+const buttonBaseClassName =
+    "inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-xs! font-semibold! transition disabled:cursor-not-allowed disabled:opacity-50";
+const secondaryButtonClassName = `${buttonBaseClassName} border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f8fafc]`;
 type NumberKey = "noMealTicketMaxHours" | "mainMealTicketMinHours" | "mealBreakDeductionHours" | "dailyOtHourLimit" | "monthlyOtHourLimit" | "yearlyOtHourLimit" | "dailyOtHourLimitHoliday" | "resubmitWindowDays" | "backdateDays";
 type TimeKey = "earlyMealWindowStartTime" | "earlyMealWindowEndTime" | "batchAutoSendTime" | "generalAffairsSendTime";
 // Width is per-field, matched to the data it holds (DESIGN_SYSTEM.md §4.3) — never w-full in an
@@ -160,7 +163,17 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
     };
 
     if (isLoading || !values) {
-        return <div className="py-16 text-center text-sm text-[#5e3f3a]">{isLoading ? t("loading") : null}</div>;
+        if (!isLoading) return null;
+        return (
+            <div className="divide-y divide-[#f1f5f9] rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                {Array.from({ length: 6 }, (_, index) => (
+                    <div key={index} className="flex flex-wrap gap-x-6 gap-y-2 px-4 py-4">
+                        <Skeleton className="h-4 w-28" />
+                        <Skeleton className="h-9 w-72" />
+                    </div>
+                ))}
+            </div>
+        );
     }
 
     const setNumber = (key: NumberKey) => (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -190,7 +203,7 @@ const AttendanceSettingPanel = forwardRef<ListHandle, ListToolbarProps>(function
                     <Field label={t("fieldMainMealTicketMinHours")} hint={t("fieldMainMealTicketMinHoursHint")}>
                         <HourInput step="0.5" min={0.5} max={24} value={values.mainMealTicketMinHours} onChange={setNumber("mainMealTicketMinHours")} disabled={isSaving} unit={t("unitHour")} />
                     </Field>
-                    <Field label={t("fieldMealBreakDeductionHours")}>
+                    <Field label={t("fieldMealBreakDeductionHours")} hint={t("fieldMealBreakDeductionHoursHint")}>
                         <HourInput step="0.25" min={0} max={4} value={values.mealBreakDeductionHours} onChange={setNumber("mealBreakDeductionHours")} disabled={isSaving} unit={t("unitHour")} />
                     </Field>
                     {/* One label over both bounds — two separate labels read as unrelated fields. */}
@@ -416,22 +429,23 @@ function WorkCalendarRow({ workshops }: { workshops: { workshopId: number; works
                     className={`${fieldClassName} w-24`}
                 />
             </Field>
-            {/* An empty year silently falls back to Sundays only, so flag it without opening the dialog. */}
-            <span className={`flex h-9 items-center text-sm ${days.length ? "text-[#5e3f3a]" : "text-[#9a5b00]"}`}>
-                {days.length ? t("calendarDayCount", { count: days.length }) : t("calendarEmpty", { year })}
-            </span>
-            <button type="button" onClick={() => setIsViewOpen(true)} disabled={!workshopId} className={secondaryButtonClassName}>
+            {/* An empty year silently falls back to Sundays only, so it is flagged in warning tone. */}
+            <button
+                type="button"
+                onClick={() => setIsViewOpen(true)}
+                disabled={!workshopId}
+                className={days.length ? secondaryButtonClassName : `${buttonBaseClassName} border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]`}
+            >
                 <CalendarDays className="h-3.5 w-3.5" />
-                {t("calendarView")}
+                {days.length ? t("calendarDayCount", { count: days.length }) : t("calendarEmpty", { year })}
             </button>
-            <button type="button" onClick={handleDownload} disabled={isBusy || !workshopId} className={secondaryButtonClassName}>
-                <Download className="h-3.5 w-3.5" />
-                {t("calendarDownloadTemplate")}
-            </button>
-            <label className={`${secondaryButtonClassName} ${isBusy ? "pointer-events-none opacity-50" : ""}`}>
-                <Upload className="h-3.5 w-3.5" />
-                {t("calendarImport")}
-                <input type="file" accept=".xlsx" className="hidden" onChange={handlePickImportFile} disabled={isBusy} />
+            <IconButton icon={Download} label={t("calendarDownloadTemplate")} onClick={handleDownload} disabled={isBusy || !workshopId} />
+            <label
+                title={t("calendarImport")}
+                className={`inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e] ${isBusy ? "pointer-events-none opacity-40" : ""}`}
+            >
+                <Upload className="h-4 w-4" />
+                <input type="file" accept=".xlsx" aria-label={t("calendarImport")} className="hidden" onChange={handlePickImportFile} disabled={isBusy} />
             </label>
             {isViewOpen && workshop && (
                 <WorkCalendarDialog
