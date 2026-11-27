@@ -1,12 +1,11 @@
 "use client";
 
-import { GripVertical, Trash2 } from "lucide-react";
+import { FastForward, GripVertical, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 // Shared by the group/department/production blocks; the people part differs per block, so it comes in via `footer`.
 export interface StepCardLabels {
     dragHandleLabel: string;
-    toggleSignatureHint: string;
     requiresSignatureYes: string;
     requiresSignatureNo: string;
     removeStep: string;
@@ -26,8 +25,8 @@ export interface StepCardLabels {
 // The people track stops at 24rem so the ticks stay close to the names on wide screens.
 const ROW_GRID = "@2xl:grid @2xl:grid-cols-[11rem_minmax(0,24rem)_auto_1fr]";
 const SIGN_WIDTH = "@2xl:w-10";
-const RESPONSIBLE_WIDTH = "@2xl:w-28";
-const RESUBMIT_WIDTH = "@2xl:w-44";
+const RESPONSIBLE_WIDTH = "@2xl:w-10";
+const RESUBMIT_WIDTH = "@2xl:w-20";
 const REMOVE_WIDTH = "w-7";
 
 const controlClassName = "h-4 w-4 shrink-0 cursor-pointer accent-[#e3000f] disabled:cursor-not-allowed";
@@ -52,11 +51,15 @@ export function StepColumnHeaders({
     showResubmit = false,
     signUsed,
     signHint,
+    responsibleHint,
+    resubmitHint,
 }: {
     showResponsible?: boolean;
     showResubmit?: boolean;
     signUsed?: number;
     signHint?: string;
+    responsibleHint?: string;
+    resubmitHint?: string;
 }) {
     const t = useTranslations("Attendance.JobTitle");
     return (
@@ -65,8 +68,12 @@ export function StepColumnHeaders({
                 {t("columnSign")}
                 {signUsed !== undefined && <span className={signUsed >= 2 ? "text-[#9a5b00]" : "text-[#8a8f94]"}> {signUsed}/2</span>}
             </span>
-            <span className={`${RESPONSIBLE_WIDTH} whitespace-nowrap text-center`}>{showResponsible && t("columnResponsible")}</span>
-            <span className={`${RESUBMIT_WIDTH} whitespace-nowrap`}>{showResubmit && t("columnResubmit")}</span>
+            <span className={`${RESPONSIBLE_WIDTH} whitespace-nowrap text-center`} title={showResponsible ? responsibleHint : undefined}>
+                {showResponsible && t("columnResponsible")}
+            </span>
+            <span className={`${RESUBMIT_WIDTH} whitespace-nowrap`} title={showResubmit ? resubmitHint : undefined}>
+                {showResubmit && t("columnResubmit")}
+            </span>
             <span className={REMOVE_WIDTH} />
         </div>
     );
@@ -145,7 +152,7 @@ export default function StepCard({
             >
                 <div className="flex h-8 w-full items-center gap-2 @2xl:w-auto">
                     {editable ? (
-                        <span title={labels.dragHandleLabel} aria-label={labels.dragHandleLabel} className="shrink-0 cursor-grab text-[#b6bbc0] hover:text-[#5e3f3a] active:cursor-grabbing">
+                        <span title={labels.dragHandleLabel} aria-label={labels.dragHandleLabel} className="shrink-0 cursor-grab text-[#8a8f94] hover:text-[#5e3f3a] active:cursor-grabbing">
                             <GripVertical className="h-4 w-4" />
                         </span>
                     ) : (
@@ -162,7 +169,7 @@ export default function StepCard({
                 <div className="order-last w-full min-w-0 @2xl:order-none @2xl:w-auto">{footer}</div>
 
                 <div className="flex flex-wrap items-start gap-2 @2xl:flex-nowrap">
-                    <label className={`${cellClassName} ${SIGN_WIDTH}`} title={`${requiresSignature ? labels.requiresSignatureYes : labels.requiresSignatureNo} — ${labels.toggleSignatureHint}`}>
+                    <label className={`${cellClassName} ${SIGN_WIDTH}`} title={requiresSignature ? labels.requiresSignatureYes : labels.requiresSignatureNo}>
                         <input
                             type="checkbox"
                             checked={requiresSignature}
@@ -193,7 +200,7 @@ export default function StepCard({
                     )}
 
                     {onToggleResubmit ? (
-                        <div className={`flex shrink-0 flex-wrap items-center gap-x-3 ${RESUBMIT_WIDTH}`}>
+                        <div className={`flex shrink-0 items-center gap-x-1.5 ${RESUBMIT_WIDTH}`}>
                             <label className="inline-flex h-8 cursor-pointer items-center gap-1" title={`${canResubmit ? labels.canResubmitYes : labels.canResubmitNo} — ${labels.toggleResubmitHint}`}>
                                 <input
                                     type="checkbox"
@@ -206,16 +213,19 @@ export default function StepCard({
                                 <span className={inlineLabelClassName}>{tJobTitle("columnResubmit")}</span>
                             </label>
                             {onToggleResubmitSkip && canResubmit && (
-                                <label className="inline-flex h-8 cursor-pointer items-center gap-1 whitespace-nowrap text-xs text-[#5e3f3a]" title={`${resubmitSkipsIntermediate ? labels.resubmitSkipYes : labels.resubmitSkipNo} — ${labels.toggleResubmitSkipHint}`}>
-                                    <input
-                                        type="checkbox"
-                                        checked={!!resubmitSkipsIntermediate}
-                                        onChange={onToggleResubmitSkip}
-                                        disabled={readOnly}
-                                        className={controlClassName}
-                                    />
-                                    {labels.resubmitSkipYes}
-                                </label>
+                                <button
+                                    type="button"
+                                    onClick={onToggleResubmitSkip}
+                                    disabled={readOnly}
+                                    aria-pressed={!!resubmitSkipsIntermediate}
+                                    aria-label={labels.resubmitSkipYes}
+                                    title={`${resubmitSkipsIntermediate ? labels.resubmitSkipYes : labels.resubmitSkipNo} — ${labels.toggleResubmitSkipHint}`}
+                                    className={`inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border transition disabled:cursor-default ${
+                                        resubmitSkipsIntermediate ? "border-[#e9bcb6] bg-[#fff4f2] text-[#e3000f]" : "border-[#e0e3e5] bg-white text-[#8a8f94] hover:bg-[#f2f4f6]"
+                                    }`}
+                                >
+                                    <FastForward className="h-3.5 w-3.5" />
+                                </button>
                             )}
                         </div>
                     ) : (

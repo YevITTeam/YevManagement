@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import { useDialogReset } from "@/modules/common/hooks/useDialogReset";
@@ -91,7 +91,6 @@ export default function WorkshopForm({ isOpen, mode, initial, loading = false, o
                             <input
                                 value={values.workshopCode}
                                 onChange={(event) => handleChange("workshopCode", event.target.value)}
-                                placeholder={t("fieldCodePlaceholder")}
                                 disabled={loading}
                                 autoFocus
                                 required
@@ -104,7 +103,6 @@ export default function WorkshopForm({ isOpen, mode, initial, loading = false, o
                             <input
                                 value={values.workshopNameVn}
                                 onChange={(event) => handleChange("workshopNameVn", event.target.value)}
-                                placeholder={t("fieldNameVnPlaceholder")}
                                 disabled={loading}
                                 required
                                 className={fieldClassName}
@@ -116,7 +114,6 @@ export default function WorkshopForm({ isOpen, mode, initial, loading = false, o
                             <input
                                 value={values.workshopNameJp ?? ""}
                                 onChange={(event) => handleChange("workshopNameJp", event.target.value)}
-                                placeholder={t("fieldNameJpPlaceholder")}
                                 disabled={loading}
                                 className={fieldClassName}
                             />
@@ -135,9 +132,10 @@ export default function WorkshopForm({ isOpen, mode, initial, loading = false, o
                         <button
                             type="submit"
                             disabled={loading}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
+                            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {tCommon("save")}
                         </button>
                     </div>
                 </form>

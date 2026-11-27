@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
 import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
@@ -152,9 +152,10 @@ export default function JobTitleForm({ isOpen, mode, initial, loading = false, o
                         <button
                             type="submit"
                             disabled={loading || isSubmitting}
-                            className="h-9 cursor-pointer rounded-md bg-[#e3000f] px-4 text-sm! font-semibold! text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-[#e3000f] px-4 text-sm! font-semibold! text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading || isSubmitting ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
+                            {(loading || isSubmitting) && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {tCommon("save")}
                         </button>
                     </div>
                 </form>

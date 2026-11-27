@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
@@ -173,7 +173,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                                 options={workshopOptions}
                                 value={values.workshopId || ""}
                                 onChange={(v) => setValues((current) => ({ ...current, workshopId: v === "" ? 0 : v }))}
-                                placeholder={t("fieldWorkshopPlaceholder")}
+                                placeholder=""
                                 disabled={loading}
                             />
                         </label>
@@ -184,7 +184,7 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                                 options={departmentOptions}
                                 value={values.departmentId || ""}
                                 onChange={(v) => setValues((current) => ({ ...current, departmentId: v === "" ? 0 : v }))}
-                                placeholder={t("fieldDepartmentPlaceholder")}
+                                placeholder=""
                                 disabled={loading}
                             />
                         </label>
@@ -194,7 +194,6 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             <input
                                 value={values.groupNameVn}
                                 onChange={(event) => setValues((current) => ({ ...current, groupNameVn: event.target.value }))}
-                                placeholder={t("fieldNameVnPlaceholder")}
                                 disabled={loading}
                                 autoFocus
                                 required
@@ -207,7 +206,6 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                             <input
                                 value={values.groupNameJp ?? ""}
                                 onChange={(event) => setValues((current) => ({ ...current, groupNameJp: event.target.value }))}
-                                placeholder={t("fieldNameJpPlaceholder")}
                                 disabled={loading}
                                 className={fieldClassName}
                             />
@@ -299,9 +297,10 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                         <button
                             type="submit"
                             disabled={loading}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
+                            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {tCommon("save")}
                         </button>
                     </div>
                 </form>

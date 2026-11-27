@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Check, Inbox, X, Search, Pencil, Trash2 } from "lucide-react";
+import { PenLine, Pencil, Trash2 } from "lucide-react";
 
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
@@ -16,6 +16,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Pagination } from "@/components/ui/Pagination";
 import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { TableScroll } from "@/components/ui/TableScroll";
+import { ErrorBar, FilterActions, IconButton, IconFlag, ListToolbar, SearchField, TableStatusRows, theadRowClassName } from "@/components/ui/ListToolbar";
 
 const PAGE_SIZE = 10;
 
@@ -74,6 +75,12 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
         setAppliedKeyword(keyword.trim());
     };
 
+    const handleReset = () => {
+        setPageIndex(1);
+        setKeyword("");
+        setAppliedKeyword("");
+    };
+
     const openEditForm = (otCase: OtCaseDto) => {
         setFormMode("edit");
         setEditingOtCase(otCase);
@@ -126,95 +133,42 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
     return (
         <div className="space-y-4">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3 md:flex-row md:items-center md:justify-between">
-                    <div className="flex gap-2">
-                        <input
-                            value={keyword}
-                            onChange={(event) => setKeyword(event.target.value)}
-                            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder={t("searchPlaceholder")}
-                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
-                        <button
-                            onClick={handleSearch}
-                            disabled={isLoading}
-                            title={tCommon("search")}
-                            aria-label={tCommon("search")}
-                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
-                        >
-                            <Search className="h-4 w-4" />
-                        </button>
-                    </div>
-                </div>
-
-                {error && (
-                    <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
-                )}
+                <ListToolbar>
+                    <SearchField value={keyword} onChange={setKeyword} onEnter={handleSearch} placeholder={t("searchPlaceholder")} />
+                    <FilterActions onSearch={handleSearch} onReset={handleReset} disabled={isLoading} />
+                </ListToolbar>
+                <ErrorBar message={error} />
 
                 <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                            <tr className={theadRowClassName}>
                                 <th className="px-3 py-2">{t("colCode")}</th>
                                 <th className="px-3 py-2">{t("colDescription")}</th>
                                 <th className="px-3 py-2">{t("colRequiredLevel")}</th>
-                                <th className="px-3 py-2">{t("colRequireSignature")}</th>
-                                <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
+                                <th className="px-3 py-2" title={t("fieldRequireSignature")}>{t("colRequireSignature")}</th>
+                                <th className="w-px px-3 py-2" aria-label={tCommon("actions")} />
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && otCases.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} className="px-4 py-12">
-                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
-                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
-                                            {t("noData")}
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
+                            <TableStatusRows loading={isLoading} empty={otCases.length === 0} columns={5} emptyText={t("noData")} />
                             {otCases.map((otCase) => (
                                 <tr key={otCase.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{otCase.code}</td>
                                     <td className="px-3 py-2 text-sm text-[#5e3f3a]">
-                                        {otCase.description || "-"}
+                                        {otCase.description}
                                         {otCase.descriptionJp && <div className="text-xs text-[#8a8f94]">{otCase.descriptionJp}</div>}
                                     </td>
-                                    <td className="px-3 py-2 text-sm">
-                                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
-                                            {enumLabels.approvalLevel[otCase.requiredApprovalLevel] ?? otCase.requiredApprovalLevel}
-                                        </span>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                        {enumLabels.approvalLevel[otCase.requiredApprovalLevel] ?? otCase.requiredApprovalLevel}
                                     </td>
-                                    <td className="px-3 py-2 text-sm">
-                                        <span
-                                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                                                otCase.requireSignature
-                                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                                    : "border-[#e0e3e5] bg-white text-[#8a8f94]"
-                                            }`}
-                                        >
-                                            {otCase.requireSignature ? <Check size={12} /> : <X size={12} />}
-                                            {otCase.requireSignature ? t("yes") : t("no")}
-                                        </span>
+                                    <td className="px-3 py-2">
+                                        {otCase.requireSignature && <IconFlag icon={PenLine} label={t("fieldRequireSignature")} tone="success" />}
                                     </td>
-                                    <td className="px-3 py-2 text-right text-sm">
-                                        <div className="inline-flex items-center gap-1.5">
-                                            <button
-                                                onClick={() => openEditForm(otCase)}
-                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-40"
-                                                title={tCommon("edit")}
-                                                aria-label={tCommon("edit")}
-                                            >
-                                                <Pencil className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => setDeletingOtCase(otCase)}
-                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e9bcb6] text-[#930006] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
-                                                title={tCommon("delete")}
-                                                aria-label={tCommon("delete")}
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
+                                    <td className="px-3 py-2 text-right">
+                                        <div className="inline-flex items-center gap-1">
+                                            <IconButton icon={Pencil} label={tCommon("edit")} onClick={() => openEditForm(otCase)} size="sm" variant="ghost" />
+                                            <IconButton icon={Trash2} label={tCommon("delete")} onClick={() => setDeletingOtCase(otCase)} size="sm" variant="danger" />
                                         </div>
                                     </td>
                                 </tr>

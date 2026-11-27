@@ -3,8 +3,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { toast } from "react-toastify";
-import { useTranslations } from "next-intl";
-import { FolderOpen, Layers } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { Building2, Layers, Loader2, Save, TriangleAlert, Users } from "lucide-react";
 
 import { DepartmentApprovalStepApi } from "@/modules/attendance/api/department-approval-step.api";
 import { GroupApprovalStepApi } from "@/modules/attendance/api/group-approval-step.api";
@@ -30,6 +30,9 @@ import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableS
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import FormDialog from "@/components/common/FormDialog";
+import { EmptyState } from "@/components/common/EmptyState";
+import { IconButton } from "@/components/ui/ListToolbar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useDragReorder } from "./useDragReorder";
 import StepCard, { StepColumnHeaders, StepSectionHeader, type StepCardLabels } from "./StepCard";
 import StepHolders, { type StepHoldersLabels } from "./StepHolders";
@@ -42,6 +45,9 @@ const sectionTitleClassName = "text-sm font-semibold text-[#191c1e]";
 // Compact trigger for the selects in this screen (default input trigger is too tall/wide for a tree UI).
 const compactSelectClassName =
     "h-8 w-full rounded-md border border-[#e0e3e5] bg-white px-2.5 pr-8 text-xs! text-[#191c1e] outline-none transition focus:border-[#e3000f]";
+// Short dashed trigger matching the people-row add link; the panel still opens at full width.
+const addStepTriggerClassName =
+    "h-7 w-full rounded-md border border-dashed border-[#e0e3e5] bg-white px-2 pr-7 text-xs! text-[#5e3f3a] outline-none transition hover:bg-[#f2f4f6] focus:border-[#e3000f]";
 
 const toJobTitleOptions = (jobTitles: JobTitleDto[], codeWithRank: (code: string, rank: number) => string): SelectOption[] =>
     jobTitles.map((jt) => ({
@@ -59,6 +65,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const tDept = useTranslations("Attendance.DepartmentApprovalStep");
     const tGroup = useTranslations("Attendance.GroupApprovalStep");
     const tJobTitle = useTranslations("Attendance.JobTitle");
+    const tCommon = useTranslations("Common");
+    const locale = useLocale();
     const codeWithRank = (code: string, rank: number) => tJobTitle("codeWithRank", { code, rank });
     const { user } = useAuth();
     // Coordinators may look at the trees, only Admin may change them.
@@ -480,8 +488,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
     const departmentOptions: SelectOption[] = departments.map((d) => ({
         value: d.id,
-        label: d.departmentNameVn,
-        searchText: `${d.departmentNameVn} ${d.departmentCode}`.toLowerCase(),
+        label: (locale === "ja" && d.departmentNameJp) || d.departmentNameVn,
+        searchText: `${d.departmentNameVn} ${d.departmentNameJp ?? ""} ${d.departmentCode}`.toLowerCase(),
     }));
     const selectedDepartment = departments.find((d) => d.id === departmentId);
     const canManageDept = selectedDepartment?.canManage ?? false;
@@ -490,8 +498,8 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
         .filter((g) => canManageDept || selectedDepartment?.groupIds.includes(g.id))
         .map((g) => ({
             value: g.id,
-            label: g.groupNameVn,
-            searchText: `${g.groupNameVn} ${g.groupCode}`.toLowerCase(),
+            label: (locale === "ja" && g.groupNameJp) || g.groupNameVn,
+            searchText: `${g.groupNameVn} ${g.groupNameJp ?? ""} ${g.groupCode}`.toLowerCase(),
         }));
 
     // ── Department block: add/remove/reorder/save ──
@@ -755,7 +763,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
     const groupStepLabels: StepCardLabels = {
         dragHandleLabel: tGroup("dragHandleLabel"),
-        toggleSignatureHint: tGroup("toggleSignatureHint"),
         requiresSignatureYes: tGroup("requiresSignatureYes"),
         requiresSignatureNo: tGroup("requiresSignatureNo"),
         removeStep: tGroup("removeStep"),
@@ -771,7 +778,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     };
     const deptStepLabels: StepCardLabels = {
         dragHandleLabel: tDept("dragHandleLabel"),
-        toggleSignatureHint: tDept("toggleSignatureHint"),
         requiresSignatureYes: tDept("requiresSignatureYes"),
         requiresSignatureNo: tDept("requiresSignatureNo"),
         removeStep: tDept("removeStep"),
@@ -785,7 +791,6 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     };
     const deptHoldersLabels: StepHoldersLabels = {
         holdersLabel: tDept("holdersLabel"),
-        loadingEmployees: tDept("loadingEmployees"),
         noHolders: tDept("noHolders"),
         noHoldersHint: tDept("noHoldersHint"),
         removeHolderHint: tDept("removeHolderHint"),
@@ -794,21 +799,15 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
     const groupCoordinatorLabels: CoordinatorsBoxLabels = {
         title: tGroup("coordinatorsTitle"),
         hint: tGroup("coordinatorsHint"),
-        label: tGroup("coordinatorsLabel"),
-        loading: tGroup("loadingCoordinators"),
         noCoordinators: tGroup("noCoordinators"),
-        notLinked: tGroup("coordinatorNotLinked"),
-        notLinkedHint: tGroup("coordinatorNotLinkedHint"),
+        notLinkedHint: tDept("coordinatorNotLinkedHint"),
         removeHint: tGroup("removeCoordinatorHint"),
         addPlaceholder: tGroup("addCoordinatorPlaceholder"),
     };
     const deptCoordinatorLabels: CoordinatorsBoxLabels = {
         title: tDept("coordinatorsTitle"),
         hint: tDept("coordinatorsHint"),
-        label: tDept("coordinatorsLabel"),
-        loading: tDept("loadingCoordinators"),
         noCoordinators: tDept("noCoordinators"),
-        notLinked: tDept("coordinatorNotLinked"),
         notLinkedHint: tDept("coordinatorNotLinkedHint"),
         removeHint: tDept("removeCoordinatorHint"),
         addPlaceholder: tDept("addCoordinatorPlaceholder"),
@@ -819,86 +818,97 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
 
     const loadingStepsSkeleton = (
         <div className="space-y-2">
-            <div className="h-14 animate-pulse rounded-lg bg-[#f1f5f9]" />
-            <div className="h-14 animate-pulse rounded-lg bg-[#f1f5f9]" />
+            <Skeleton className="h-14 rounded-lg" />
+            <Skeleton className="h-14 rounded-lg" />
         </div>
     );
+    const showGroupCoordinators = typeof groupId === "number" && canManageGroupCoordinators;
+    const showSidePanel = showGroupCoordinators || canManageDeptCoordinators;
+    const isSaving = isSavingGroup || isSavingDept;
 
     return (
         <div className="space-y-4">
             <section className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 shadow-sm">
                 {workshops.length > 0 && (
-                    <>
-                        <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tDept("fieldWorkshop")}</span>
-                        <div className="w-44 max-w-full">
-                            <SearchableSelect
-                                options={workshops.map((w) => ({ value: w.id, label: w.workshopNameVn, searchText: w.workshopNameVn.toLowerCase() }))}
-                                value={workshopId}
-                                onChange={handleSelectWorkshop}
-                                placeholder={tDept("fieldWorkshopPlaceholder")}
-                                disabled={isLoadingOptions}
-                                triggerClassName={compactSelectClassName}
-                            />
-                        </div>
-                    </>
+                    <div className="w-36 max-w-full">
+                        <SearchableSelect
+                            options={workshops.map((w) => ({ value: w.id, label: w.workshopNameVn, searchText: w.workshopNameVn.toLowerCase() }))}
+                            value={workshopId}
+                            onChange={handleSelectWorkshop}
+                            placeholder={tDept("fieldWorkshop")}
+                            ariaLabel={tDept("fieldWorkshop")}
+                            disabled={isLoadingOptions}
+                            triggerClassName={compactSelectClassName}
+                        />
+                    </div>
                 )}
-                <span className="ml-2 shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tDept("fieldDepartment")}</span>
                 <div className="w-64 max-w-full">
                     <SearchableSelect
                         options={departmentOptions}
                         value={departmentId}
                         onChange={handleSelectDepartment}
-                        placeholder={tDept("fieldDepartmentPlaceholder")}
+                        placeholder={tDept("fieldDepartment")}
+                        ariaLabel={tDept("fieldDepartment")}
                         disabled={isLoadingOptions}
                         triggerClassName={compactSelectClassName}
                     />
                 </div>
                 {typeof departmentId === "number" && (
-                    <>
-                        <span className="ml-2 shrink-0 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{tGroup("fieldGroup")}</span>
-                        <div className="w-64 max-w-full">
-                            <SearchableSelect
-                                options={groupOptions}
-                                value={groupId}
-                                onChange={handleSelectGroup}
-                                placeholder={tGroup("fieldGroupPlaceholder")}
-                                disabled={isLoadingOptions}
-                                triggerClassName={compactSelectClassName}
-                            />
-                        </div>
-                    </>
+                    <div className="w-64 max-w-full">
+                        <SearchableSelect
+                            options={groupOptions}
+                            value={groupId}
+                            onChange={handleSelectGroup}
+                            placeholder={tGroup("fieldGroup")}
+                            ariaLabel={tGroup("fieldGroup")}
+                            disabled={isLoadingOptions}
+                            triggerClassName={compactSelectClassName}
+                        />
+                    </div>
                 )}
                 {typeof departmentId === "number" && isAdmin && (
                     <button
                         type="button"
                         onClick={handleSaveAll}
-                        disabled={!(isGroupDirty || isDeptDirty) || isSavingGroup || isSavingDept || groupSigningMinNotMet || groupLevelIncomplete || !!groupRepeatedNames}
-                        className="ml-auto cursor-pointer rounded-md bg-[#e3000f] px-3 py-1.5 text-xs! font-semibold! text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!(isGroupDirty || isDeptDirty) || isSaving || groupSigningMinNotMet || groupLevelIncomplete || !!groupRepeatedNames}
+                        className="ml-auto inline-flex h-8 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-[#e3000f] px-3 text-xs! font-semibold! text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {isSavingGroup || isSavingDept ? tGroup("saving") : tGroup("saveButton")}
+                        {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                        {tCommon("save")}
                     </button>
                 )}
             </section>
 
+            {typeof departmentId !== "number" && !isLoadingOptions && (
+                <div className="rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                    <EmptyState icon={Building2} title={tDept("intro")} />
+                </div>
+            )}
+
             {typeof departmentId === "number" && (
-                // Left: the merged group → department pipeline; right: sticky config panel so selectors don't break the pipeline.
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
+                // Left: the merged group → department pipeline; right: sticky coordinators panel, only when the user may see one.
+                <div className={`grid grid-cols-1 gap-4 ${showSidePanel ? "lg:grid-cols-[1fr_300px]" : ""}`}>
                     <div className="@container order-2 space-y-4 rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm lg:order-1">
                         {/* Intermediate levels — the form passes these first */}
                         <div>
-                            <StepSectionHeader columns={typeof groupId === "number" && <StepColumnHeaders showResponsible showResubmit signUsed={groupSigningCount} signHint={tGroup("intermediateLimitHint")} />}>
-                                <FolderOpen className="h-4 w-4 text-[#e3000f]" />
-                                <h3 className={sectionTitleClassName}>{tGroup("sectionTitle")}</h3>
+                            <StepSectionHeader
+                                columns={
+                                    typeof groupId === "number" && (
+                                        <StepColumnHeaders
+                                            showResponsible
+                                            showResubmit
+                                            signUsed={groupSigningCount}
+                                            signHint={tGroup("intermediateLimitHint")}
+                                            responsibleHint={tGroup("toggleResponsibleHint")}
+                                            resubmitHint={tGroup("toggleResubmitHint")}
+                                        />
+                                    )
+                                }
+                            >
+                                <Users className="h-4 w-4 text-[#e3000f]" />
+                                <h3 className={sectionTitleClassName} title={tGroup("description")}>{tGroup("sectionTitle")}</h3>
                                 {typeof groupId === "number" && !isLoadingGroupSteps && isAdmin && (
-                                    <button
-                                        type="button"
-                                        onClick={openApplyDialog}
-                                        disabled={isSavingGroup}
-                                        className="ml-1 inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md border border-[#e0e3e5] bg-white px-2 text-xs! font-semibold! text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        <Layers size={13} />
-                                        {tGroup("applyToGroups")}
-                                    </button>
+                                    <IconButton icon={Layers} label={tGroup("applyTitle")} onClick={openApplyDialog} disabled={isSavingGroup} size="sm" />
                                 )}
                             </StepSectionHeader>
 
@@ -959,16 +969,16 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                     </ol>
 
                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[#e0e3e5] pt-3">
-                                        {isAdmin && <div className="w-64 max-w-full">
+                                        {isAdmin && <div className="w-32">
                                             <SearchableSelect
                                                 options={toJobTitleOptions(availableGroupJobTitles, codeWithRank)}
                                                 value=""
                                                 onChange={handleAddGroupStep}
                                                 placeholder={tGroup("fieldAddJobTitlePlaceholder")}
-                                                triggerClassName={compactSelectClassName}
+                                                triggerClassName={addStepTriggerClassName}
                                             />
                                         </div>}
-                                        <label className="flex cursor-pointer items-center gap-2 text-xs text-[#191c1e]">
+                                        <label className="flex cursor-pointer items-center gap-2 text-xs text-[#191c1e]" title={tGroup("creatorMustSignHint")}>
                                             <input
                                                 type="checkbox"
                                                 checked={groupBorrowed.creatorMustSign}
@@ -1003,15 +1013,20 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         {/* Terminal levels — after the group block */}
                         <div>
                             <StepSectionHeader columns={deptSteps.length > 0 && <StepColumnHeaders />}>
-                                <FolderOpen className="h-4 w-4 text-[#e3000f]" />
-                                <h3 className={sectionTitleClassName}>{tDept("sectionTitle")}</h3>
+                                <Building2 className="h-4 w-4 text-[#e3000f]" />
+                                <h3 className={sectionTitleClassName} title={tDept("description")}>{tDept("sectionTitle")}</h3>
                             </StepSectionHeader>
 
                             {isLoadingDeptSteps ? (
                                 loadingStepsSkeleton
                             ) : (
                                 <>
-                                    {deptSteps.length === 0 && <p className="mb-2 text-sm text-[#5e3f3a]">{tDept("noSteps")}</p>}
+                                    {deptSteps.length === 0 && (
+                                        <p className="mb-2 flex items-center gap-1.5 text-sm text-[#9a5b00]">
+                                            <TriangleAlert className="h-4 w-4 shrink-0" />
+                                            {tDept("noSteps")}
+                                        </p>
+                                    )}
 
                                     {deptSteps.length > 0 && (
                                         <ol>
@@ -1052,13 +1067,13 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                                     )}
 
                                     {isAdmin && <div className="flex flex-wrap items-center gap-2 border-t border-[#e0e3e5] pt-3">
-                                        <div className="w-64 max-w-full">
+                                        <div className="w-32">
                                             <SearchableSelect
                                                 options={toJobTitleOptions(availableDeptJobTitles, codeWithRank)}
                                                 value=""
                                                 onChange={handleAddDeptStep}
-                                                placeholder={tDept("fieldAddJobTitlePlaceholder")}
-                                                triggerClassName={compactSelectClassName}
+                                                placeholder={tGroup("fieldAddJobTitlePlaceholder")}
+                                                triggerClassName={addStepTriggerClassName}
                                             />
                                         </div>
                                     </div>}
@@ -1068,9 +1083,10 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         </div>
                     </div>
 
+                    {showSidePanel && (
                     <aside className="order-1 space-y-4 lg:sticky lg:top-6 lg:order-2 lg:self-start">
                         <div className="divide-y divide-[#e0e3e5] rounded-lg border border-[#e0e3e5] bg-white shadow-sm">
-                        {typeof groupId === "number" && canManageGroupCoordinators && (
+                        {showGroupCoordinators && (
                             <CoordinatorsBox
                                 embedded
                                 isLoading={isLoadingGroupCoordinators}
@@ -1101,6 +1117,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                         )}
                         </div>
                     </aside>
+                    )}
                 </div>
             )}
 
@@ -1111,7 +1128,7 @@ const ApprovalStepManager = forwardRef<ListHandle, ListToolbarProps>(function Ap
                 onSubmit={handleSubmitApply}
                 loading={isApplying}
                 submitLabel={tGroup("applySubmit")}
-                cancelLabel={tGroup("applyCancel")}
+                cancelLabel={tCommon("cancel")}
             >
                 <label className="block">
                     <span className="mb-1 block text-xs font-medium text-[#5e3f3a]">{tGroup("applyLevelLabel")}</span>

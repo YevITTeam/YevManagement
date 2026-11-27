@@ -1,17 +1,17 @@
 "use client";
 
-import { Users, X } from "lucide-react";
+import { UserX, Users, X } from "lucide-react";
 
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import AvatarStack from "@/components/ui/AvatarStack";
+import InfoTooltip from "@/components/ui/InfoTooltip";
+import { IconFlag } from "@/components/ui/ListToolbar";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export interface CoordinatorsBoxLabels {
     title: string;
     hint: string;
-    label: string;
-    loading: string;
     noCoordinators: string;
-    notLinked: string;
     notLinkedHint: string;
     removeHint: string;
     addPlaceholder: string;
@@ -45,7 +45,7 @@ export default function CoordinatorsBox({
     onAddChange: (value: number | "") => void;
     onAddQueryChange?: (query: string) => void;
     labels: CoordinatorsBoxLabels;
-    // true = rendered inside a shared card (no own border/background, no "currently in charge" caption).
+    // true = rendered inside a shared card (no own border/background).
     embedded?: boolean;
 }) {
     return (
@@ -53,11 +53,11 @@ export default function CoordinatorsBox({
             <div className="flex items-center gap-1.5">
                 <Users className="h-3.5 w-3.5 text-[#8a8f94]" />
                 <span className={embedded ? "text-xs font-semibold text-[#191c1e]" : "text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]"}>{labels.title}</span>
+                <InfoTooltip text={labels.hint} />
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-                {!embedded && <span className="text-xs font-semibold text-[#8a8f94]">{labels.label}</span>}
                 {isLoading ? (
-                    <span className="text-xs text-[#8a8f94]">{labels.loading}</span>
+                    <Skeleton className="h-6 w-full" />
                 ) : (
                     <>
                         {!embedded && <AvatarStack people={coordinators.map((c) => ({ id: c.employeeId, name: c.fullName, code: c.employeeCode }))} />}
@@ -70,11 +70,7 @@ export default function CoordinatorsBox({
                                     className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-white py-0.5 pl-2 pr-1 text-xs text-[#5e3f3a]"
                                 >
                                     {coordinator.fullName} ({coordinator.employeeCode})
-                                    {!coordinator.userName && (
-                                        <span className="text-[#9a5b00]" title={labels.notLinkedHint}>
-                                            — {labels.notLinked}
-                                        </span>
-                                    )}
+                                    {!coordinator.userName && <IconFlag icon={UserX} label={labels.notLinkedHint} tone="warning" />}
                                     <button
                                         type="button"
                                         onClick={() => onRemove(coordinator.employeeId)}

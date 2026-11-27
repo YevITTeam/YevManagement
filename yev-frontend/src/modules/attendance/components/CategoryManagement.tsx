@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { useAuth } from "@/modules/auth/context/AuthContext";
@@ -19,6 +19,7 @@ import AttendanceSettingPanel from "./settings/AttendanceSettingPanel";
 import type { ListHandle } from "./list-toolbar";
 import type { ProductionCatalogKind } from "@/modules/attendance/types/production-catalog.dto";
 import { Tabs } from "@/components/ui/Tabs";
+import { IconButton } from "@/components/ui/ListToolbar";
 import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 
 type CategoryTab =
@@ -55,21 +56,21 @@ export default function CategoryManagement() {
     const canCreateEmployee = hasPermission(user, "Attendance.Employee.Create");
     // "settings" is not a CRUD list, so it has no add button.
     const canManageProductionCatalog = hasPermission(user, "Attendance.ProductionCatalog.Manage");
-    const allTabs: { key: CategoryTab; label: string; addLabel: string | null; visible: boolean; group?: CategoryTabGroup }[] = [
-        { key: "workshops", label: t("tabWorkshops"), addLabel: t("addWorkshops"), visible: hasPermission(user, "Attendance.Workshop.Create"), group: "organization" },
-        { key: "departments", label: t("tabDepartments"), addLabel: t("addDepartments"), visible: hasPermission(user, "Attendance.Department.Create"), group: "organization" },
-        { key: "groups", label: t("tabGroups"), addLabel: t("addGroups"), visible: hasPermission(user, "Attendance.Group.Create"), group: "organization" },
-        { key: "production-lines", label: t("tabProductionLines"), addLabel: t("addProductionLines"), visible: canManageProductionCatalog, group: "organization" },
-        { key: "production-teams", label: t("tabProductionTeams"), addLabel: t("addProductionTeams"), visible: canManageProductionCatalog, group: "organization" },
-        { key: "production-shift-teams", label: t("tabProductionShiftTeams"), addLabel: t("addProductionShiftTeams"), visible: canManageProductionCatalog, group: "organization" },
-        { key: "production-tasks", label: t("tabProductionTasks"), addLabel: t("addProductionTasks"), visible: canManageProductionCatalog, group: "organization" },
-        { key: "reasons", label: t("tabReasons"), addLabel: t("addReasons"), visible: hasPermission(user, "Attendance.Reason.Create") },
-        { key: "ot-cases", label: t("tabOtCases"), addLabel: t("addOtCases"), visible: hasPermission(user, "Attendance.OtCase.Create") },
-        { key: "job-titles", label: t("tabJobTitles"), addLabel: t("addJobTitles"), visible: hasPermission(user, "Attendance.JobTitle.Create") },
+    const allTabs: { key: CategoryTab; label: string; canAdd: boolean; visible: boolean; group?: CategoryTabGroup }[] = [
+        { key: "workshops", label: t("tabWorkshops"), canAdd: true, visible: hasPermission(user, "Attendance.Workshop.Create"), group: "organization" },
+        { key: "departments", label: t("tabDepartments"), canAdd: true, visible: hasPermission(user, "Attendance.Department.Create"), group: "organization" },
+        { key: "groups", label: t("tabGroups"), canAdd: true, visible: hasPermission(user, "Attendance.Group.Create"), group: "organization" },
+        { key: "production-lines", label: t("tabProductionLines"), canAdd: true, visible: canManageProductionCatalog, group: "organization" },
+        { key: "production-teams", label: t("tabProductionTeams"), canAdd: true, visible: canManageProductionCatalog, group: "organization" },
+        { key: "production-shift-teams", label: t("tabProductionShiftTeams"), canAdd: true, visible: canManageProductionCatalog, group: "organization" },
+        { key: "production-tasks", label: t("tabProductionTasks"), canAdd: true, visible: canManageProductionCatalog, group: "organization" },
+        { key: "reasons", label: t("tabReasons"), canAdd: true, visible: hasPermission(user, "Attendance.Reason.Create") },
+        { key: "ot-cases", label: t("tabOtCases"), canAdd: true, visible: hasPermission(user, "Attendance.OtCase.Create") },
+        { key: "job-titles", label: t("tabJobTitles"), canAdd: true, visible: hasPermission(user, "Attendance.JobTitle.Create") },
         {
             key: "approval-steps",
             label: t("tabApprovalSteps"),
-            addLabel: null,
+            canAdd: false,
             visible: hasAnyPermission(user, [
                 "Attendance.DepartmentApprovalStep.Update",
                 "Attendance.GroupApprovalStep.Update",
@@ -78,7 +79,7 @@ export default function CategoryManagement() {
         {
             key: "employees",
             label: t("tabEmployees"),
-            addLabel: canCreateEmployee ? t("addEmployees") : null,
+            canAdd: canCreateEmployee,
             visible: hasAnyPermission(user, [
                 "Attendance.Employee.Create",
                 "Attendance.Employee.Update",
@@ -88,8 +89,8 @@ export default function CategoryManagement() {
                 "Attendance.ProductionEmployee.View",
             ]),
         },
-        { key: "reports", label: t("tabReports"), addLabel: null, visible: canViewReports },
-        { key: "settings", label: t("tabSettings"), addLabel: null, visible: hasPermission(user, "Attendance.Setting.Update") },
+        { key: "reports", label: t("tabReports"), canAdd: false, visible: canViewReports },
+        { key: "settings", label: t("tabSettings"), canAdd: false, visible: hasPermission(user, "Attendance.Setting.Update") },
     ];
     const tabs = allTabs.filter((tab) => tab.visible);
     const groupLabels: Record<CategoryTabGroup, string> = { organization: t("tabOrganization") };
@@ -158,7 +159,7 @@ export default function CategoryManagement() {
 
     const activeRef = refByTab[activeTab];
     // Empty fallback when the user holds none of the tab permissions (direct URL; the sidebar hides the entry).
-    const activeTabMeta = tabs.find((tab) => tab.key === activeTab) ?? tabs[0] ?? { label: "", addLabel: null };
+    const activeTabMeta = tabs.find((tab) => tab.key === activeTab) ?? tabs[0] ?? { label: "", canAdd: false };
 
     // Must keep a stable identity: an inline arrow would retrigger each List's effect and loop forever
     // ("Maximum update depth exceeded").
@@ -238,19 +239,16 @@ export default function CategoryManagement() {
                 </div>
 
                 <div className="flex shrink-0 items-center justify-end gap-2 md:pb-1.5">
-                    <button
-                        onClick={() => activeRef.current?.refresh()}
-                        disabled={loading}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                    >
-                        <RefreshCw className="h-3.5 w-3.5" /> {tCommon("refresh")}
-                    </button>
-                    {activeTabMeta.addLabel && (
+                    <IconButton icon={RefreshCw} label={tCommon("refresh")} onClick={() => activeRef.current?.refresh()} disabled={loading} size="sm" />
+                    {activeTabMeta.canAdd && (
                         <button
                             onClick={() => activeRef.current?.openCreate()}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
+                            title={tCommon("add")}
+                            aria-label={tCommon("add")}
+                            className="inline-flex h-7 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#e3000f] px-2 text-xs font-semibold text-white transition hover:bg-[#b40009] sm:px-3"
                         >
-                            {activeTabMeta.addLabel}
+                            <Plus className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">{tCommon("add")}</span>
                         </button>
                     )}
                 </div>

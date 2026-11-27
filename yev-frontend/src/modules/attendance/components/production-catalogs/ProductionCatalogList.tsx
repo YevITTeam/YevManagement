@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Inbox, Search, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 
 import { ProductionCatalogApi } from "@/modules/attendance/api/production-catalog.api";
 import { WorkshopApi } from "@/modules/attendance/api/workshop.api";
@@ -21,6 +21,7 @@ import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import ProductionCatalogForm from "./ProductionCatalogForm";
 import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { TableScroll } from "@/components/ui/TableScroll";
+import { ErrorBar, FilterActions, IconButton, ListToolbar, SearchField, TableStatusRows, fieldClassName, theadRowClassName } from "@/components/ui/ListToolbar";
 
 const PAGE_SIZE = 10;
 
@@ -110,6 +111,14 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
         setAppliedKeyword(keyword.trim());
     };
 
+    const handleReset = () => {
+        setPageIndex(1);
+        setKeyword("");
+        setAppliedKeyword("");
+        setWorkshopFilter("");
+        setTeamFilter("");
+    };
+
     const closeForm = () => {
         if (!isSaving) setFormOpen(false);
     };
@@ -150,19 +159,16 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
         }
     };
 
-    const columnCount = isLine ? 8 : hasWorkshop ? 5 : 4;
+    // A filtered column only repeats the chosen value.
+    const showWorkshop = hasWorkshop && workshopFilter === "";
+    const showTeam = isLine && teamFilter === "";
+    const columnCount = (showWorkshop ? 1 : 0) + (isLine ? 4 + (showTeam ? 1 : 0) : 2) + 2;
 
     return (
         <div className="space-y-4">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-wrap gap-2 border-b border-[#e0e3e5] bg-[#f8fafc] p-3">
-                    <input
-                        value={keyword}
-                        onChange={(event) => setKeyword(event.target.value)}
-                        onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                        placeholder={t("searchPlaceholder")}
-                        className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                    />
+                <ListToolbar>
+                    <SearchField value={keyword} onChange={setKeyword} onEnter={handleSearch} placeholder={t("searchPlaceholder")} />
                     {hasWorkshop && (
                         <SearchableSelect
                             options={workshopOptions}
@@ -173,7 +179,8 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                                 setTeamFilter("");
                             }}
                             placeholder={t("allWorkshops")}
-                            triggerClassName="h-9 w-32 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            ariaLabel={t("colWorkshop")}
+                            triggerClassName={`${fieldClassName} w-36 pr-8`}
                         />
                     )}
                     {isLine && (
@@ -185,31 +192,23 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                                 setTeamFilter(value);
                             }}
                             placeholder={t("allTeams")}
-                            triggerClassName="h-9 w-40 rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            ariaLabel={t("colTeam")}
+                            triggerClassName={`${fieldClassName} w-40 pr-8`}
                         />
                     )}
-                    <button
-                        onClick={handleSearch}
-                        disabled={isLoading}
-                        title={tCommon("search")}
-                        aria-label={tCommon("search")}
-                        className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                    >
-                        <Search className="h-4 w-4" />
-                    </button>
-                </div>
-
-                {error && <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
+                    <FilterActions onSearch={handleSearch} onReset={handleReset} disabled={isLoading} />
+                </ListToolbar>
+                <ErrorBar message={error} />
 
                 <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                {hasWorkshop && <th className="px-3 py-2">{t("colWorkshop")}</th>}
+                            <tr className={theadRowClassName}>
+                                {showWorkshop && <th className="px-3 py-2">{t("colWorkshop")}</th>}
                                 <th className="px-3 py-2">{t("colCode")}</th>
                                 {isLine ? (
                                     <>
-                                        <th className="px-3 py-2">{t("colTeam")}</th>
+                                        {showTeam && <th className="px-3 py-2">{t("colTeam")}</th>}
                                         <th className="px-3 py-2">{t("colCongDoan")}</th>
                                         <th className="px-3 py-2">{t("colCdMae")}</th>
                                         <th className="px-3 py-2">{t("colSortCode")}</th>
@@ -220,27 +219,18 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                                     <th className="px-3 py-2">{t("colName")}</th>
                                 )}
                                 <th className="px-3 py-2 text-right">{t("colEmployees")}</th>
-                                <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
+                                <th className="w-px px-3 py-2" aria-label={tCommon("actions")} />
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && items.length === 0 && (
-                                <tr>
-                                    <td colSpan={columnCount} className="px-4 py-12">
-                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
-                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
-                                            {t("noData")}
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
+                            <TableStatusRows loading={isLoading} empty={items.length === 0} columns={columnCount} emptyText={t("noData")} />
                             {items.map((item) => (
                                 <tr key={item.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    {hasWorkshop && <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.workshopCode}</td>}
+                                    {showWorkshop && <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.workshopCode}</td>}
                                     <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{item.code}</td>
                                     {isLine ? (
                                         <>
-                                            <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.teamCode || "-"}</td>
+                                            {showTeam && <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.teamCode || "-"}</td>}
                                             <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.congDoan || "-"}</td>
                                             <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.cdMae || "-"}</td>
                                             <td className="px-3 py-2 text-sm text-[#5e3f3a]">{item.sortCode || "-"}</td>
@@ -249,24 +239,10 @@ const ProductionCatalogList = forwardRef<ListHandle, ProductionCatalogListProps>
                                         <td className="px-3 py-2 text-sm text-[#5e3f3a]">{(isTask ? item.staffKind : item.nameVn) || "-"}</td>
                                     )}
                                     <td className="px-3 py-2 text-right text-sm text-[#5e3f3a]">{item.employeeCount}</td>
-                                    <td className="px-3 py-2 text-right text-sm">
-                                        <div className="inline-flex items-center gap-1.5">
-                                            <button
-                                                onClick={() => openForm(item)}
-                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                title={tCommon("edit")}
-                                                aria-label={tCommon("edit")}
-                                            >
-                                                <Pencil className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => setDeleting(item)}
-                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e9bcb6] text-[#930006] transition hover:bg-[#fff4f2]"
-                                                title={tCommon("delete")}
-                                                aria-label={tCommon("delete")}
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
+                                    <td className="px-3 py-2 text-right">
+                                        <div className="inline-flex items-center gap-1">
+                                            <IconButton icon={Pencil} label={tCommon("edit")} onClick={() => openForm(item)} size="sm" variant="ghost" />
+                                            <IconButton icon={Trash2} label={tCommon("delete")} onClick={() => setDeleting(item)} size="sm" variant="danger" />
                                         </div>
                                     </td>
                                 </tr>

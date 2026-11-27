@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { GripVertical, Inbox, Search, Pencil, Trash2 } from "lucide-react";
+import { GripVertical, Loader2, Pencil, Save, Trash2 } from "lucide-react";
 
 import { JobTitleApi } from "@/modules/attendance/api/job-title.api";
 import type { JobTitleDto } from "@/modules/attendance/types/job-title.dto";
@@ -17,6 +17,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { useDragReorder } from "./useDragReorder";
 import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { TableScroll } from "@/components/ui/TableScroll";
+import { ErrorBar, FilterActions, IconButton, ListToolbar, SearchField, TableStatusRows, theadRowClassName } from "@/components/ui/ListToolbar";
 
 const PAGE_SIZE = 20;
 
@@ -108,6 +109,12 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
         setAppliedKeyword(keyword.trim());
     };
 
+    const handleReset = () => {
+        setPageIndex(1);
+        setKeyword("");
+        setAppliedKeyword("");
+    };
+
     const openEditForm = (jobTitle: JobTitleDto) => {
         setFormMode("edit");
         setEditingJobTitle(jobTitle);
@@ -160,66 +167,38 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
     return (
         <div className="space-y-4">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex gap-2">
-                        <input
-                            value={keyword}
-                            onChange={(event) => setKeyword(event.target.value)}
-                            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder={t("searchPlaceholder")}
-                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
-                        <button
-                            onClick={handleSearch}
-                            disabled={isLoading}
-                            title={tCommon("search")}
-                            aria-label={tCommon("search")}
-                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
-                        >
-                            <Search className="h-4 w-4" />
-                        </button>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        {isOrderDirty && (
+                <ListToolbar
+                    actions={
+                        isOrderDirty && (
                             <button
                                 onClick={handleSaveOrder}
                                 disabled={isSavingOrder}
-                                className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex h-9 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md bg-[#e3000f] px-3 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                {isSavingOrder ? t("savingOrder") : t("saveOrderButton")}
+                                {isSavingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                {t("saveOrderButton")}
                             </button>
-                        )}
-                    </div>
-                </div>
-
-                {error && (
-                    <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
-                )}
-
+                        )
+                    }
+                >
+                    <SearchField value={keyword} onChange={setKeyword} onEnter={handleSearch} placeholder={t("searchPlaceholder")} wide />
+                    <FilterActions onSearch={handleSearch} onReset={handleReset} disabled={isLoading} />
+                </ListToolbar>
+                <ErrorBar message={error} />
 
                 <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                                <th className="w-10 px-2 py-2.5" />
-                                <th className="px-4 py-2.5">{t("colCode")}</th>
-                                <th className="px-4 py-2.5">{t("colName")}</th>
-                                <th className="px-4 py-2.5">{t("colRankOrder")}</th>
-                                <th className="px-4 py-2.5">{t("colTerminalLevel")}</th>
-                                <th className="px-4 py-2.5 text-right">{tCommon("actions")}</th>
+                            <tr className={theadRowClassName}>
+                                <th className="px-3 py-2">{t("colRankOrder")}</th>
+                                <th className="px-3 py-2">{t("colCode")}</th>
+                                <th className="px-3 py-2">{t("colName")}</th>
+                                <th className="px-3 py-2">{t("colTerminalLevel")}</th>
+                                <th className="w-px px-3 py-2" aria-label={tCommon("actions")} />
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && jobTitles.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} className="px-4 py-12">
-                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
-                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
-                                            {t("noData")}
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
+                            <TableStatusRows loading={isLoading} empty={jobTitles.length === 0} columns={5} emptyText={t("noData")} />
                             {jobTitles.map((jobTitle, index) => (
                                 <tr
                                     key={jobTitle.id}
@@ -232,41 +211,28 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                                         drag.dragIndex === index ? "z-10 bg-[#fff4f2] shadow-lg" : "hover:bg-[#f8fafc]"
                                     }`}
                                 >
-                                    <td className="px-2 py-3 text-center">
-                                        <span
-                                            title={canReorder ? t("dragHandleLabel") : t("dragDisabledHint")}
-                                            aria-label={t("dragHandleLabel")}
-                                            className={`inline-flex ${canReorder ? "cursor-grab text-[#8a8f94] active:cursor-grabbing" : "cursor-not-allowed text-[#d7dbe0]"}`}
-                                        >
-                                            <GripVertical className="h-4 w-4" />
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                        <span className="inline-flex items-center gap-1">
+                                            <span
+                                                title={canReorder ? t("dragHandleLabel") : t("dragDisabledHint")}
+                                                aria-label={t("dragHandleLabel")}
+                                                className={`inline-flex ${canReorder ? "cursor-grab text-[#8a8f94] active:cursor-grabbing" : "cursor-not-allowed text-[#e0e3e5]"}`}
+                                            >
+                                                <GripVertical className="h-4 w-4" />
+                                            </span>
+                                            {index + 1}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-sm font-semibold text-[#191c1e]">{jobTitle.code}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{jobTitle.name}</td>
-                                    <td className="px-4 py-3 text-sm text-[#5e3f3a]">{index + 1}</td>
-                                    <td className="px-4 py-3 text-sm">
-                                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-medium text-[#5e3f3a]">
-                                            {enumLabels.terminalLevel[jobTitle.terminalLevel] ?? jobTitle.terminalLevel}
-                                        </span>
+                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{jobTitle.code}</td>
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">{jobTitle.name}</td>
+                                    {/* 0 = intermediate level, the common case: leave the cell empty. */}
+                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                        {jobTitle.terminalLevel !== 0 && (enumLabels.terminalLevel[jobTitle.terminalLevel] ?? jobTitle.terminalLevel)}
                                     </td>
-                                    <td className="px-4 py-3 text-right text-sm">
-                                        <div className="inline-flex items-center gap-1.5">
-                                            <button
-                                                onClick={() => openEditForm(jobTitle)}
-                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-40"
-                                                title={tCommon("edit")}
-                                                aria-label={tCommon("edit")}
-                                            >
-                                                <Pencil className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => setDeletingJobTitle(jobTitle)}
-                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e9bcb6] text-[#930006] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
-                                                title={tCommon("delete")}
-                                                aria-label={tCommon("delete")}
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
+                                    <td className="px-3 py-2 text-right">
+                                        <div className="inline-flex items-center gap-1">
+                                            <IconButton icon={Pencil} label={tCommon("edit")} onClick={() => openEditForm(jobTitle)} size="sm" variant="ghost" />
+                                            <IconButton icon={Trash2} label={tCommon("delete")} onClick={() => setDeletingJobTitle(jobTitle)} size="sm" variant="danger" />
                                         </div>
                                     </td>
                                 </tr>

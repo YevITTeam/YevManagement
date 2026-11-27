@@ -3,13 +3,16 @@
 import { useImperativeHandle, useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { Check, Info, Search } from "lucide-react";
+import { Check, CheckCheck, ListX, Search } from "lucide-react";
 
 import { JobTitlePermissionApi } from "@/modules/attendance/api/job-title-permission.api";
 import { PermissionApi } from "@/modules/auth/api/permission.api";
 import type { PermissionDto } from "@/modules/auth/types/permission.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import InfoTooltip from "@/components/ui/InfoTooltip";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { IconButton } from "@/components/ui/ListToolbar";
 
 // Lets the parent form save this mapping together with its own fields (one Save button in the dialog).
 export interface JobTitlePermissionSectionHandle {
@@ -104,13 +107,11 @@ export default function JobTitlePermissionSection({ jobTitleId, ref }: JobTitleP
             <div className="flex flex-wrap items-center gap-2">
                 <h4 className="flex items-center gap-1.5 text-sm font-semibold text-[#191c1e]">
                     {t("sectionTitle")}
-                    <span title={t("description")} className="cursor-help text-[#8a8f94]">
-                        <Info className="h-3.5 w-3.5" />
-                    </span>
+                    <InfoTooltip text={t("description")} />
                 </h4>
                 {!isLoading && allowedPermissions.length > 0 && (
                     <>
-                        <span className="rounded-full bg-[#f2f4f7] px-2 text-[11px] font-semibold leading-5 text-[#5e3f3a]">
+                        <span className="text-xs font-semibold text-[#5e3f3a]">
                             {t("selectedCount", { count: allowedPermissions.filter((p) => selectedCodes.has(p.code)).length, total: allowedPermissions.length })}
                         </span>
                         <div className="relative ml-auto w-44">
@@ -123,19 +124,23 @@ export default function JobTitlePermissionSection({ jobTitleId, ref }: JobTitleP
                                 className="h-7 w-full rounded-md border border-[#e0e3e5] bg-white pl-7 pr-2 text-xs! text-[#191c1e] outline-none transition focus:border-[#e3000f]"
                             />
                         </div>
-                        <button
-                            type="button"
+                        <IconButton
+                            icon={allVisibleChecked ? ListX : CheckCheck}
+                            label={allVisibleChecked ? t("clearAll") : t("selectAll")}
                             onClick={() => setMany(visiblePermissions.map((p) => p.code), !allVisibleChecked)}
-                            className="cursor-pointer text-xs! font-semibold! text-[#e3000f] transition hover:text-[#b40009]"
-                        >
-                            {allVisibleChecked ? t("clearAll") : t("selectAll")}
-                        </button>
+                            size="sm"
+                            variant="ghost"
+                        />
                     </>
                 )}
             </div>
 
             {isLoading ? (
-                <p className="text-sm text-[#5e3f3a]">{t("loadingMapping")}</p>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                    {Array.from({ length: 6 }, (_, i) => (
+                        <Skeleton key={i} className="h-6" />
+                    ))}
+                </div>
             ) : allowedPermissions.length === 0 ? (
                 <p className="text-sm text-[#5e3f3a]">{t("noAllowedPermissions")}</p>
             ) : (
@@ -149,13 +154,13 @@ export default function JobTitlePermissionSection({ jobTitleId, ref }: JobTitleP
                                     onClick={() => handleToggle(permission.code)}
                                     title={permission.code}
                                     aria-pressed={checked}
-                                    className={`flex w-full cursor-pointer items-start gap-2 rounded-md px-2 py-1 text-left text-[13px]! transition hover:bg-[#f2f4f7] ${
+                                    className={`flex w-full cursor-pointer items-start gap-2 rounded-md px-2 py-1 text-left text-[13px]! transition hover:bg-[#f2f4f6] ${
                                         checked ? "bg-[#fff4f2]" : ""
                                     }`}
                                 >
                                     <span
                                         className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                                            checked ? "border-[#e3000f] bg-[#e3000f] text-white" : "border-[#c7ccd1] bg-white"
+                                            checked ? "border-[#e3000f] bg-[#e3000f] text-white" : "border-[#8a8f94] bg-white"
                                         }`}
                                     >
                                         {checked && <Check size={11} />}

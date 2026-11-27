@@ -3,10 +3,10 @@
 import { TriangleAlert, X } from "lucide-react";
 
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export interface StepHoldersLabels {
     holdersLabel: string;
-    loadingEmployees: string;
     noHolders: string;
     noHoldersHint: string;
     removeHolderHint: string;
@@ -95,7 +95,7 @@ export default function StepHolders({
     labels: StepHoldersLabels;
     readOnly?: boolean;
 }) {
-    if (isLoadingEmployees) return <div className={personMessageClassName}>{labels.loadingEmployees}</div>;
+    if (isLoadingEmployees) return <Skeleton className="my-1.5 h-5 w-40" />;
 
     return (
         <ul className={peopleListClassName} title={labels.holdersLabel}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type {
     ProductionCatalogItemDto,
@@ -222,9 +222,10 @@ export default function ProductionCatalogForm({
                         <button
                             type="submit"
                             disabled={loading || !canSubmit}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
+                            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {tCommon("save")}
                         </button>
                     </div>
                 </form>
