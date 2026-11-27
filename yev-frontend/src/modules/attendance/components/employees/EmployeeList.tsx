@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
     AlertTriangle,
     CalendarClock,
@@ -55,6 +55,7 @@ import type { ProductionOptionDto } from "@/modules/attendance/types/production-
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { localeName } from "@/modules/attendance/lib/bilingual";
 import { useFitViewport } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 15;
@@ -65,6 +66,7 @@ const toProductionOptions = (options: ProductionOptionDto[]): SelectOption[] =>
 
 const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeList({ onLoadingChange }, ref) {
     const t = useTranslations("Attendance.Employee");
+    const locale = useLocale();
     const tCommon = useTranslations("Common");
     const tProduction = useTranslations("Attendance.ProductionEmployeeList");
     const { user } = useAuth();
@@ -247,20 +249,20 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
 
     const departmentOptions: SelectOption[] = departments.map((d) => ({
         value: d.id,
-        label: d.departmentNameVn,
-        searchText: d.departmentNameVn.toLowerCase(),
+        label: localeName(locale, d.departmentNameVn, d.departmentNameJp)[0],
+        searchText: `${d.departmentNameVn} ${d.departmentNameJp ?? ""}`.toLowerCase(),
     }));
     const workshopOptions: SelectOption[] = workshops.map((w) => ({
         value: w.id,
-        label: w.workshopNameVn,
-        searchText: w.workshopNameVn.toLowerCase(),
+        label: localeName(locale, w.workshopNameVn, w.workshopNameJp)[0],
+        searchText: `${w.workshopNameVn} ${w.workshopNameJp ?? ""}`.toLowerCase(),
     }));
     const groupOptions: SelectOption[] = groups
         .filter((g) => workshopId === "" || g.workshopId === workshopId)
         .map((g) => ({
         value: g.id,
-        label: g.groupNameVn,
-        searchText: g.groupNameVn.toLowerCase(),
+        label: localeName(locale, g.groupNameVn, g.groupNameJp)[0],
+        searchText: `${g.groupNameVn} ${g.groupNameJp ?? ""}`.toLowerCase(),
     }));
 
     const { isLoading, error, refetch: fetchEmployees } = useFetchEffect(
@@ -634,7 +636,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     </td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
-                                        {employee.workshopNameVn ??
+                                        {(employee.workshopNameVn && localeName(locale, employee.workshopNameVn, employee.workshopNameJp)[0]) ??
                                             (employee.approvalScopes.length > 0
                                                 ? [...new Set(employee.approvalScopes.map((s) => s.workshopNameVn))].join(", ")
                                                 : "-")}
@@ -642,10 +644,14 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     <td className="px-2 py-1 text-sm leading-4 text-[#191c1e]">
                                         {(!employee.groupNameVn && employee.approvalScopes.length > 0
                                             ? employee.approvalScopes.map((s) => `${s.departmentNameVn} (${s.workshopNameVn})`).join(", ")
-                                            : employee.departmentNameVn) ?? (
+                                            : employee.departmentNameVn && localeName(locale, employee.departmentNameVn, employee.departmentNameJp)[0]) || (
                                             <span className="text-xs italic text-[#8a8f94]">{t("orgUnitCompanyWide")}</span>
                                         )}
-                                        {employee.groupNameVn && <div className="text-xs text-[#5e3f3a]">{employee.groupNameVn}</div>}
+                                        {employee.groupNameVn && (
+                                            <div className="text-xs text-[#5e3f3a]" title={localeName(locale, employee.groupNameVn, employee.groupNameJp)[1]}>
+                                                {localeName(locale, employee.groupNameVn, employee.groupNameJp)[0]}
+                                            </div>
+                                        )}
                                     </td>
                                     <td className="px-2 py-1.5 text-sm text-[#191c1e]">
                                         {employee.jobTitleName ?? (

@@ -149,7 +149,6 @@ export default function ProductionCatalogForm({
                                     options={workshopOptions}
                                     value={values.workshopId}
                                     onChange={(workshopId) => setValues((current) => ({ ...current, workshopId, teamId: "" }))}
-                                    placeholder=""
                                     disabled={loading}
                                 />
                             </div>
@@ -176,7 +175,6 @@ export default function ProductionCatalogForm({
                                         options={teamOptions}
                                         value={values.teamId}
                                         onChange={(teamId) => setValues((current) => ({ ...current, teamId }))}
-                                        placeholder=""
                                         disabled={loading || values.workshopId === ""}
                                     />
                                 </div>

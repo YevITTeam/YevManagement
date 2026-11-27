@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, CalendarClock, CalendarX2, Car, OctagonX, PenLine, Printer, RefreshCw, SearchX, Undo2, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "@/navigation";
+import { useRouter, Link } from "@/navigation";
 
 import { DepartmentApi } from "@/modules/attendance/api/department.api";
 import type { DepartmentDto } from "@/modules/attendance/types/department.dto";
@@ -1069,7 +1069,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 options={visibleDepartments.map((d) => ({ value: d.id, label: d.label, searchText: d.label.toLowerCase() }))}
                                 value={departmentId ?? ""}
                                 onChange={handleDepartmentChange}
-                                placeholder=""
                                 ariaLabel={t("fieldDepartment")}
                                 disabled={isSubmitting || isEditMode || isScopeDepartmentLocked}
                             />
@@ -1082,7 +1081,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
                                     value={groupId ?? ""}
                                     onChange={() => {}}
-                                    placeholder=""
                                     ariaLabel={t("fieldGroup")}
                                     disabled
                                 />
@@ -1171,7 +1169,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 options={reasons.map((r) => ({ value: r.id, label: r.reasonNameVn, searchText: r.reasonNameVn.toLowerCase() }))}
                                 value={reasonId ?? ""}
                                 onChange={(v) => setReasonId(v === "" ? null : v)}
-                                placeholder=""
                                 ariaLabel={t("fieldReason")}
                                 disabled={isSubmitting}
                             />
@@ -1751,7 +1748,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 isOpen={isPasswordDialogOpen}
                 title={t("confirmSaveTitle")}
                 label={t("secondaryPasswordLabel")}
-                hint={hasSecondaryPassword === false ? t("secondaryPasswordMissingHint") : ""}
+                hint={
+                    hasSecondaryPassword === false && (
+                        <>
+                            {t("secondaryPasswordMissingHint")}{" "}
+                            <Link href="/ot/secondary-password" className="font-semibold underline hover:text-[#e3000f]">
+                                {t("setupLink")}
+                            </Link>
+                        </>
+                    )
+                }
                 hintIsWarning
                 value={secondaryPassword}
                 onChange={setSecondaryPassword}

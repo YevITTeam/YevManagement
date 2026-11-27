@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { sortByLabel } from "@/lib/sort-options";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 export interface MultiSelectOption {
     value: number;
@@ -16,8 +17,10 @@ interface MultiSelectProps {
     options: MultiSelectOption[];
     values: number[];
     onChange: (values: number[]) => void;
-    placeholder: string;
+    placeholder?: string;
     ariaLabel?: string;
+    /** Overrides the trigger className (default size h-10). */
+    triggerClassName?: string;
     disabled?: boolean;
     // Caps rendered rows for lists of thousands; typing narrows the rest.
     maxVisible?: number;
@@ -30,12 +33,13 @@ interface PanelPosition {
     maxHeight: number;
 }
 
-const triggerClassName =
+const defaultTriggerClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
 // Searchable multi-select: ticking an option keeps the panel open, and every selected option is
 // shown as a removable chip under the trigger (same look as the IP chips in DeviceForm).
-export function MultiSelect({ options, values, onChange, placeholder, ariaLabel, disabled, maxVisible }: MultiSelectProps) {
+export function MultiSelect({ options, values, onChange, placeholder = "", ariaLabel, triggerClassName, disabled, maxVisible }: MultiSelectProps) {
+    const t = useTranslations("Common");
     const [query, setQuery] = useState("");
     const [isOpen, setIsOpen] = useState(false);
     const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
@@ -126,7 +130,7 @@ export function MultiSelect({ options, values, onChange, placeholder, ariaLabel,
                     aria-controls={listboxId}
                     aria-label={ariaLabel}
                     title={ariaLabel}
-                    className={`${triggerClassName} flex cursor-pointer items-center ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+                    className={`${triggerClassName ?? defaultTriggerClassName} flex cursor-pointer items-center ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
                     onClick={open}
                     onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") open();
@@ -134,7 +138,7 @@ export function MultiSelect({ options, values, onChange, placeholder, ariaLabel,
                     tabIndex={disabled ? -1 : 0}
                 >
                     <span className={`flex-1 truncate ${values.length === 0 ? "text-[#8a8f94]" : ""}`}>
-                        {values.length === 0 ? placeholder : `Đã chọn ${values.length} mục`}
+                        {values.length === 0 ? placeholder : t("selectedCount", { count: values.length })}
                     </span>
                     <ChevronDown
                         className={`pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8a8f94] transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
@@ -167,7 +171,7 @@ export function MultiSelect({ options, values, onChange, placeholder, ariaLabel,
                                         e.stopPropagation();
                                         close();
                                     }}
-                                    placeholder="Tìm kiếm…"
+                                    placeholder={t("searchEllipsis")}
                                     className="h-8 w-full rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                                 />
                             </div>
@@ -178,7 +182,7 @@ export function MultiSelect({ options, values, onChange, placeholder, ariaLabel,
                                     onMouseDown={() => onChange([])}
                                     className="flex w-full shrink-0 items-center gap-2 border-b border-[#f1f5f9] px-3 py-2 text-left text-xs text-[#8a8f94] transition-colors hover:bg-[#f8fafc]"
                                 >
-                                    <X size={11} /> Bỏ chọn tất cả
+                                    <X size={11} /> {t("clearAllSelection")}
                                 </button>
                             )}
 
@@ -240,7 +244,7 @@ export function MultiSelect({ options, values, onChange, placeholder, ariaLabel,
                                 onClick={() => toggle(opt.value)}
                                 disabled={disabled}
                                 className="cursor-pointer text-[#5e3f3a] transition hover:text-[#e3000f] disabled:cursor-not-allowed"
-                                aria-label={`Bỏ ${opt.label}`}
+                                aria-label={t("removeItem", { label: opt.label })}
                             >
                                 <X size={12} />
                             </button>

@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { sortByLabel } from "@/lib/sort-options";
 import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 const inputClassName =
     "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
@@ -21,7 +22,7 @@ interface SearchableSelectProps {
     options: SelectOption[];
     value: number | "";
     onChange: (v: number | "") => void;
-    placeholder: string;
+    placeholder?: string;
     /** Field name for screen readers and hover when no visible label sits above. */
     ariaLabel?: string;
     disabled?: boolean;
@@ -38,7 +39,8 @@ interface PanelPosition {
     maxHeight: number;
 }
 
-export function SearchableSelect({ options, value, onChange, placeholder, ariaLabel, disabled, triggerClassName, onQueryChange }: SearchableSelectProps) {
+export function SearchableSelect({ options, value, onChange, placeholder = "", ariaLabel, disabled, triggerClassName, onQueryChange }: SearchableSelectProps) {
+    const t = useTranslations("Common");
     const [query, setQueryState] = useState("");
     // Ref keeps the callback out of close()'s identity, which the outside-click effect depends on.
     const onQueryChangeRef = useRef(onQueryChange);
@@ -181,7 +183,7 @@ export function SearchableSelect({ options, value, onChange, placeholder, ariaLa
                                     if (e.key === "Escape") close();
                                     if (e.key === "Enter" && filtered.length === 1) selectOption(filtered[0].value);
                                 }}
-                                placeholder="Tìm kiếm…"
+                                placeholder={t("searchEllipsis")}
                                 className="h-8 w-full rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                             />
                         </div>
@@ -191,7 +193,7 @@ export function SearchableSelect({ options, value, onChange, placeholder, ariaLa
                                 onMouseDown={() => selectOption("")}
                                 className="flex w-full shrink-0 items-center gap-2 border-b border-[#f1f5f9] px-3 py-2 text-left text-xs text-[#8a8f94] transition-colors hover:bg-[#f8fafc]"
                             >
-                                <X size={11} /> Bỏ chọn
+                                <X size={11} /> {t("clearSelection")}
                             </button>
                         )}
 

@@ -223,12 +223,15 @@ namespace Attendance.Application.Services
                     YearToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    GroupNameJp = x.Group != null ? x.Group.GroupNameJp : null,
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Group != null ? x.Group.Department.DepartmentNameVn : x.Department != null ? x.Department.DepartmentNameVn : null,
+                    DepartmentNameJp = x.Group != null ? x.Group.Department.DepartmentNameJp : x.Department != null ? x.Department.DepartmentNameJp : null,
                     JobTitleId = x.JobTitleId,
                     JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
                     WorkshopId = x.Group != null ? x.Group.WorkshopId : (int?)null,
                     WorkshopNameVn = x.Group != null ? x.Group.Workshop.WorkshopNameVn : null,
+                    WorkshopNameJp = x.Group != null ? x.Group.Workshop.WorkshopNameJp : null,
                     ApprovalScopes = x.ApprovalScopes.Select(s => new EmployeeApprovalScopeDto
                     {
                         WorkshopId = s.WorkshopId,
@@ -296,12 +299,15 @@ namespace Attendance.Application.Services
                     YearToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    GroupNameJp = x.Group != null ? x.Group.GroupNameJp : null,
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
+                    DepartmentNameJp = x.Department != null ? x.Department.DepartmentNameJp : null,
                     JobTitleId = x.JobTitleId,
                     JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
                     WorkshopId = x.Group != null ? x.Group.WorkshopId : (int?)null,
                     WorkshopNameVn = x.Group != null ? x.Group.Workshop.WorkshopNameVn : null,
+                    WorkshopNameJp = x.Group != null ? x.Group.Workshop.WorkshopNameJp : null,
                     ApprovalScopes = x.ApprovalScopes.Select(s => new EmployeeApprovalScopeDto
                     {
                         WorkshopId = s.WorkshopId,
@@ -379,12 +385,15 @@ namespace Attendance.Application.Services
                     YearToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    GroupNameJp = x.Group != null ? x.Group.GroupNameJp : null,
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
+                    DepartmentNameJp = x.Department != null ? x.Department.DepartmentNameJp : null,
                     JobTitleId = x.JobTitleId,
                     JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
                     WorkshopId = x.Group != null ? x.Group.WorkshopId : (int?)null,
                     WorkshopNameVn = x.Group != null ? x.Group.Workshop.WorkshopNameVn : null,
+                    WorkshopNameJp = x.Group != null ? x.Group.Workshop.WorkshopNameJp : null,
                     ApprovalScopes = x.ApprovalScopes.Select(s => new EmployeeApprovalScopeDto
                     {
                         WorkshopId = s.WorkshopId,
@@ -434,12 +443,15 @@ namespace Attendance.Application.Services
                     YearToDate = x.EmployeeAccumulationHistories.Where(h => h.Year == todayYear && h.Month <= todayMonth).Sum(h => (decimal?)h.TotalHours) ?? 0m,
                     GroupId = x.GroupId,
                     GroupNameVn = x.Group != null ? x.Group.GroupNameVn : null,
+                    GroupNameJp = x.Group != null ? x.Group.GroupNameJp : null,
                     DepartmentId = x.DepartmentId,
                     DepartmentNameVn = x.Department != null ? x.Department.DepartmentNameVn : null,
+                    DepartmentNameJp = x.Department != null ? x.Department.DepartmentNameJp : null,
                     JobTitleId = x.JobTitleId,
                     JobTitleName = x.JobTitle != null ? x.JobTitle.Name : null,
                     WorkshopId = x.Group != null ? x.Group.WorkshopId : (int?)null,
                     WorkshopNameVn = x.Group != null ? x.Group.Workshop.WorkshopNameVn : null,
+                    WorkshopNameJp = x.Group != null ? x.Group.Workshop.WorkshopNameJp : null,
                     ApprovalScopes = x.ApprovalScopes.Select(s => new EmployeeApprovalScopeDto
                     {
                         WorkshopId = s.WorkshopId,
@@ -717,9 +729,10 @@ namespace Attendance.Application.Services
             if (dto.GroupId.HasValue)
             {
                 var groupId = dto.GroupId.Value;
-                var info = (await _unitOfWork.Groups.SelectAsync(x => x.Id == groupId, x => new { x.WorkshopId, x.Workshop.WorkshopNameVn })).FirstOrDefault();
+                var info = (await _unitOfWork.Groups.SelectAsync(x => x.Id == groupId, x => new { x.WorkshopId, x.Workshop.WorkshopNameVn, x.Workshop.WorkshopNameJp })).FirstOrDefault();
                 dto.WorkshopId = info?.WorkshopId;
                 dto.WorkshopNameVn = info?.WorkshopNameVn;
+                dto.WorkshopNameJp = info?.WorkshopNameJp;
             }
 
             dto.ApprovalScopes = (await _unitOfWork.EmployeeApprovalScopes.SelectAsync(
@@ -751,8 +764,10 @@ namespace Attendance.Application.Services
                 YearToDate = yearToDate,
                 GroupId = employee.GroupId,
                 GroupNameVn = employee.Group?.GroupNameVn,
+                GroupNameJp = employee.Group?.GroupNameJp,
                 DepartmentId = employee.DepartmentId,
                 DepartmentNameVn = employee.Department?.DepartmentNameVn,
+                DepartmentNameJp = employee.Department?.DepartmentNameJp,
                 JobTitleId = employee.JobTitleId,
                 JobTitleName = employee.JobTitle?.Name,
                 CustomMonthlyOtHourLimit = employee.CustomMonthlyOtHourLimit,
@@ -781,8 +796,10 @@ namespace Attendance.Application.Services
                 YearToDate = yearToDate,
                 GroupId = employee.GroupId,
                 GroupNameVn = employee.Group?.GroupNameVn,
+                GroupNameJp = employee.Group?.GroupNameJp,
                 DepartmentId = employee.DepartmentId,
                 DepartmentNameVn = employee.Department?.DepartmentNameVn,
+                DepartmentNameJp = employee.Department?.DepartmentNameJp,
                 JobTitleId = employee.JobTitleId,
                 JobTitleName = employee.JobTitle?.Name,
                 CustomMonthlyOtHourLimit = employee.CustomMonthlyOtHourLimit,

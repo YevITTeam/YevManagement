@@ -329,7 +329,9 @@ export interface OtFormPaperScanListItemDto extends OtFormPaperScanDto {
     endTime: string;
     otCaseCode: string;
     departmentNameVn: string;
+    departmentNameJp: string | null;
     groupNameVn: string | null;
+    groupNameJp: string | null;
 }
 
 export interface ReviewOtFormPaperScanDto {

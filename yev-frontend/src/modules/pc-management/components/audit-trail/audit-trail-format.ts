@@ -1,10 +1,9 @@
-// Shared by AuditTrailList and DeviceAuditHistoryPanel.
-export const auditActionLabels: Record<string, string> = {
-    Create: "Tạo mới",
-    Update: "Cập nhật",
-    Delete: "Xoá",
-    Restore: "Khôi phục",
-};
+// Shared by AuditTrailList and DeviceAuditHistoryPanel; labels live under Asset.AuditTrail.action<Name>.
+export const auditActions = ["Create", "Update", "Delete", "Restore"] as const;
+
+export function auditActionLabel(t: { (key: string): string; has: (key: string) => boolean }, action: string): string {
+    return t.has(`action${action}`) ? t(`action${action}`) : action;
+}
 
 export const auditActionClasses: Record<string, string> = {
     Create: "border border-emerald-200 bg-emerald-50 text-emerald-600",

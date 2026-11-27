@@ -165,7 +165,7 @@ export default function AttendanceAiChatBox() {
             <div className="flex items-center justify-between gap-2 border-b border-[#e0e3e5] px-4 py-2.5">
                 <h1 className="text-sm font-semibold text-[#191c1e]">{t("title")}</h1>
                 <div className="flex items-center gap-1.5">
-                    <ToggleChip checked={thinkEnabled} onChange={(value) => !isStreaming && setThinkEnabled(value)} icon={Brain} label={t("thinkLabel")} title={t("thinkHint")} compact />
+                    <ToggleChip checked={thinkEnabled} onChange={setThinkEnabled} disabled={isStreaming} icon={Brain} label={t("thinkLabel")} title={t("thinkHint")} compact />
                     <IconButton icon={SquarePen} label={t("newChat")} onClick={handleReset} disabled={isEmpty} />
                 </div>
             </div>

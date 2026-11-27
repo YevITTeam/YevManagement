@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 
 interface SecondaryPasswordDialogProps {
     isOpen: boolean;
     title: string;
     label: string;
-    hint: string;
+    hint: ReactNode;
     // true = show the hint as a warning (user has no secondary password yet).
     hintIsWarning?: boolean;
     value: string;

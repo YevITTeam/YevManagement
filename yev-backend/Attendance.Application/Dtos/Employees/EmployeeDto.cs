@@ -22,12 +22,15 @@ namespace Attendance.Application.Dtos.Employees
         // Department Managers use DepartmentId instead; company-wide levels have both null.
         public int? GroupId { get; set; }
         public string? GroupNameVn { get; set; }
+        public string? GroupNameJp { get; set; }
         public int? DepartmentId { get; set; }
         public string? DepartmentNameVn { get; set; }
+        public string? DepartmentNameJp { get; set; }
 
         // Workshop of the employee's group (null for managers — they carry ApprovalScopes instead).
         public int? WorkshopId { get; set; }
         public string? WorkshopNameVn { get; set; }
+        public string? WorkshopNameJp { get; set; }
 
         // (Workshop, Department) pairs a Department Manager approves for.
         public List<EmployeeApprovalScopeDto> ApprovalScopes { get; set; } = new();

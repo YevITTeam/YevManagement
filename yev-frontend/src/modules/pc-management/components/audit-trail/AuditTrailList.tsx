@@ -8,7 +8,7 @@ import { useTranslations } from "next-intl";
 
 import { AuditTrailApi, type GetAuditTrailPageNationParams } from "@/modules/pc-management/api/audit-trail.api";
 import type { AuditTrailDto } from "@/modules/pc-management/types/audit-trail.dto";
-import { auditActionClasses, auditActionLabels } from "./audit-trail-format";
+import { auditActionClasses, auditActionLabel, auditActions } from "./audit-trail-format";
 import AuditTrailDiffView from "./AuditTrailDiffView";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
@@ -175,7 +175,7 @@ export default function AuditTrailList({
                             value={action}
                             onChange={setAction}
                             triggerClassName={`${fieldClassName} pr-8`}
-                            options={[{ value: "", label: t("allActions") }, ...Object.entries(auditActionLabels).map(([value, label]) => ({ value, label }))]}
+                            options={[{ value: "", label: t("allActions") }, ...auditActions.map((value) => ({ value, label: auditActionLabel(t, value) }))]}
                         />
                     </label>
                     <label className="block">
@@ -263,7 +263,7 @@ export default function AuditTrailList({
                                             <span
                                                 className={`inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${auditActionClasses[row.action] ?? "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"}`}
                                             >
-                                                {auditActionLabels[row.action] ?? row.action}
+                                                {auditActionLabel(t, row.action)}
                                             </span>
                                         </td>
                                         <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.changedBy}</td>

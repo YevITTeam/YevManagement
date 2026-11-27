@@ -8,6 +8,8 @@ namespace Attendance.Application.Dtos.OtForms
         public TimeOnly EndTime { get; set; }
         public string OtCaseCode { get; set; } = null!;
         public string DepartmentNameVn { get; set; } = null!;
+        public string? DepartmentNameJp { get; set; }
         public string? GroupNameVn { get; set; }
+        public string? GroupNameJp { get; set; }
     }
 }

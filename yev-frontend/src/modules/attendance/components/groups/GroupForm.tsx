@@ -173,7 +173,6 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                                 options={workshopOptions}
                                 value={values.workshopId || ""}
                                 onChange={(v) => setValues((current) => ({ ...current, workshopId: v === "" ? 0 : v }))}
-                                placeholder=""
                                 disabled={loading}
                             />
                         </label>
@@ -184,7 +183,6 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                                 options={departmentOptions}
                                 value={values.departmentId || ""}
                                 onChange={(v) => setValues((current) => ({ ...current, departmentId: v === "" ? 0 : v }))}
-                                placeholder=""
                                 disabled={loading}
                             />
                         </label>
@@ -221,7 +219,6 @@ export default function GroupForm({ isOpen, mode, initial, loading = false, onCl
                                     options={lineOptions}
                                     value={newLineId}
                                     onChange={setNewLineId}
-                                    placeholder=""
                                     disabled={loading || !values.workshopId}
                                 />
                             </label>

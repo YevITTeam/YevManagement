@@ -23,6 +23,7 @@ const iconButtonVariants = {
 export function IconButton({
     icon: Icon,
     label,
+    title,
     onClick,
     disabled,
     variant = "default",
@@ -30,6 +31,8 @@ export function IconButton({
 }: {
     icon: LucideIcon;
     label: string;
+    /** Hover text when it should say more than the accessible label (e.g. a file name). */
+    title?: string;
     onClick?: () => void;
     disabled?: boolean;
     variant?: keyof typeof iconButtonVariants;
@@ -40,7 +43,7 @@ export function IconButton({
             type="button"
             onClick={onClick}
             disabled={disabled}
-            title={label}
+            title={title ?? label}
             aria-label={label}
             className={`inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md transition disabled:cursor-not-allowed disabled:opacity-40 ${
                 size === "sm" ? "h-7 w-7" : "h-9 w-9"
@@ -103,6 +106,7 @@ export function ToggleChip({
     label,
     title,
     compact,
+    disabled,
 }: {
     checked: boolean;
     onChange: (checked: boolean) => void;
@@ -110,15 +114,17 @@ export function ToggleChip({
     label: string;
     title?: string;
     compact?: boolean;
+    disabled?: boolean;
 }) {
     return (
         <button
             type="button"
+            disabled={disabled}
             aria-pressed={checked}
             onClick={() => onChange(!checked)}
             title={title ?? label}
             aria-label={label}
-            className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-sm font-medium transition ${
+            className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 checked ? "border-[#e9bcb6] bg-[#fff4f2] text-[#e3000f]" : "border-[#e0e3e5] bg-white text-[#5e3f3a] hover:bg-[#f2f4f6]"
             }`}
         >

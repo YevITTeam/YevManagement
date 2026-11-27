@@ -1,21 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useLocale } from "next-intl";
 import { toast } from "react-toastify";
-import {
-    Bot,
-    Brain,
-    Check,
-    Copy,
-    ExternalLink,
-    RotateCcw,
-    Search,
-    Send,
-    Sparkles,
-    Square,
-    User,
-} from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { Bot, Brain, Check, Copy, ExternalLink, Loader2, Search, Send, Sparkles, Square, SquarePen, User } from "lucide-react";
 
 import { AiChatApi } from "@/modules/ai-chat/api/ai-chat.api";
 import MarkdownMessage from "@/modules/ai-chat/components/MarkdownMessage";
@@ -25,26 +13,12 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useRouter } from "@/navigation";
+import { IconButton, ToggleChip } from "@/components/ui/ListToolbar";
+import { useFitViewport } from "@/components/ui/TableScroll";
 
-// Friendly labels for the BE tool names (AiChatToolDefinitions.cs); keep in sync so labels don't imply
-// capabilities the assistant no longer has.
-const TOOL_LABELS: Record<string, string> = {
-    search_devices: "thiết bị",
-    get_device_detail: "chi tiết thiết bị",
-    search_device_groups: "nhóm thiết bị",
-    search_device_departments: "bộ phận",
-    search_ip_addresses: "địa chỉ IP",
-    search_ip_prefixes: "dải IP",
-    get_ip_prefix_usage: "tình trạng dải IP",
-};
-
-// Each suggestion must be answerable by the tools above with real data (actual machine codes/IP ranges).
-const SUGGESTIONS = [
-    "Dải IP 10.45.1 còn bao nhiêu địa chỉ trống?",
-    "IP 10.45.1.20 có dùng được không, đang được máy nào dùng?",
-    "Các máy ở chi nhánh Dĩ An",
-    "Xem chi tiết cấu hình máy YDC-9875",
-];
+// Tool labels live under AiChat.tool.<BE tool name>; keep in sync with AiChatToolDefinitions.cs.
+// Each suggestion must be answerable by those tools with real data (actual machine codes/IP ranges).
+const SUGGESTION_KEYS = ["suggestion1", "suggestion2", "suggestion3", "suggestion4"] as const;
 
 interface DeviceRef {
     id: number;
@@ -60,13 +34,13 @@ interface ChatBubble extends AiChatMessageDto {
 // React Compiler forbids calling impure Date.now in render, so it is wrapped at module level.
 const now = (): number => Date.now();
 
-const formatTime = (timestamp?: number) =>
-    timestamp ? new Date(timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
-
 export default function AiChatBox() {
+    const t = useTranslations("Asset.AiChat");
+    const locale = useLocale();
+    const rootRef = useRef<HTMLDivElement>(null);
+    const fitHeight = useFitViewport(rootRef);
     const { user } = useAuth();
     const canViewDevice = hasPermission(user, "Asset.Device.View");
-    const locale = useLocale();
 
     const [messages, setMessages] = useState<ChatBubble[]>([]);
     const [input, setInput] = useState("");
@@ -133,7 +107,7 @@ export default function AiChatBox() {
                     }
                 } else if (event.type === "error") {
                     failed = true;
-                    toast.error(event.message || "AI gặp lỗi khi trả lời.");
+                    toast.error(event.message || t("answerError"));
                     break;
                 } else if (event.type === "done") {
                     break;
@@ -143,12 +117,7 @@ export default function AiChatBox() {
             // User "Stop" also lands here and isn't an error. 403 bodies have no `message`, so the fallback must cover it.
             if (!controller.signal.aborted) {
                 failed = true;
-                toast.error(
-                    getApiErrorMessage(
-                        error,
-                        "Không gọi được trợ lý AI. Kiểm tra quyền truy cập hoặc kết nối tới máy chủ AI."
-                    )
-                );
+                toast.error(getApiErrorMessage(error, t("connectError")));
             }
         } finally {
             abortRef.current = null;
@@ -166,7 +135,7 @@ export default function AiChatBox() {
                     },
                 ]);
             } else if (!failed && !controller.signal.aborted) {
-                toast.info("AI không trả về nội dung nào cho câu hỏi này.");
+                toast.info(t("emptyAnswer"));
             }
 
             setStreamingText("");
@@ -191,70 +160,26 @@ export default function AiChatBox() {
     };
 
     const isEmpty = messages.length === 0 && !isStreaming;
+    const toolLabel = (name: string) => (t.has(`tool.${name}`) ? t(`tool.${name}`) : name);
 
     return (
-        <div className="flex h-[calc(100vh-9rem)] flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0e3e5] px-5 py-3">
-                <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#fff4f2]">
-                        <Bot className="h-5 w-5 text-[#e3000f]" />
-                    </div>
-                    <div>
-                        <h1 className="text-sm font-semibold text-[#191c1e]">Trợ lý AI</h1>
-                        <p className="text-xs text-[#8a8f94]">
-                            Hỏi bằng tiếng Việt về thiết bị, IP, phần mềm, chi nhánh…
-                        </p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        aria-pressed={thinkEnabled}
-                        disabled={isStreaming}
-                        onClick={() => setThinkEnabled((prev) => !prev)}
-                        title="Bật để AI suy luận kỹ hơn trước khi trả lời — chính xác hơn với câu hỏi phức tạp nhưng chậm hơn nhiều (khoảng 2-3 giây so với 15-20 giây)."
-                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${thinkEnabled
-                            ? "border-[#e3000f] bg-[#fff4f2] text-[#e3000f]"
-                            : "border-[#e0e3e5] text-[#5e3f3a] hover:bg-[#f8fafc]"
-                            }`}
-                    >
-                        <Brain className="h-3.5 w-3.5" />
-                        Suy luận sâu
-                        <span
-                            className={`ml-0.5 inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${thinkEnabled ? "bg-[#e3000f]" : "bg-[#e0e3e5]"
-                                }`}
-                        >
-                            <span
-                                className={`h-3 w-3 rounded-full bg-white shadow transition-transform ${thinkEnabled ? "translate-x-3.5" : "translate-x-0.5"
-                                    }`}
-                            />
-                        </span>
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={handleReset}
-                        disabled={isEmpty}
-                        className="flex items-center gap-1.5 rounded-lg border border-[#e0e3e5] px-3 py-1.5 text-xs font-medium text-[#5e3f3a] transition hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        Hội thoại mới
-                    </button>
+        // Desktop height is the space left in <main>; phones keep page scrolling with a fixed-height box.
+        <div ref={rootRef} style={{ height: fitHeight }} className="flex h-[75svh] flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-2 border-b border-[#e0e3e5] px-4 py-2.5">
+                <h1 className="text-sm font-semibold text-[#191c1e]">{t("title")}</h1>
+                <div className="flex items-center gap-1.5">
+                    <ToggleChip checked={thinkEnabled} onChange={setThinkEnabled} disabled={isStreaming} icon={Brain} label={t("thinkLabel")} title={t("thinkHint")} compact />
+                    <IconButton icon={SquarePen} label={t("newChat")} onClick={handleReset} disabled={isEmpty} />
                 </div>
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
                 {isEmpty ? (
                     <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#fff4f2]">
-                            <Bot className="h-8 w-8 text-[#e3000f]" />
-                        </div>
-                        <p className="max-w-md text-sm text-[#5e3f3a]">
-                            Đặt câu hỏi về dữ liệu quản lý PC. Trợ lý sẽ tự tra cứu trong hệ thống rồi trả lời.
-                        </p>
+                        <Bot className="h-8 w-8 text-[#e3000f]" />
+                        <p className="max-w-md text-sm text-[#5e3f3a]">{t("emptyHint")}</p>
                         <div className="grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">
-                            {SUGGESTIONS.map((suggestion) => (
+                            {SUGGESTION_KEYS.map((key) => t(key)).map((suggestion) => (
                                 <button
                                     key={suggestion}
                                     type="button"
@@ -276,7 +201,7 @@ export default function AiChatBox() {
                 {activeTools.length > 0 && (
                     <div className="flex items-center gap-2 text-xs text-[#5e3f3a]">
                         <Search className="h-3.5 w-3.5 animate-pulse text-[#e3000f]" />
-                        Đang tra cứu {activeTools.map((name) => TOOL_LABELS[name] ?? name).join(", ")}…
+                        {t("processing", { tools: activeTools.map(toolLabel).join(", ") })}
                     </div>
                 )}
 
@@ -289,13 +214,16 @@ export default function AiChatBox() {
                 )}
 
                 {isStreaming && !streamingText && activeTools.length === 0 && (
-                    <p className="text-xs text-[#8a8f94]">Trợ lý đang soạn câu trả lời…</p>
+                    <p className="flex items-center gap-1.5 text-xs text-[#8a8f94]">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        {t("composing")}
+                    </p>
                 )}
 
                 <div ref={bottomRef} />
             </div>
 
-            <form onSubmit={handleSubmit} className="border-t border-[#e0e3e5] px-5 py-3">
+            <form onSubmit={handleSubmit} className="border-t border-[#e0e3e5] px-4 py-2.5">
                 <div className="flex items-end gap-2">
                     <textarea
                         value={input}
@@ -307,27 +235,23 @@ export default function AiChatBox() {
                             }
                         }}
                         rows={2}
-                        placeholder="Nhập câu hỏi… (Enter để gửi, Shift+Enter để xuống dòng)"
-                        className="flex-1 resize-none rounded-lg border border-[#e0e3e5] px-3 py-2 text-sm text-[#191c1e] outline-none focus:border-[#e3000f]"
+                        placeholder={t("inputPlaceholder")}
+                        title={t("inputHint")}
+                        aria-label={t("inputPlaceholder")}
+                        className="flex-1 resize-none rounded-lg border border-[#e0e3e5] px-3 py-2 text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                     />
 
                     {isStreaming ? (
-                        <button
-                            type="button"
-                            onClick={() => abortRef.current?.abort()}
-                            className="flex items-center gap-1.5 rounded-lg border border-[#e0e3e5] px-4 py-2 text-sm font-semibold text-[#5e3f3a] transition hover:bg-[#f8fafc]"
-                        >
-                            <Square className="h-3.5 w-3.5" />
-                            Dừng
-                        </button>
+                        <IconButton icon={Square} label={t("stop")} onClick={() => abortRef.current?.abort()} />
                     ) : (
                         <button
                             type="submit"
                             disabled={!input.trim()}
-                            className="flex items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            title={t("send")}
+                            aria-label={t("send")}
+                            className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md bg-[#e3000f] text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                            <Send className="h-3.5 w-3.5" />
-                            Gửi
+                            <Send className="h-4 w-4" />
                         </button>
                     )}
                 </div>
@@ -345,6 +269,8 @@ function MessageRow({
     canViewDevice: boolean;
     isLive?: boolean;
 }) {
+    const t = useTranslations("Asset.AiChat");
+    const locale = useLocale();
     const router = useRouter();
     const isUser = message.role === "user";
     const [copied, setCopied] = useState(false);
@@ -355,7 +281,7 @@ function MessageRow({
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
         } catch {
-            toast.error("Không thể sao chép nội dung.");
+            toast.error(t("copyError"));
         }
     };
 
@@ -385,13 +311,14 @@ function MessageRow({
                             <button
                                 type="button"
                                 onClick={() => void handleCopy()}
-                                className="flex items-center gap-1 transition hover:text-[#5e3f3a]"
+                                title={copied ? t("copied") : t("copy")}
+                                aria-label={copied ? t("copied") : t("copy")}
+                                className="flex cursor-pointer items-center rounded p-0.5 transition hover:text-[#5e3f3a]"
                             >
-                                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                                {copied ? "Đã chép" : "Sao chép"}
+                                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                             </button>
                         )}
-                        <span>{formatTime(message.timestamp)}</span>
+                        <span>{message.timestamp ? new Date(message.timestamp).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) : ""}</span>
                     </div>
                 )}
 
@@ -402,10 +329,11 @@ function MessageRow({
                                 key={ref.id}
                                 type="button"
                                 onClick={() => router.push({ pathname: "/pc/devices", query: { id: String(ref.id) } })}
-                                className="flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-1 text-[11px] font-medium text-[#5e3f3a] transition hover:border-[#e3000f] hover:text-[#e3000f]"
+                                title={t("openDeviceHint")}
+                                className="flex cursor-pointer items-center gap-1 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-1 text-[11px] font-medium text-[#5e3f3a] transition hover:border-[#e3000f] hover:text-[#e3000f]"
                             >
                                 <ExternalLink className="h-3 w-3" />
-                                Xem chi tiết {ref.deviceCode}
+                                {t("openDevice", { code: ref.deviceCode })}
                             </button>
                         ))}
                     </div>

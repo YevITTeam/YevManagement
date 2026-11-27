@@ -196,7 +196,7 @@ export default function ApprovalDelegationPanel() {
                 ) : items.length > 0 ? (
                     items.map((d) => renderRow(d, nameOf(d)))
                 ) : (
-                    <EmptyState icon={Inbox} title={t("empty")} />
+                    <EmptyState icon={Inbox} title={t("empty")} compact />
                 )}
             </div>
         </section>

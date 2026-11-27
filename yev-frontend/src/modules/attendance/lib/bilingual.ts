@@ -61,3 +61,11 @@ export function bilingualYesNo(value: boolean): string {
 // Literal for the same reason as above: the level label is already bilingual and would be duplicated by t().
 export const removedByLabelBilingual = "Đã bị loại khỏi đơn bởi / 申請から除外した者";
 export const removedReasonLabelBilingual = "Lý do / 理由";
+
+// Name in the current locale (falls back to the other language); the other-language name goes to `title`.
+export function localeName(locale: string, vn: string | null | undefined, jp: string | null | undefined): [string, string | undefined] {
+    const isJa = locale === "ja";
+    const name = (isJa ? jp || vn : vn || jp) || "—";
+    const other = (isJa ? vn : jp) || undefined;
+    return [name, other === name ? undefined : other];
+}

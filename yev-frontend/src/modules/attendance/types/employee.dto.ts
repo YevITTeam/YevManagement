@@ -23,11 +23,14 @@ export interface EmployeeDto {
     // Nullable: Department Managers use departmentId instead; Workshop Manager/Director have neither (company-wide).
     groupId: number | null;
     groupNameVn: string | null;
+    groupNameJp: string | null;
     departmentId: number | null;
     departmentNameVn: string | null;
+    departmentNameJp: string | null;
     // Workshop of the employee's group; null for managers, who carry approvalScopes instead.
     workshopId: number | null;
     workshopNameVn: string | null;
+    workshopNameJp: string | null;
     approvalScopes: EmployeeApprovalScopeDto[];
 
     // null when no job title is assigned.

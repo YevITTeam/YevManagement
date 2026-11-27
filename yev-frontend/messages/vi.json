@@ -31,7 +31,12 @@
     "dateRange": "Khoảng ngày",
     "export": "Xuất Excel",
     "import": "Import",
-    "downloadTemplate": "Tải file mẫu"
+    "downloadTemplate": "Tải file mẫu",
+    "searchEllipsis": "Tìm kiếm…",
+    "selectedCount": "Đã chọn {count} mục",
+    "clearSelection": "Bỏ chọn",
+    "clearAllSelection": "Bỏ chọn tất cả",
+    "removeItem": "Bỏ {label}"
   },
   "Login": {
     "title": "Đăng nhập",
@@ -1110,7 +1115,7 @@
       "secondaryPasswordLabel": "Mật khẩu cấp 2",
       "secondaryPasswordMissingError": "Bạn chưa thiết lập mật khẩu cấp 2 — vào \"Mật khẩu cấp 2\" để thiết lập trước khi lưu đơn.",
       "secondaryPasswordRequiredError": "Vui lòng nhập mật khẩu cấp 2.",
-      "secondaryPasswordMissingHint": "Chưa có mật khẩu cấp 2 — thiết lập ở mục \"Mật khẩu cấp 2\".",
+      "secondaryPasswordMissingHint": "Chưa có mật khẩu cấp 2.",
       "removeEmployeeButton": "Không phê duyệt nhân viên",
       "willBeRemovedNote": "loại khi lưu: {reason}",
       "willBeRemovedNoteNoReason": "loại khi lưu",
@@ -1146,7 +1151,8 @@
       "nextDayHint": "Sang ngày hôm sau",
       "colTime": "Giờ",
       "ateLaterHint": "Ăn sau: không trừ giờ nghỉ ăn",
-      "removeFromFormButton": "Bỏ khỏi đơn"
+      "removeFromFormButton": "Bỏ khỏi đơn",
+      "setupLink": "Thiết lập"
     },
     "OtFormPrint": {
       "loadError": "Không thể tải đơn tăng ca để in.",
@@ -1614,7 +1620,8 @@
       "moveMemberSuccess": "Chuyển nhân sự thành công",
       "moveMemberError": "Chuyển nhân sự thất bại",
       "treeMemberNoJobTitle": "Không chức danh",
-      "chartNoPeople": "Chưa có nhân sự nào được gán vào đơn vị"
+      "chartNoPeople": "Chưa có nhân sự nào được gán vào đơn vị",
+      "clearSearch": "Xoá tìm kiếm"
     },
     "JobTitle": {
       "title": "Chức danh",
@@ -2626,7 +2633,48 @@
       "colTime": "Thời gian",
       "colDetail": "Chi tiết",
       "view": "Xem",
-      "hide": "Ẩn"
+      "hide": "Ẩn",
+      "actionCreate": "Tạo mới",
+      "actionUpdate": "Cập nhật",
+      "actionDelete": "Xoá",
+      "actionRestore": "Khôi phục",
+      "historyLoadError": "Không thể tải lịch sử thao tác.",
+      "historyLoading": "Đang tải lịch sử...",
+      "historyEmpty": "Chưa có lịch sử thao tác nào."
+    },
+    "AiChat": {
+      "title": "Trợ lý AI",
+      "thinkLabel": "Suy luận sâu",
+      "thinkHint": "Suy luận sâu: chính xác hơn với câu hỏi phức tạp nhưng chậm hơn nhiều",
+      "newChat": "Hội thoại mới",
+      "emptyHint": "Hỏi về thiết bị, IP, phần mềm, chi nhánh…",
+      "suggestion1": "Dải IP 10.45.1 còn bao nhiêu địa chỉ trống?",
+      "suggestion2": "IP 10.45.1.20 có dùng được không, đang được máy nào dùng?",
+      "suggestion3": "Các máy ở chi nhánh Dĩ An",
+      "suggestion4": "Xem chi tiết cấu hình máy YDC-9875",
+      "tool": {
+        "search_devices": "thiết bị",
+        "get_device_detail": "chi tiết thiết bị",
+        "search_device_groups": "nhóm thiết bị",
+        "search_device_departments": "bộ phận",
+        "search_ip_addresses": "địa chỉ IP",
+        "search_ip_prefixes": "dải IP",
+        "get_ip_prefix_usage": "tình trạng dải IP"
+      },
+      "processing": "Đang tra cứu {tools}…",
+      "composing": "Đang soạn…",
+      "inputPlaceholder": "Nhập câu hỏi…",
+      "inputHint": "Enter để gửi, Shift+Enter để xuống dòng",
+      "stop": "Dừng",
+      "send": "Gửi",
+      "copy": "Sao chép",
+      "copied": "Đã chép",
+      "openDevice": "{code}",
+      "openDeviceHint": "Xem chi tiết thiết bị",
+      "answerError": "AI gặp lỗi khi trả lời.",
+      "connectError": "Không gọi được trợ lý AI (quyền hoặc kết nối).",
+      "emptyAnswer": "AI không trả về nội dung nào cho câu hỏi này.",
+      "copyError": "Không thể sao chép nội dung."
     }
   },
   "Guide": {

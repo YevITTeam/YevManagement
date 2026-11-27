@@ -504,7 +504,6 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                                         options={filteredGroupOptions}
                                         value={values.groupId ?? ""}
                                         onChange={handleGroupChange}
-                                        placeholder=""
                                         disabled={loading}
                                         triggerClassName={selectTriggerClassName}
                                     />
@@ -527,7 +526,6 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                                             options={lineOptions}
                                             value={values.productionLineId ?? ""}
                                             onChange={(v) => v !== "" && pickPair(v, values.shiftTeamId)}
-                                            placeholder=""
                                             disabled={loading}
                                             triggerClassName={selectTriggerClassName}
                                         />

@@ -17,6 +17,7 @@ import { TimeRange } from "@/modules/attendance/components/ot-form/TimeRange";
 import { openPaperScan } from "@/modules/attendance/lib/paperScan";
 import type { OtFormPaperScanListItemDto } from "@/modules/attendance/types/ot-form.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { localeName } from "@/modules/attendance/lib/bilingual";
 import { Link } from "@/navigation";
 
 type StatusKey = "0" | "1" | "2";
@@ -141,8 +142,14 @@ export default function PaperScanReviewPage() {
                                             </div>
                                         </td>
                                         <td className="px-4 py-2.5 leading-5 text-[#191c1e]">
-                                            <div>{item.departmentNameVn}</div>
-                                            {item.groupNameVn && <div className="text-xs text-[#5e3f3a]">{item.groupNameVn}</div>}
+                                            <div title={localeName(locale, item.departmentNameVn, item.departmentNameJp)[1]}>
+                                                {localeName(locale, item.departmentNameVn, item.departmentNameJp)[0]}
+                                            </div>
+                                            {item.groupNameVn && (
+                                                <div className="text-xs text-[#5e3f3a]" title={localeName(locale, item.groupNameVn, item.groupNameJp)[1]}>
+                                                    {localeName(locale, item.groupNameVn, item.groupNameJp)[0]}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-4 py-2.5 text-[#5e3f3a]">{item.otCaseCode}</td>
                                         <td className="whitespace-nowrap px-4 py-2.5 text-[#191c1e]">
@@ -152,15 +159,13 @@ export default function PaperScanReviewPage() {
                                             </div>
                                         </td>
                                         <td className="px-4 py-2.5">
-                                            <button
-                                                type="button"
+                                            <IconButton
+                                                icon={FileText}
+                                                label={t("viewFile")}
                                                 title={item.fileName}
-                                                aria-label={t("viewFile")}
                                                 onClick={() => openPaperScan(item.otFormId, t("openError"))}
-                                                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                            >
-                                                <FileText className="h-3.5 w-3.5" />
-                                            </button>
+                                                size="sm"
+                                            />
                                         </td>
                                         <td className="px-4 py-2.5">
                                             {isPending ? (

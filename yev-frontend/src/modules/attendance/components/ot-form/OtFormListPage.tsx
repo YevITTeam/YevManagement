@@ -32,17 +32,10 @@ import { TableScroll } from "@/components/ui/TableScroll";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/common/EmptyState";
 import { DateRange, ErrorBar, FilterActions, ListToolbar, TableStatusRows, fieldClassName, theadRowClassName } from "@/components/ui/ListToolbar";
+import { localeName } from "@/modules/attendance/lib/bilingual";
 
 const PAGE_SIZE = 10;
 const advancedTriggerClassName = `${fieldClassName} w-44 pr-8`;
-
-// Name in the current locale (falls back to the other language); the other-language name goes to `title`.
-function localeName(locale: string, vn: string | null | undefined, jp: string | null | undefined): [string, string | undefined] {
-    const isJa = locale === "ja";
-    const name = (isJa ? jp || vn : vn || jp) || "—";
-    const other = (isJa ? vn : jp) || undefined;
-    return [name, other === name ? undefined : other];
-}
 
 function toDateStr(d: Date): string {
     const year = d.getFullYear();

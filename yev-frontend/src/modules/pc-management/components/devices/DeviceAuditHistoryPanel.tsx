@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { AuditTrailApi } from "@/modules/pc-management/api/audit-trail.api";
 import type { AuditTrailDto } from "@/modules/pc-management/types/audit-trail.dto";
-import { auditActionClasses, auditActionLabels } from "@/modules/pc-management/components/audit-trail/audit-trail-format";
+import { auditActionClasses, auditActionLabel } from "@/modules/pc-management/components/audit-trail/audit-trail-format";
 import AuditTrailDiffView from "@/modules/pc-management/components/audit-trail/AuditTrailDiffView";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 
@@ -19,19 +20,20 @@ function formatDateTime(value: string) {
 
 // Device History tab: unpaged, newest first.
 export default function DeviceAuditHistoryPanel({ deviceId }: DeviceAuditHistoryPanelProps) {
+    const t = useTranslations("Asset.AuditTrail");
     const [rows, setRows] = useState<AuditTrailDto[]>([]);
 
     const { isLoading, error } = useFetchEffect(
         () => AuditTrailApi.getAuditTrailByRecord("Device", deviceId),
         [deviceId],
         (data) => setRows(data),
-        "Không thể tải lịch sử thao tác.",
+        t("historyLoadError"),
         undefined,
         "device-audit-history"
     );
 
     if (isLoading) {
-        return <div className="rounded-xl border border-[#e0e3e5] bg-white p-6 text-sm text-[#5e3f3a]">Đang tải lịch sử...</div>;
+        return <div className="rounded-xl border border-[#e0e3e5] bg-white p-6 text-sm text-[#5e3f3a]">{t("historyLoading")}</div>;
     }
 
     if (error) {
@@ -39,7 +41,7 @@ export default function DeviceAuditHistoryPanel({ deviceId }: DeviceAuditHistory
     }
 
     if (rows.length === 0) {
-        return <div className="rounded-xl border border-[#e0e3e5] bg-white p-6 text-sm text-[#5e3f3a]">Chưa có lịch sử thao tác nào.</div>;
+        return <div className="rounded-xl border border-[#e0e3e5] bg-white p-6 text-sm text-[#5e3f3a]">{t("historyEmpty")}</div>;
     }
 
     return (
@@ -51,7 +53,7 @@ export default function DeviceAuditHistoryPanel({ deviceId }: DeviceAuditHistory
                             <span
                                 className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${auditActionClasses[row.action] ?? "border border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"}`}
                             >
-                                {auditActionLabels[row.action] ?? row.action}
+                                {auditActionLabel(t, row.action)}
                             </span>
                             <span className="text-sm font-semibold text-[#191c1e]">{row.recordName}</span>
                             {row.affectedCount > 1 && (
