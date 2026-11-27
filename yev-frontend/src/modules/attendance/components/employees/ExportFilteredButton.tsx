@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileDown } from "lucide-react";
+import { FileDown, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -35,15 +35,17 @@ export default function ExportFilteredButton({ download, fallbackFileName }: Exp
         }
     };
 
+    const Icon = isExporting ? Loader2 : FileDown;
     return (
         <button
             type="button"
             onClick={handleExport}
             disabled={isExporting}
             title={t("exportFilteredHint")}
-            className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={t("exportFilteredButton")}
+            className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-40"
         >
-            <FileDown className="h-3.5 w-3.5" /> {isExporting ? t("exportFilteredBusy") : t("exportFilteredButton")}
+            <Icon className={`h-4 w-4 ${isExporting ? "animate-spin" : ""}`} />
         </button>
     );
 }

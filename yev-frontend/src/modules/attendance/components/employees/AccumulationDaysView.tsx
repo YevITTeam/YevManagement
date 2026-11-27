@@ -4,6 +4,8 @@ import { useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { ArrowLeft } from "lucide-react";
+import { IconButton } from "@/components/ui/ListToolbar";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeAccumulationDayDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
@@ -21,7 +23,6 @@ interface AccumulationDaysViewProps {
 // Daily OT hours of one month as a Monday-first calendar, opened from a month cell of AccumulationHistoryTable.
 export default function AccumulationDaysView({ employeeId, year, month, monthTotalHours, canEdit, onBack }: AccumulationDaysViewProps) {
     const t = useTranslations("Attendance.AccumulationHistory");
-    const tCommon = useTranslations("Common");
     const [days, setDays] = useState<EmployeeAccumulationDayDto[]>([]);
 
     const { isLoading, error } = useFetchEffect(
@@ -41,19 +42,16 @@ export default function AccumulationDaysView({ employeeId, year, month, monthTot
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                >
-                    <ArrowLeft className="h-4 w-4" />
-                    {t("daysBack")}
-                </button>
+                <IconButton icon={ArrowLeft} label={t("daysBack")} onClick={onBack} variant="ghost" />
                 <span className="text-sm font-semibold text-[#191c1e]">{t("daysTitle", { month, year })}</span>
             </div>
 
             {isLoading ? (
-                <div className="py-8 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
+                <div className="grid grid-cols-7 gap-1.5">
+                    {Array.from({ length: 35 }, (_, i) => (
+                        <Skeleton key={i} className="h-10 w-full" />
+                    ))}
+                </div>
             ) : error ? (
                 <div className="py-8 text-center text-sm text-[#930006]">{error}</div>
             ) : (
@@ -75,7 +73,7 @@ export default function AccumulationDaysView({ employeeId, year, month, monthTot
                             return (
                                 <div key={day} className="rounded-lg border border-[#e0e3e5] bg-white px-1 py-1 text-center">
                                     <div className="text-[11px] text-[#8a8f94]">{day}</div>
-                                    <div className={`text-sm font-semibold ${hours === 0 ? "text-[#b0b5ba]" : "text-[#191c1e]"}`}>{hours}h</div>
+                                    <div className="h-5 text-sm font-semibold text-[#191c1e]">{hours > 0 && `${hours}h`}</div>
                                 </div>
                             );
                         })}
@@ -88,7 +86,7 @@ export default function AccumulationDaysView({ employeeId, year, month, monthTot
                         </div>
                         {otherHours !== 0 && (
                             <div className="mt-1 flex items-center justify-between text-xs text-[#5e3f3a]">
-                                <span>{t("daysOther")}</span>
+                                <span title={t("daysOtherHint")}>{t("daysOther")}</span>
                                 <span className="font-semibold">{otherHours}h</span>
                             </div>
                         )}

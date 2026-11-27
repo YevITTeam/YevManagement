@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
+import { Skeleton } from "@/components/ui/Skeleton";
 import SignatureUpload from "@/modules/attendance/components/signature/SignatureUpload";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
@@ -16,7 +17,7 @@ interface EmployeeSignatureDialogProps {
     onClose: () => void;
 }
 
-const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+const fieldLabelClassName = "mb-1.5 block text-xs font-medium text-[#5e3f3a]";
 
 export default function EmployeeSignatureDialog({ employee, onClose }: EmployeeSignatureDialogProps) {
     const t = useTranslations("Attendance.Employee");
@@ -64,9 +65,12 @@ export default function EmployeeSignatureDialog({ employee, onClose }: EmployeeS
             <div className="fixed inset-0 bg-black/40" onClick={handleClose} />
             <div role="dialog" aria-modal="true" className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
-                    <h3 className="text-lg font-semibold text-[#191c1e]">
-                        {t("signatureDialogTitle")} — {employee.lastName} {employee.firstName} ({employee.code})
-                    </h3>
+                    <div>
+                        <h3 className="text-lg font-semibold text-[#191c1e]">{t("signatureDialogTitle")}</h3>
+                        <p className="text-sm text-[#5e3f3a]">
+                            {employee.lastName} {employee.firstName} ({employee.code})
+                        </p>
+                    </div>
                     <button
                         type="button"
                         onClick={handleClose}
@@ -81,7 +85,7 @@ export default function EmployeeSignatureDialog({ employee, onClose }: EmployeeS
                     <div>
                         <span className={fieldLabelClassName}>{tSignature("currentSignatureLabel")}</span>
                         {isLoading ? (
-                            <div className="py-6 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
+                            <Skeleton className="h-24 w-full" />
                         ) : current ? (
                             // eslint-disable-next-line @next/next/no-img-element -- base64 data URI
                             <img
@@ -114,7 +118,7 @@ export default function EmployeeSignatureDialog({ employee, onClose }: EmployeeS
                             disabled={isSaving || !draftBase64}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isSaving ? t("saving") : t("updateSubmit")}
+                            {isSaving ? t("saving") : tCommon("save")}
                         </button>
                     </div>
                 </div>

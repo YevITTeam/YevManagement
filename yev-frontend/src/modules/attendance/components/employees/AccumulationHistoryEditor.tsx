@@ -34,6 +34,8 @@ function parseHours(text: string): number | null {
 // opening balance = total − sum of 12 months, which must not go negative.
 export default function AccumulationHistoryEditor({ data, onSaved, onCancel }: AccumulationHistoryEditorProps) {
     const t = useTranslations("Attendance.AccumulationHistory");
+    const tCommon = useTranslations("Common");
+    const tEmployee = useTranslations("Attendance.Employee");
     const [monthTexts, setMonthTexts] = useState<string[]>(() => data.months.map((m) => String(m.totalHours)));
     const [initialBalance, setInitialBalance] = useState(data.initialBalanceHours ?? 0);
     const [yearText, setYearText] = useState(String(data.yearTotalHours));
@@ -80,20 +82,23 @@ export default function AccumulationHistoryEditor({ data, onSaved, onCancel }: A
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-4 py-2.5">
-                <span className="text-sm font-semibold text-[#191c1e]">{t("yearTotalEdit")}</span>
-                <input
-                    inputMode="decimal"
-                    value={yearText}
-                    onChange={(e) => handleYearChange(e.target.value)}
-                    className={inputClass}
-                    aria-label={t("yearTotalEdit")}
-                />
+                <span className="text-sm font-semibold text-[#191c1e]">{t("yearTotalLabel")}</span>
+                <span className="flex items-center gap-1.5">
+                    <input
+                        inputMode="decimal"
+                        value={yearText}
+                        onChange={(e) => handleYearChange(e.target.value)}
+                        className={inputClass}
+                        aria-label={t("yearTotalLabel")}
+                    />
+                    <span className="text-xs text-[#8a8f94]">{tEmployee("unitHour")}</span>
+                </span>
             </div>
             {yearBelowMonths && <p className="text-xs text-[#930006]">{t("invalidYear")}</p>}
             {!monthsValid && <p className="text-xs text-[#930006]">{t("invalidNumber")}</p>}
 
             <div className="flex items-center justify-between px-1 text-xs text-[#5e3f3a]">
-                <span>{t("initialDerived")}</span>
+                <span title={t("initialDerived")}>{t("initialBalanceLabel")}</span>
                 <span className="font-semibold text-[#191c1e]">{round2(initialBalance)}h</span>
             </div>
 
@@ -121,7 +126,7 @@ export default function AccumulationHistoryEditor({ data, onSaved, onCancel }: A
                     disabled={isSaving}
                     className="h-10 cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
                 >
-                    {t("cancel")}
+                    {tCommon("cancel")}
                 </button>
                 <button
                     type="button"
@@ -129,7 +134,7 @@ export default function AccumulationHistoryEditor({ data, onSaved, onCancel }: A
                     disabled={!canSave}
                     className="h-10 cursor-pointer rounded-lg bg-[#e3000f] px-4 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    {isSaving ? t("saving") : t("save")}
+                    {isSaving ? t("saving") : tCommon("save")}
                 </button>
             </div>
         </div>

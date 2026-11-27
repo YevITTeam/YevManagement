@@ -4,6 +4,8 @@ import { useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import { Pencil, X } from "lucide-react";
+import { IconButton } from "@/components/ui/ListToolbar";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeAccumulationHistoryYearDto } from "@/modules/attendance/types/employee-accumulation-history.dto";
@@ -19,6 +21,9 @@ interface AccumulationHistoryModalProps {
     employeeLabel: string;
     // With Attendance.EmployeeAccumulation.Update: read via the "manage" endpoint and show the edit button.
     canEdit?: boolean;
+    // Per-employee limits; null/undefined = system default.
+    monthlyLimit?: number | null;
+    yearlyLimit?: number | null;
     onClose: () => void;
 }
 
@@ -26,7 +31,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 // The ledger was never backfilled, so older years are always empty.
 const YEAR_OPTIONS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
 
-export default function AccumulationHistoryModal({ employeeId, employeeLabel, canEdit = false, onClose }: AccumulationHistoryModalProps) {
+export default function AccumulationHistoryModal({ employeeId, employeeLabel, canEdit = false, monthlyLimit, yearlyLimit, onClose }: AccumulationHistoryModalProps) {
     const t = useTranslations("Attendance.AccumulationHistory");
     const tCommon = useTranslations("Common");
     const { setting } = useAttendanceSetting();
@@ -58,9 +63,12 @@ export default function AccumulationHistoryModal({ employeeId, employeeLabel, ca
                         <h2 id="accumulation-history-title" className="text-lg font-semibold text-[#191c1e]">
                             {t("modalTitle")}
                         </h2>
-                        <p className="truncate text-sm text-[#5e3f3a]">{employeeLabel}</p>
+                        <p className="text-sm text-[#5e3f3a]">{employeeLabel}</p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        {canEdit && data && !isLoading && !isEditing && selectedMonth === null && (
+                            <IconButton icon={Pencil} label={t("edit")} onClick={() => setIsEditing(true)} variant="ghost" />
+                        )}
                         <StyledSelect
                             value={year}
                             onChange={(v) => {
@@ -85,7 +93,14 @@ export default function AccumulationHistoryModal({ employeeId, employeeLabel, ca
                 </div>
 
                 {isLoading ? (
-                    <div className="py-8 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>
+                    <div className="space-y-3">
+                        <Skeleton className="h-11 w-full" />
+                        <div className="grid grid-cols-4 gap-2">
+                            {Array.from({ length: 12 }, (_, i) => (
+                                <Skeleton key={i} className="h-12 w-full" />
+                            ))}
+                        </div>
+                    </div>
                 ) : error ? (
                     <div className="py-8 text-center text-sm text-[#930006]">{error}</div>
                 ) : data ? (
@@ -109,21 +124,12 @@ export default function AccumulationHistoryModal({ employeeId, employeeLabel, ca
                             onBack={() => setSelectedMonth(null)}
                         />
                     ) : (
-                        <>
-                            <AccumulationHistoryTable data={data} setting={setting} onSelectMonth={setSelectedMonth} />
-                            {canEdit && (
-                                <div className="mt-3 flex justify-end">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsEditing(true)}
-                                        className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                                    >
-                                        <Pencil className="h-3.5 w-3.5" />
-                                        {t("edit")}
-                                    </button>
-                                </div>
-                            )}
-                        </>
+                        <AccumulationHistoryTable
+                            data={data}
+                            monthlyLimit={monthlyLimit ?? setting.monthlyOtHourLimit}
+                            yearlyLimit={yearlyLimit ?? setting.yearlyOtHourLimit}
+                            onSelectMonth={setSelectedMonth}
+                        />
                     )
                 ) : null}
             </div>

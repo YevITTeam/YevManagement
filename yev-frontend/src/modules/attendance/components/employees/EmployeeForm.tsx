@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { GroupApi } from "@/modules/attendance/api/group.api";
@@ -89,10 +89,11 @@ interface LinePair {
     shiftTeamCode: string;
 }
 
-const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+const fieldLabelClassName = "mb-1.5 block text-xs font-medium text-[#5e3f3a]";
 const fieldClassName =
-    "h-10 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+    "h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 const hourFieldClassName = fieldClassName.replace("w-full", "w-24");
+const selectTriggerClassName = `${fieldClassName} pr-9`;
 
 export default function EmployeeForm({ isOpen, mode, initial, loading = false, onClose, onSubmit, scope, canEditOtLimit = false }: EmployeeFormProps) {
     const t = useTranslations("Attendance.Employee");
@@ -309,15 +310,17 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
             : usersWithRoles
     ).slice(0, 8);
 
+    const showOtLimit = mode === "create" || canEditOtLimit;
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="fixed inset-0 bg-black/40" onClick={() => !loading && onClose()} />
 
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="employee-form-title"
-                className="z-60 mx-4 flex max-h-[88vh] w-full max-w-2xl flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl"
+                className="z-60 flex max-h-full w-full max-w-4xl flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl"
             >
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] px-6 py-4">
                     <h3 id="employee-form-title" className="text-lg font-semibold text-[#191c1e]">
@@ -334,288 +337,283 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                 </div>
 
                 <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
-                            <input
-                                value={values.code}
-                                onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
-                                placeholder={t("fieldCodePlaceholder")}
-                                disabled={loading}
-                                autoFocus
-                                required
-                                className={fieldClassName}
-                            />
-                        </label>
-
-                        <label className="relative block">
-                            <span className={fieldLabelClassName}>{t("fieldUserName")}</span>
-                            <input
-                                value={values.userName ?? ""}
-                                onChange={(event) =>
-                                    setValues((current) => ({ ...current, userName: event.target.value.trim() ? event.target.value : null }))
-                                }
-                                onFocus={() => setShowUserSuggestions(true)}
-                                onBlur={() => setShowUserSuggestions(false)}
-                                placeholder={t("fieldUserNamePlaceholder")}
-                                disabled={loading}
-                                autoComplete="off"
-                                className={fieldClassName}
-                            />
-                            {showUserSuggestions && filteredUserSuggestions.length > 0 && (
-                                <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-[#e0e3e5] bg-white shadow-lg">
-                                    {filteredUserSuggestions.map((u) => (
-                                        <li key={u.id}>
-                                            <button
-                                                type="button"
-                                                onMouseDown={(event) => event.preventDefault()}
-                                                onClick={() => {
-                                                    setValues((current) => ({ ...current, userName: u.userName }));
-                                                    setShowUserSuggestions(false);
-                                                }}
-                                                className="block w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[#f8fafc]"
-                                            >
-                                                <div className="font-semibold text-[#191c1e]">{u.fullName || u.userName}</div>
-                                                <div className="text-xs text-[#5e3f3a]">{u.userName}</div>
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </label>
-
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldLastName")}<RequiredMark /></span>
-                            <input
-                                value={values.lastName}
-                                onChange={(event) => setValues((current) => ({ ...current, lastName: event.target.value }))}
-                                placeholder={t("fieldLastNamePlaceholder")}
-                                disabled={loading}
-                                required
-                                className={fieldClassName}
-                            />
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClassName}>{t("fieldFirstName")}<RequiredMark /></span>
-                            <input
-                                value={values.firstName}
-                                onChange={(event) => setValues((current) => ({ ...current, firstName: event.target.value }))}
-                                placeholder={t("fieldFirstNamePlaceholder")}
-                                disabled={loading}
-                                required
-                                className={fieldClassName}
-                            />
-                        </label>
-
-                        <label className="block sm:col-span-2">
-                            <span className={fieldLabelClassName}>{t("fieldJobTitle")}</span>
-                            <SearchableSelect
-                                options={jobTitleOptions}
-                                value={values.jobTitleId ?? ""}
-                                onChange={handleJobTitleChange}
-                                placeholder={t("fieldJobTitlePlaceholder")}
-                                disabled={loading}
-                            />
-                        </label>
-
-                        {needsDepartment && (
-                            <div className="space-y-2 sm:col-span-2">
-                                <span className={fieldLabelClassName}>{t("fieldApprovalScopes")}<RequiredMark /></span>
-                                {values.approvalScopes.map((scopeRow, index) => (
-                                    <div key={index} className="flex flex-wrap items-center gap-2">
-                                        <div className="w-44 max-w-full">
-                                            <SearchableSelect
-                                                options={workshopOptions}
-                                                value={scopeRow.workshopId || ""}
-                                                onChange={(v) => updateScope(index, { workshopId: v === "" ? 0 : v })}
-                                                placeholder={t("fieldWorkshopPlaceholder")}
-                                                disabled={loading}
-                                            />
-                                        </div>
-                                        <div className="min-w-40 flex-1">
-                                            <SearchableSelect
-                                                options={departmentOptions}
-                                                value={scopeRow.departmentId || ""}
-                                                onChange={(v) => updateScope(index, { departmentId: v === "" ? 0 : v })}
-                                                placeholder={t("fieldDepartmentPlaceholder")}
-                                                disabled={loading}
-                                            />
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setValues((current) => ({ ...current, approvalScopes: current.approvalScopes.filter((_, i) => i !== index) }))}
-                                            disabled={loading}
-                                            title={t("removeApprovalScope")}
-                                            aria-label={t("removeApprovalScope")}
-                                            className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                ))}
-                                <button
-                                    type="button"
-                                    onClick={() => setValues((current) => ({ ...current, approvalScopes: [...current.approvalScopes, { workshopId: 0, departmentId: 0 }] }))}
-                                    disabled={loading}
-                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-[#c9ced3] px-3 py-1.5 text-xs font-semibold text-[#5e3f3a] transition hover:border-[#e3000f] hover:text-[#e3000f] disabled:opacity-50"
-                                >
-                                    <Plus className="h-3.5 w-3.5" /> {t("addApprovalScope")}
-                                </button>
-                            </div>
-                        )}
-
-                        {needsGroup && (
+                    <div className="min-h-0 flex-1 divide-y divide-[#f1f5f9] overflow-y-auto px-6 py-5">
+                        <FormSection title={t("sectionPersonal")}>
                             <label className="block">
-                                <span className={fieldLabelClassName}>{t("fieldWorkshop")}</span>
-                                <SearchableSelect
-                                    options={workshopOptions}
-                                    value={effectiveWorkshopFilter}
-                                    onChange={(v) => handleWorkshopFilterChange(v)}
-                                    placeholder={t("fieldWorkshopPlaceholder")}
-                                    disabled={loading}
-                                />
-                            </label>
-                        )}
-
-                        {needsGroup && (
-                            <label className="block">
-                                <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
-                                <SearchableSelect
-                                    options={departmentOptions}
-                                    value={effectiveDepartmentFilter}
-                                    onChange={(v) => handleDepartmentFilterChange(v)}
-                                    placeholder={t("fieldDepartmentPlaceholder")}
-                                    disabled={loading}
-                                />
-                            </label>
-                        )}
-
-                        {needsGroup && (
-                            <label className="block">
-                                <span className={fieldLabelClassName}>{t("fieldGroup")}<RequiredMark /></span>
-                                <SearchableSelect
-                                    options={filteredGroupOptions}
-                                    value={values.groupId ?? ""}
-                                    onChange={handleGroupChange}
-                                    placeholder={t("fieldGroupPlaceholder")}
-                                    disabled={loading}
-                                />
-                            </label>
-                        )}
-
-                        {/* A single-pair group already fixes Line × Ca. */}
-                        {needsGroup && selectedGroup && (selectedGroup.lines?.length ?? 0) > 1 && (
-                            <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5 sm:col-span-2">
-                                <label className="block w-44">
-                                    <span className={fieldLabelClassName}>{tProduction("fieldLine")}</span>
-                                    <SearchableSelect
-                                        options={lineOptions}
-                                        value={values.productionLineId ?? ""}
-                                        onChange={(v) => v !== "" && pickPair(v, values.shiftTeamId)}
-                                        placeholder=""
-                                        disabled={loading}
-                                    />
-                                </label>
-                                <div className="w-36">
-                                    <span className={fieldLabelClassName}>{tProduction("fieldShiftTeam")}</span>
-                                    <StyledSelect
-                                        options={shiftOptions}
-                                        value={values.shiftTeamId ?? 0}
-                                        onChange={(v) => pickPair(values.productionLineId, v)}
-                                        disabled={loading || shiftOptions.length === 0}
-                                        triggerClassName={`${fieldClassName} pr-8 text-left`}
-                                        ariaLabel={tProduction("fieldShiftTeam")}
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        {needsGroup && selectedGroup && (
-                            <label className="block">
-                                <span className={fieldLabelClassName}>{tProduction("colCongDoan")}</span>
+                                <span className={fieldLabelClassName}>{t("fieldCode")}<RequiredMark /></span>
                                 <input
-                                    value={values.congDoan ?? ""}
-                                    onChange={(event) => setValues((current) => ({ ...current, congDoan: event.target.value || null }))}
-                                    list="employee-cong-doan-options"
-                                    maxLength={50}
+                                    value={values.code}
+                                    onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))}
                                     disabled={loading}
+                                    autoFocus
+                                    required
                                     className={fieldClassName}
                                 />
-                                {/* Reports group by exact text, so suggest existing values to avoid near-duplicates. */}
-                                <datalist id="employee-cong-doan-options">
-                                    {congDoanOptions.map((option) => (
-                                        <option key={option} value={option} />
-                                    ))}
-                                </datalist>
                             </label>
-                        )}
-
-                        {needsGroup && selectedGroup && (
                             <label className="block">
-                                <span className={fieldLabelClassName}>{tProduction("colTaskName")}</span>
-                                <SearchableSelect
-                                    options={taskOptions}
-                                    value={selectedTask?.id ?? ""}
-                                    onChange={(v) => {
-                                        const task = workshopTasks.find((x) => x.id === v);
-                                        setValues((current) => ({ ...current, taskName: task?.code ?? null }));
-                                    }}
-                                    placeholder={values.taskName && !selectedTask ? values.taskName : ""}
+                                <span className={fieldLabelClassName}>{t("fieldLastName")}<RequiredMark /></span>
+                                <input
+                                    value={values.lastName}
+                                    onChange={(event) => setValues((current) => ({ ...current, lastName: event.target.value }))}
+                                    placeholder={t("fieldLastNamePlaceholder")}
                                     disabled={loading}
+                                    required
+                                    className={fieldClassName}
                                 />
                             </label>
-                        )}
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldFirstName")}<RequiredMark /></span>
+                                <input
+                                    value={values.firstName}
+                                    onChange={(event) => setValues((current) => ({ ...current, firstName: event.target.value }))}
+                                    placeholder={t("fieldFirstNamePlaceholder")}
+                                    disabled={loading}
+                                    required
+                                    className={fieldClassName}
+                                />
+                            </label>
+                            <label className="relative block">
+                                <span className={fieldLabelClassName}>{t("fieldUserName")}</span>
+                                <input
+                                    value={values.userName ?? ""}
+                                    onChange={(event) =>
+                                        setValues((current) => ({ ...current, userName: event.target.value.trim() ? event.target.value : null }))
+                                    }
+                                    onFocus={() => setShowUserSuggestions(true)}
+                                    onBlur={() => setShowUserSuggestions(false)}
+                                    disabled={loading}
+                                    autoComplete="off"
+                                    className={fieldClassName}
+                                />
+                                {showUserSuggestions && filteredUserSuggestions.length > 0 && (
+                                    <ul className="absolute z-10 mt-1 max-h-56 w-full min-w-56 overflow-y-auto rounded-lg border border-[#e0e3e5] bg-white shadow-lg">
+                                        {filteredUserSuggestions.map((u) => (
+                                            <li key={u.id}>
+                                                <button
+                                                    type="button"
+                                                    onMouseDown={(event) => event.preventDefault()}
+                                                    onClick={() => {
+                                                        setValues((current) => ({ ...current, userName: u.userName }));
+                                                        setShowUserSuggestions(false);
+                                                    }}
+                                                    className="block w-full cursor-pointer px-3 py-2 text-left text-sm hover:bg-[#f8fafc]"
+                                                >
+                                                    <div className="font-semibold text-[#191c1e]">{u.fullName || u.userName}</div>
+                                                    <div className="text-xs text-[#5e3f3a]">{u.userName}</div>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </label>
+                        </FormSection>
 
+                        <FormSection title={t("sectionOrg")}>
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("fieldJobTitle")}</span>
+                                <SearchableSelect
+                                    options={jobTitleOptions}
+                                    value={values.jobTitleId ?? ""}
+                                    onChange={handleJobTitleChange}
+                                    placeholder={t("fieldJobTitlePlaceholder")}
+                                    disabled={loading}
+                                    triggerClassName={selectTriggerClassName}
+                                />
+                            </label>
+
+                            {needsDepartment && (
+                                <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+                                    <span className={fieldLabelClassName}>{t("fieldApprovalScopes")}<RequiredMark /></span>
+                                    {values.approvalScopes.map((scopeRow, index) => (
+                                        <div key={index} className="flex flex-wrap items-center gap-2">
+                                            <div className="w-44 max-w-full">
+                                                <SearchableSelect
+                                                    options={workshopOptions}
+                                                    value={scopeRow.workshopId || ""}
+                                                    onChange={(v) => updateScope(index, { workshopId: v === "" ? 0 : v })}
+                                                    placeholder={t("fieldWorkshopPlaceholder")}
+                                                    ariaLabel={t("fieldWorkshop")}
+                                                    disabled={loading}
+                                                    triggerClassName={selectTriggerClassName}
+                                                />
+                                            </div>
+                                            <div className="min-w-40 flex-1">
+                                                <SearchableSelect
+                                                    options={departmentOptions}
+                                                    value={scopeRow.departmentId || ""}
+                                                    onChange={(v) => updateScope(index, { departmentId: v === "" ? 0 : v })}
+                                                    placeholder={t("fieldDepartmentPlaceholder")}
+                                                    ariaLabel={t("fieldDepartment")}
+                                                    disabled={loading}
+                                                    triggerClassName={selectTriggerClassName}
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setValues((current) => ({ ...current, approvalScopes: current.approvalScopes.filter((_, i) => i !== index) }))}
+                                                disabled={loading}
+                                                title={t("removeApprovalScope")}
+                                                aria-label={t("removeApprovalScope")}
+                                                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:opacity-50"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => setValues((current) => ({ ...current, approvalScopes: [...current.approvalScopes, { workshopId: 0, departmentId: 0 }] }))}
+                                        disabled={loading}
+                                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-[#e0e3e5] px-3 py-1.5 text-xs font-semibold text-[#5e3f3a] transition hover:border-[#e3000f] hover:text-[#e3000f] disabled:opacity-50"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" /> {t("addApprovalScope")}
+                                    </button>
+                                </div>
+                            )}
+
+                            {needsGroup && (
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("fieldWorkshop")}</span>
+                                    <SearchableSelect
+                                        options={workshopOptions}
+                                        value={effectiveWorkshopFilter}
+                                        onChange={(v) => handleWorkshopFilterChange(v)}
+                                        placeholder={t("filterAll")}
+                                        disabled={loading}
+                                        triggerClassName={selectTriggerClassName}
+                                    />
+                                </label>
+                            )}
+                            {needsGroup && (
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("fieldDepartment")}</span>
+                                    <SearchableSelect
+                                        options={departmentOptions}
+                                        value={effectiveDepartmentFilter}
+                                        onChange={(v) => handleDepartmentFilterChange(v)}
+                                        placeholder={t("filterAll")}
+                                        disabled={loading}
+                                        triggerClassName={selectTriggerClassName}
+                                    />
+                                </label>
+                            )}
+                            {needsGroup && (
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{t("fieldGroup")}<RequiredMark /></span>
+                                    <SearchableSelect
+                                        options={filteredGroupOptions}
+                                        value={values.groupId ?? ""}
+                                        onChange={handleGroupChange}
+                                        placeholder=""
+                                        disabled={loading}
+                                        triggerClassName={selectTriggerClassName}
+                                    />
+                                </label>
+                            )}
+
+                            {/* Workshop Manager / Director carry no group or department. */}
+                            {!needsGroup && !needsDepartment && (
+                                <p className="text-sm text-[#8a8f94] sm:col-span-2 lg:col-span-3 lg:pt-7">{t("orgUnitCompanyWide")}</p>
+                            )}
+                        </FormSection>
+
+                        {needsGroup && selectedGroup && (
+                            <FormSection title={t("productionFilters")}>
+                                {/* A single-pair group already fixes Line × Ca. */}
+                                {(selectedGroup.lines?.length ?? 0) > 1 && (
+                                    <label className="block">
+                                        <span className={fieldLabelClassName}>{tProduction("fieldLine")}</span>
+                                        <SearchableSelect
+                                            options={lineOptions}
+                                            value={values.productionLineId ?? ""}
+                                            onChange={(v) => v !== "" && pickPair(v, values.shiftTeamId)}
+                                            placeholder=""
+                                            disabled={loading}
+                                            triggerClassName={selectTriggerClassName}
+                                        />
+                                    </label>
+                                )}
+                                {(selectedGroup.lines?.length ?? 0) > 1 && (
+                                    <div>
+                                        <span className={fieldLabelClassName}>{tProduction("fieldShiftTeam")}</span>
+                                        <StyledSelect
+                                            options={shiftOptions}
+                                            value={values.shiftTeamId ?? 0}
+                                            onChange={(v) => pickPair(values.productionLineId, v)}
+                                            disabled={loading || shiftOptions.length === 0}
+                                            triggerClassName={`${selectTriggerClassName} text-left`}
+                                            ariaLabel={tProduction("fieldShiftTeam")}
+                                        />
+                                    </div>
+                                )}
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{tProduction("colCongDoan")}</span>
+                                    <input
+                                        value={values.congDoan ?? ""}
+                                        onChange={(event) => setValues((current) => ({ ...current, congDoan: event.target.value || null }))}
+                                        list="employee-cong-doan-options"
+                                        maxLength={50}
+                                        disabled={loading}
+                                        className={fieldClassName}
+                                    />
+                                    {/* Reports group by exact text, so suggest existing values to avoid near-duplicates. */}
+                                    <datalist id="employee-cong-doan-options">
+                                        {congDoanOptions.map((option) => (
+                                            <option key={option} value={option} />
+                                        ))}
+                                    </datalist>
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClassName}>{tProduction("colTaskName")}</span>
+                                    <SearchableSelect
+                                        options={taskOptions}
+                                        value={selectedTask?.id ?? ""}
+                                        onChange={(v) => {
+                                            const task = workshopTasks.find((x) => x.id === v);
+                                            setValues((current) => ({ ...current, taskName: task?.code ?? null }));
+                                        }}
+                                        placeholder={values.taskName && !selectedTask ? values.taskName : ""}
+                                        disabled={loading}
+                                        triggerClassName={selectTriggerClassName}
+                                    />
+                                </label>
+                            </FormSection>
+                        )}
 
                         {/* Saved apart from the main PUT: POST carries them on create, edit goes through PUT /{id}/ot-limit. */}
-                        {(mode === "create" || canEditOtLimit) && (
-                            <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5 sm:col-span-2">
-                                <label className="block">
-                                    <span className={fieldLabelClassName}>{t("fieldCustomMonthlyOtHourLimit")}</span>
-                                    <span className="flex items-center gap-1.5">
-                                        <input
-                                            type="number"
-                                            step="1"
-                                            min={1}
-                                            value={values.customMonthlyOtHourLimit ?? ""}
-                                            onChange={(event) =>
-                                                setValues((current) => ({
-                                                    ...current,
-                                                    customMonthlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
-                                                }))
-                                            }
-                                            placeholder={String(setting.monthlyOtHourLimit)}
-                                            disabled={loading}
-                                            className={hourFieldClassName}
-                                        />
-                                        <span className="text-xs text-[#8a8f94]">{t("unitHour")}</span>
-                                    </span>
-                                </label>
-                                <label className="block">
-                                    <span className={fieldLabelClassName}>{t("fieldCustomYearlyOtHourLimit")}</span>
-                                    <span className="flex items-center gap-1.5">
-                                        <input
-                                            type="number"
-                                            step="1"
-                                            min={1}
-                                            value={values.customYearlyOtHourLimit ?? ""}
-                                            onChange={(event) =>
-                                                setValues((current) => ({
-                                                    ...current,
-                                                    customYearlyOtHourLimit: event.target.value === "" ? null : Number(event.target.value),
-                                                }))
-                                            }
-                                            placeholder={String(setting.yearlyOtHourLimit)}
-                                            disabled={loading}
-                                            className={hourFieldClassName}
-                                        />
-                                        <span className="text-xs text-[#8a8f94]">{t("unitHour")}</span>
-                                    </span>
-                                </label>
-                            </div>
+                        {showOtLimit && (
+                            <FormSection title={t("otLimitDialogTitle")}>
+                                {(
+                                    [
+                                        ["customMonthlyOtHourLimit", t("otLimitMonthly"), setting.monthlyOtHourLimit],
+                                        ["customYearlyOtHourLimit", t("otLimitYearly"), setting.yearlyOtHourLimit],
+                                    ] as const
+                                ).map(([field, label, defaultLimit]) => (
+                                    <label key={field} className="block">
+                                        <span className={fieldLabelClassName}>{label}</span>
+                                        <span className="flex items-center gap-1.5">
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                min={1}
+                                                value={values[field] ?? ""}
+                                                onChange={(event) =>
+                                                    setValues((current) => ({
+                                                        ...current,
+                                                        [field]: event.target.value === "" ? null : Number(event.target.value),
+                                                    }))
+                                                }
+                                                placeholder={String(defaultLimit)}
+                                                title={t("fieldCustomOtHourLimitHint")}
+                                                disabled={loading}
+                                                className={hourFieldClassName}
+                                            />
+                                            <span className="text-xs text-[#8a8f94]">{t("unitHour")}</span>
+                                        </span>
+                                    </label>
+                                ))}
+                            </FormSection>
                         )}
-                    </div>
                     </div>
 
                     <div className="flex justify-end gap-3 border-t border-[#e0e3e5] px-6 py-4">
@@ -632,11 +630,21 @@ export default function EmployeeForm({ isOpen, mode, initial, loading = false, o
                             disabled={loading}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {loading ? t("saving") : mode === "create" ? t("createSubmit") : t("updateSubmit")}
+                            {loading ? t("saving") : tCommon("save")}
                         </button>
                     </div>
                 </form>
             </div>
         </div>
+    );
+}
+
+// Long-form grouping (DESIGN_SYSTEM §4.7, same as DeviceForm): title column on the left, 4-column grid on the right.
+function FormSection({ title, children }: { title: string; children: ReactNode }) {
+    return (
+        <section className="grid gap-x-6 gap-y-3 py-5 first:pt-0 last:pb-0 lg:grid-cols-[8rem_1fr]">
+            <h4 className="text-sm font-semibold text-[#191c1e] lg:pt-7">{title}</h4>
+            <div className="grid content-start gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
+        </section>
     );
 }

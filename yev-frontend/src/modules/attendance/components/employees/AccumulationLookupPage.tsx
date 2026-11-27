@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
-import { History, Inbox, Search } from "lucide-react";
+import { History, Search } from "lucide-react";
 
 import { EmployeeApi } from "@/modules/attendance/api/employee.api";
 import type { EmployeeDto } from "@/modules/attendance/types/employee.dto";
@@ -14,6 +14,7 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import AccumulationHistoryModal from "./AccumulationHistoryModal";
 import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { TableScroll } from "@/components/ui/TableScroll";
+import { ErrorBar, IconButton, ListToolbar, SearchField, TableStatusRows, rowClassName, theadRowClassName } from "@/components/ui/ListToolbar";
 
 const PAGE_SIZE = 10;
 
@@ -62,72 +63,38 @@ export default function AccumulationLookupPage() {
             </div>
 
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] p-3 md:flex-row md:items-center md:justify-between">
-                    <div className="flex flex-wrap gap-2">
-                        <input
-                            value={keyword}
-                            onChange={(event) => setKeyword(event.target.value)}
-                            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder={t("searchPlaceholder")}
-                            className="h-9 w-64 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
-                        <button
-                            onClick={handleSearch}
-                            disabled={isLoading}
-                            title={tCommon("search")}
-                            aria-label={tCommon("search")}
-                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50 inline-flex h-9 w-9 shrink-0 items-center justify-center"
-                        >
-                            <Search className="h-4 w-4" />
-                        </button>
-                    </div>
-                </div>
+                <ListToolbar>
+                    <SearchField value={keyword} onChange={setKeyword} onEnter={handleSearch} placeholder={t("searchPlaceholder")} wide />
+                    <IconButton icon={Search} label={tCommon("search")} onClick={handleSearch} disabled={isLoading} variant="primary" />
+                </ListToolbar>
 
-                {error && (
-                    <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
-                )}
+                <ErrorBar message={error} />
 
-                <TableScroll>
-                    <table className="min-w-full border-collapse text-left">
+                <TableScroll className="relative">
+                    <table className="min-w-full border-collapse text-left text-sm">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                            <tr className={theadRowClassName}>
                                 <th className="px-3 py-2">{t("colCode")}</th>
                                 <th className="px-3 py-2">{t("colFullName")}</th>
                                 <th className="px-3 py-2">{t("colOrgUnit")}</th>
-                                <th className="px-3 py-2 text-right">{tCommon("actions")}</th>
+                                <th className="w-10 px-3 py-2" />
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && employees.length === 0 && (
-                                <tr>
-                                    <td colSpan={4} className="px-4 py-12">
-                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
-                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
-                                            {t("noEmployees")}
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
+                            <TableStatusRows loading={isLoading} empty={employees.length === 0} columns={4} emptyText={t("noEmployees")} />
                             {employees.map((employee) => (
-                                <tr key={employee.id} className="border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
-                                    <td className="px-3 py-2 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                <tr key={employee.id} onClick={() => setSelectedEmployee(employee)} className={`${rowClassName} cursor-pointer`}>
+                                    <td className="px-3 py-2 font-semibold text-[#191c1e]">{employee.code}</td>
+                                    <td className="px-3 py-2 text-[#5e3f3a]">
                                         {employee.lastName} {employee.firstName}
                                     </td>
-                                    <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                    <td className="px-3 py-2 text-[#5e3f3a]">
                                         {employee.groupNameVn ?? employee.departmentNameVn ?? (
                                             <span className="text-xs italic text-[#8a8f94]">{t("orgUnitCompanyWide")}</span>
                                         )}
                                     </td>
-                                    <td className="px-3 py-2 text-right text-sm">
-                                        <button
-                                            onClick={() => setSelectedEmployee(employee)}
-                                            className="cursor-pointer inline-flex items-center gap-1.5 font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                            title={t("viewButtonLabel")}
-                                        >
-                                            <History className="h-3.5 w-3.5" />
-                                            {t("viewButtonLabel")}
-                                        </button>
+                                    <td className="px-3 py-1 text-right">
+                                        <IconButton icon={History} label={t("viewButtonLabel")} onClick={() => setSelectedEmployee(employee)} variant="ghost" size="sm" />
                                     </td>
                                 </tr>
                             ))}
@@ -151,6 +118,8 @@ export default function AccumulationLookupPage() {
                 <AccumulationHistoryModal
                     employeeId={selectedEmployee.id}
                     employeeLabel={`${selectedEmployee.lastName} ${selectedEmployee.firstName} (${selectedEmployee.code})`}
+                    monthlyLimit={selectedEmployee.customMonthlyOtHourLimit}
+                    yearlyLimit={selectedEmployee.customYearlyOtHourLimit}
                     canEdit={canUpdateAccumulation}
                     onClose={() => setSelectedEmployee(null)}
                 />

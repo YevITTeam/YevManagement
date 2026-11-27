@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, X } from "lucide-react";
+import { BadgeCheck, Check, Download, FileSpreadsheet, Loader2, PenLine, UserCog, UserPlus, X, type LucideIcon } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -14,6 +14,20 @@ import type {
 import ExportFilteredButton from "./ExportFilteredButton";
 import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import InfoTooltip from "@/components/ui/InfoTooltip";
+import { IconButton, IconFlag } from "@/components/ui/ListToolbar";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/common/EmptyState";
+
+// Icon + number; the meaning sits in the title.
+function IconCount({ icon: Icon, label, count }: { icon: LucideIcon; label: string; count: number }) {
+    return (
+        <span className="inline-flex items-center gap-1 text-[#5e3f3a]" title={label} aria-label={label}>
+            <Icon className="h-3.5 w-3.5" aria-hidden />
+            {count}
+        </span>
+    );
+}
 
 interface EmployeeIdentityLinkImportDialogProps {
     isOpen: boolean;
@@ -25,6 +39,7 @@ interface EmployeeIdentityLinkImportDialogProps {
 // Confirm re-sends the original File (kept in state), not rows, because rows may embed signature images.
 export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onImported, exportFilter }: EmployeeIdentityLinkImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
+    const tCommon = useTranslations("Common");
     const [file, setFile] = useState<File | null>(null);
     const [isPreviewing, setIsPreviewing] = useState(false);
     const [isConfirming, setIsConfirming] = useState(false);
@@ -124,7 +139,7 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
             link.click();
             URL.revokeObjectURL(url);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, t("identityLinkTemplateError")));
+            toast.error(getApiErrorMessage(err, t("importTemplateError")));
         } finally {
             setIsDownloadingTemplate(false);
         }
@@ -143,17 +158,18 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                 className="z-60 mx-4 flex max-h-[85vh] w-full max-w-6xl flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl"
             >
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] p-6 pb-4">
-                    <div>
+                    <div className="flex items-center gap-1.5">
                         <h3 id="import-identity-link-title" className="text-lg font-semibold text-[#191c1e]">
                             {t("identityLinkImportTitle")}
                         </h3>
+                        <InfoTooltip text={t("identityLinkImportDescription")} />
                     </div>
                     <button
                         type="button"
                         onClick={handleClose}
                         disabled={isBusy}
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
-                        aria-label={t("importClose")}
+                        aria-label={tCommon("close")}
                     >
                         <X className="h-5 w-5" />
                     </button>
@@ -170,6 +186,14 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                                     signatures: result.signatureSetCount,
                                 })}
                             </span>
+                            {(result.jobTitleAssignedCount > 0 || result.coordinatorAddedCount > 0) && (
+                                <span className="text-[#5e3f3a]">
+                                    {t("identityLinkConfirmSuccessExtra", {
+                                        jobTitles: result.jobTitleAssignedCount,
+                                        coordinators: result.coordinatorAddedCount,
+                                    })}
+                                </span>
+                            )}
                             <span className={result.skippedCount > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
                                 {t("importSkippedCount", { count: result.skippedCount })}
                             </span>
@@ -214,42 +238,43 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                                 type="button"
                                 onClick={handlePreview}
                                 disabled={!file || isBusy}
-                                className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                {isPreviewing ? t("identityLinkPreviewing") : t("identityLinkPreviewButton")}
+                                {isPreviewing && <Loader2 className="h-4 w-4 animate-spin" />}
+                                {t("importPreviewButton")}
                             </button>
-                            <button
-                                type="button"
-                                onClick={handleDownloadTemplate}
-                                disabled={isDownloadingTemplate}
-                                className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <Download className="h-3.5 w-3.5" /> {t("identityLinkDownloadTemplate")}
-                            </button>
+                            <IconButton icon={Download} label={tCommon("downloadTemplate")} onClick={handleDownloadTemplate} disabled={isDownloadingTemplate} />
                             <ExportFilteredButton download={() => EmployeeIdentityLinkImportApi.exportLinks(exportFilter)} fallbackFileName="LienKetTaiKhoan.xlsx" />
                         </div>
 
                         {preview && (
                             <div className="flex flex-wrap items-center gap-4 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold">
-                                <span className="text-[#191c1e]">{t("identityLinkSummaryTotal", { count: preview.totalRows })}</span>
-                                <span className="text-emerald-600">{t("identityLinkSummaryValid", { count: preview.validRows })}</span>
-                                <span className={preview.invalidRows > 0 ? "text-[#930006]" : "text-[#5e3f3a]"}>
-                                    {t("identityLinkSummaryInvalid", { count: preview.invalidRows })}
+                                <span className="text-[#191c1e]">{t("importSummaryTotal", { count: preview.totalRows })}</span>
+                                <span className="text-emerald-600">{t("importSummaryValid", { count: preview.validRows })}</span>
+                                <span
+                                    className={preview.invalidRows > 0 ? "text-[#930006]" : "text-[#5e3f3a]"}
+                                    title={preview.invalidRows > 0 ? t("importSummaryHint") : undefined}
+                                >
+                                    {t("importSummaryInvalid", { count: preview.invalidRows })}
                                 </span>
-                                <span className="text-[#5e3f3a]">
-                                    {t("identityLinkSummaryNewAccounts", { count: preview.newIdentityUserCount })} ·{" "}
-                                    {t("identityLinkSummarySignatures", { count: preview.rowsWithSignatureCount })} ·{" "}
-                                    {t("identityLinkSummaryJobTitles", { count: preview.rowsWithJobTitleCount })} ·{" "}
-                                    {t("identityLinkSummaryCoordinators", { count: preview.rowsWithCoordinatorCount })}
-                                </span>
+                                <IconCount icon={UserPlus} label={t("identityLinkSummaryNewAccounts", { count: preview.newIdentityUserCount })} count={preview.newIdentityUserCount} />
+                                <IconCount icon={PenLine} label={t("identityLinkSummarySignatures", { count: preview.rowsWithSignatureCount })} count={preview.rowsWithSignatureCount} />
+                                <IconCount icon={BadgeCheck} label={t("identityLinkSummaryJobTitles", { count: preview.rowsWithJobTitleCount })} count={preview.rowsWithJobTitleCount} />
+                                <IconCount icon={UserCog} label={t("identityLinkSummaryCoordinators", { count: preview.rowsWithCoordinatorCount })} count={preview.rowsWithCoordinatorCount} />
                             </div>
                         )}
 
                         <div className="flex-1 overflow-auto p-2">
                             {rows.length === 0 ? (
-                                <div className="px-4 py-12 text-center text-sm text-[#5e3f3a]">
-                                    {isPreviewing ? t("identityLinkReadingFile") : t("identityLinkNoPreviewYet")}
-                                </div>
+                                isPreviewing ? (
+                                    <div className="space-y-2 p-2">
+                                        {Array.from({ length: 6 }, (_, i) => (
+                                            <Skeleton key={i} className="h-6 w-full" />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <EmptyState icon={FileSpreadsheet} title={t("importNoPreviewYet")} />
+                                )
                             ) : (
                                 <table className="min-w-full border-collapse text-left text-xs">
                                     <thead>
@@ -261,7 +286,6 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                                             <th className="whitespace-nowrap px-3 py-2">{t("identityLinkColJobTitle")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("identityLinkColCoordinator")}</th>
                                             <th className="whitespace-nowrap px-3 py-2">{t("identityLinkColSignature")}</th>
-                                            <th className="whitespace-nowrap px-3 py-2">{t("identityLinkColStatus")}</th>
                                             <th className="min-w-[200px] px-3 py-2">{t("importColError")}</th>
                                         </tr>
                                     </thead>
@@ -275,17 +299,27 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#191c1e]">
                                                     {row.employeeCode} {row.resolvedEmployeeFullName ? `— ${row.resolvedEmployeeFullName}` : ""}
                                                 </td>
-                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.userName ?? "-"}</td>
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        {row.userName ?? "-"}
+                                                        {!row.identityUserAlreadyExists && <IconFlag icon={UserPlus} label={t("identityLinkStatusNew")} tone="success" />}
+                                                    </span>
+                                                </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.email ?? "-"}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{row.resolvedJobTitleName ?? "-"}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
-                                                    {row.isCoordinator ? (row.coordinatorScopeDescription ?? t("identityLinkSignatureYes")) : "-"}
+                                                    {row.isCoordinator
+                                                        ? (row.coordinatorScopeDescription ?? (
+                                                              <Check className="h-4 w-4 text-emerald-600" role="img" aria-label={t("identityLinkColCoordinator")} />
+                                                          ))
+                                                        : "-"}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
-                                                    {row.hasSignatureImage ? t("identityLinkSignatureYes") : t("identityLinkSignatureNo")}
-                                                </td>
-                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
-                                                    {row.identityUserAlreadyExists ? t("identityLinkStatusExisting") : t("identityLinkStatusNew")}
+                                                    {row.hasSignatureImage ? (
+                                                        <PenLine className="h-4 w-4 text-emerald-600" role="img" aria-label={t("identityLinkColSignature")} />
+                                                    ) : (
+                                                        "-"
+                                                    )}
                                                 </td>
                                                 <td className="px-3 py-2 text-[#930006]">{row.errors.join("; ") || "-"}</td>
                                             </tr>
@@ -304,16 +338,17 @@ export default function EmployeeIdentityLinkImportDialog({ isOpen, onClose, onIm
                         disabled={isBusy}
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {result ? t("importClose") : t("importCancel")}
+                        {result ? tCommon("close") : tCommon("cancel")}
                     </button>
                     {!result && (
                         <button
                             type="button"
                             onClick={handleConfirm}
                             disabled={!canConfirm || isBusy}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isConfirming ? t("identityLinkConfirming") : t("identityLinkConfirmButton")}
+                            {isConfirming && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {tCommon("import")}
                         </button>
                     )}
                 </div>

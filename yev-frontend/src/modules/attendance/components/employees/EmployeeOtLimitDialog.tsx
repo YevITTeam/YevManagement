@@ -17,9 +17,9 @@ interface EmployeeOtLimitDialogProps {
     onSaved: () => void;
 }
 
-const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+const fieldLabelClassName = "mb-1.5 block text-xs font-medium text-[#5e3f3a]";
 const fieldClassName =
-    "h-10 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+    "h-9 w-24 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
 // Uses the narrow Attendance.Employee.UpdateOtLimit permission for coordinators who can't open EmployeeForm.
 export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: EmployeeOtLimitDialogProps) {
@@ -62,9 +62,12 @@ export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: Em
             <div className="fixed inset-0 bg-black/40" onClick={handleClose} />
             <div role="dialog" aria-modal="true" className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
                 <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
-                    <h3 className="text-lg font-semibold text-[#191c1e]">
-                        {t("otLimitDialogTitle")} — {employee.lastName} {employee.firstName} ({employee.code})
-                    </h3>
+                    <div>
+                        <h3 className="text-lg font-semibold text-[#191c1e]">{t("otLimitDialogTitle")}</h3>
+                        <p className="text-sm text-[#5e3f3a]">
+                            {employee.lastName} {employee.firstName} ({employee.code})
+                        </p>
+                    </div>
                     <button
                         type="button"
                         onClick={handleClose}
@@ -87,6 +90,7 @@ export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: Em
                                     value={monthly ?? ""}
                                     onChange={(event) => setMonthly(event.target.value === "" ? null : Number(event.target.value))}
                                     placeholder={String(setting.monthlyOtHourLimit)}
+                                    title={t("fieldCustomOtHourLimitHint")}
                                     disabled={isSaving}
                                     className={fieldClassName}
                                 />
@@ -103,6 +107,7 @@ export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: Em
                                     value={yearly ?? ""}
                                     onChange={(event) => setYearly(event.target.value === "" ? null : Number(event.target.value))}
                                     placeholder={String(setting.yearlyOtHourLimit)}
+                                    title={t("fieldCustomOtHourLimitHint")}
                                     disabled={isSaving}
                                     className={fieldClassName}
                                 />
@@ -125,7 +130,7 @@ export default function EmployeeOtLimitDialog({ employee, onClose, onSaved }: Em
                             disabled={isSaving}
                             className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isSaving ? t("saving") : t("updateSubmit")}
+                            {isSaving ? t("saving") : tCommon("save")}
                         </button>
                     </div>
                 </form>

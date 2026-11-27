@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, X } from "lucide-react";
+import { Download, Loader2, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -10,7 +10,8 @@ import type { ProductionEmployeeAccumulationResultDto } from "@/modules/attendan
 import ExportFilteredButton from "./ExportFilteredButton";
 import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
-import { Tabs } from "@/components/ui/Tabs";
+import InfoTooltip from "@/components/ui/InfoTooltip";
+import { IconButton } from "@/components/ui/ListToolbar";
 
 interface EmployeeMonthlyAccumulationImportDialogProps {
     isOpen: boolean;
@@ -28,6 +29,7 @@ export default function EmployeeMonthlyAccumulationImportDialog({
     exportFilter,
 }: EmployeeMonthlyAccumulationImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
+    const tCommon = useTranslations("Common");
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState(now.getMonth() + 1);
@@ -73,7 +75,7 @@ export default function EmployeeMonthlyAccumulationImportDialog({
             link.click();
             URL.revokeObjectURL(url);
         } catch (err) {
-            toast.error(getApiErrorMessage(err, t("monthlyAccumulationTemplateError")));
+            toast.error(getApiErrorMessage(err, t("importTemplateError")));
         } finally {
             setIsDownloadingTemplate(false);
         }
@@ -95,6 +97,9 @@ export default function EmployeeMonthlyAccumulationImportDialog({
         }
     };
 
+    const numberClassName =
+        "h-9 rounded-md border border-[#e0e3e5] bg-white px-2.5 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="fixed inset-0 bg-black/40" onClick={handleClose} />
@@ -104,157 +109,159 @@ export default function EmployeeMonthlyAccumulationImportDialog({
                 className="z-60 mx-4 flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl"
             >
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] p-6 pb-4">
-                    <div>
+                    <div className="flex items-center gap-1.5">
                         <h3 className="text-lg font-semibold text-[#191c1e]">{t("monthlyAccumulationImportTitle")}</h3>
+                        <InfoTooltip text={t("monthlyAccumulationImportDesc")} />
                     </div>
                     <button
                         onClick={handleClose}
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                        aria-label={t("importClose")}
+                        aria-label={tCommon("close")}
                     >
                         <X className="h-5 w-5" />
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-auto p-6">
-                {!result ? (
-                    <div className="space-y-4">
-                        <Tabs
-                            tabs={[
-                                { key: "month", label: t("accumulationModeMonth") },
-                                { key: "year", label: t("accumulationModeYear") },
-                            ]}
-                            activeKey={mode}
-                            onChange={(key) => {
-                                setMode(key);
-                                resetState();
-                            }}
-                        />
-                        <div className="flex flex-wrap items-end gap-3">
-                            <label className="block">
-                                <span className="mb-1 block text-xs font-semibold text-[#5e3f3a]">{t("monthlyAccumulationYear")}</span>
+                <div className="flex-1 overflow-auto p-4">
+                    {!result ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="inline-flex shrink-0 rounded-lg border border-[#e0e3e5] bg-[#f2f4f6] p-0.5" role="radiogroup">
+                                {([
+                                    ["month", t("accumulationModeMonth"), undefined],
+                                    ["year", t("accumulationModeYear"), t("accumulationModeYearHint")],
+                                ] as const).map(([key, label, hint]) => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={mode === key}
+                                        title={hint}
+                                        disabled={isImporting}
+                                        onClick={() => {
+                                            setMode(key);
+                                            resetState();
+                                        }}
+                                        className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed ${
+                                            mode === key ? "bg-white text-[#e3000f] shadow-sm" : "text-[#5e3f3a] hover:text-[#191c1e]"
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            <label className="flex items-center gap-1.5 text-xs font-medium text-[#5e3f3a]">
+                                {t("monthlyAccumulationYear")}
                                 <input
                                     type="number"
                                     value={year}
                                     onChange={(e) => setYear(Number(e.target.value))}
                                     disabled={isImporting}
-                                    className="h-9 w-28 rounded-lg border border-[#e0e3e5] px-3 text-sm outline-none focus:border-[#e3000f]"
+                                    className={`${numberClassName} w-20`}
                                 />
                             </label>
                             {!isYearMode && (
-                            <label className="block">
-                                <span className="mb-1 block text-xs font-semibold text-[#5e3f3a]">{t("monthlyAccumulationMonth")}</span>
-                                <input
-                                    type="number"
-                                    min={1}
-                                    max={12}
-                                    value={month}
-                                    onChange={(e) => setMonth(Number(e.target.value))}
-                                    disabled={isImporting}
-                                    className="h-9 w-20 rounded-lg border border-[#e0e3e5] px-3 text-sm outline-none focus:border-[#e3000f]"
-                                />
-                            </label>
+                                <label className="flex items-center gap-1.5 text-xs font-medium text-[#5e3f3a]">
+                                    {t("monthlyAccumulationMonth")}
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={12}
+                                        value={month}
+                                        onChange={(e) => setMonth(Number(e.target.value))}
+                                        disabled={isImporting}
+                                        className={`${numberClassName} w-16`}
+                                    />
+                                </label>
+                            )}
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".xlsx"
+                                onChange={handleFileChange}
+                                disabled={isImporting}
+                                className="min-w-48 flex-1 text-sm text-[#191c1e] file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-[#f8fafc] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#191c1e] hover:file:bg-[#f2f4f6]"
+                            />
+                            <IconButton icon={Download} label={tCommon("downloadTemplate")} onClick={handleDownloadTemplate} disabled={isDownloadingTemplate} />
+                            <ExportFilteredButton
+                                download={() =>
+                                    isYearMode
+                                        ? EmployeeImportApi.exportYearlyAccumulation(exportFilter, year)
+                                        : EmployeeImportApi.exportMonthlyAccumulation(exportFilter, year, month)
+                                }
+                                fallbackFileName={isYearMode ? "LuyKeOT_CaNam.xlsx" : "LuyKeOT.xlsx"}
+                            />
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap items-center gap-4 rounded-lg bg-[#f8fafc] px-4 py-3 text-sm">
+                                <span className="font-semibold text-emerald-600">
+                                    {t("monthlyAccumulationAdjustedCount", { count: result.adjustedCount })}
+                                </span>
+                                {result.adjustedYearCount !== undefined && result.adjustedYearCount > 0 && (
+                                    <span className="font-semibold text-emerald-600">
+                                        {t("monthlyAccumulationAdjustedYearCount", { count: result.adjustedYearCount })}
+                                    </span>
+                                )}
+                                <span className="text-[#5e3f3a]">
+                                    {t("monthlyAccumulationUnchangedCount", { count: result.unchangedCount })}
+                                </span>
+                                <span className={result.skippedCount > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
+                                    {t("monthlyAccumulationSkippedCount", { count: result.skippedCount })}
+                                </span>
+                                <span className="text-[#5e3f3a]">
+                                    {t("monthlyAccumulationTotalDelta", { hours: result.totalDeltaHours.toFixed(2) })}
+                                </span>
+                                {result.totalDeltaYearHours !== undefined && result.totalDeltaYearHours !== 0 && (
+                                    <span className="text-[#5e3f3a]">
+                                        {t("monthlyAccumulationTotalDeltaYear", { hours: result.totalDeltaYearHours.toFixed(2) })}
+                                    </span>
+                                )}
+                            </div>
+
+                            {result.skippedRows.length > 0 && (
+                                <div className="max-h-96 overflow-y-auto rounded-lg border border-[#e0e3e5]">
+                                    <table className="min-w-full border-collapse text-left text-sm">
+                                        <thead>
+                                            <tr className="border-b border-[#e0e3e5] bg-[#fff4f2] text-xs font-semibold uppercase tracking-[0.06em] text-[#930006]">
+                                                <th className="px-3 py-2">{t("monthlyAccumulationColCode")}</th>
+                                                <th className="px-3 py-2">{t("monthlyAccumulationColReason")}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {result.skippedRows.map((row, index) => (
+                                                <tr key={`${row.employeeCode}-${index}`} className="border-b border-[#f1f5f9]">
+                                                    <td className="px-3 py-2 font-semibold text-[#191c1e]">{row.employeeCode}</td>
+                                                    <td className="px-3 py-2 text-[#930006]">{row.reason}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             )}
                         </div>
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".xlsx"
-                            onChange={handleFileChange}
-                            disabled={isImporting}
-                            className="block w-full text-sm text-[#191c1e] file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-[#f8fafc] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#191c1e] hover:file:bg-[#f2f4f6]"
-                        />
+                    )}
+                </div>
+
+                <div className="flex justify-end gap-3 border-t border-[#e0e3e5] p-4">
+                    <button
+                        type="button"
+                        onClick={handleClose}
+                        disabled={isImporting}
+                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {result ? tCommon("close") : tCommon("cancel")}
+                    </button>
+                    {!result && (
                         <button
                             type="button"
-                            onClick={handleDownloadTemplate}
-                            disabled={isDownloadingTemplate}
-                            className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={handleImport}
+                            disabled={!file || isImporting || (!isYearMode && (month < 1 || month > 12))}
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            <Download className="h-3.5 w-3.5" /> {t("monthlyAccumulationDownloadTemplate")}
+                            {isImporting && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {tCommon("import")}
                         </button>
-                        <ExportFilteredButton
-                            download={() =>
-                                isYearMode
-                                    ? EmployeeImportApi.exportYearlyAccumulation(exportFilter, year)
-                                    : EmployeeImportApi.exportMonthlyAccumulation(exportFilter, year, month)
-                            }
-                            fallbackFileName={isYearMode ? "LuyKeOT_CaNam.xlsx" : "LuyKeOT.xlsx"}
-                        />
-                        <div className="flex justify-end gap-3">
-                            <button
-                                onClick={handleClose}
-                                disabled={isImporting}
-                                className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                {t("importCancel")}
-                            </button>
-                            <button
-                                onClick={handleImport}
-                                disabled={!file || isImporting || (!isYearMode && (month < 1 || month > 12))}
-                                className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                {isImporting ? t("monthlyAccumulationImporting") : t("monthlyAccumulationImportSubmit")}
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        <div className="flex flex-wrap items-center gap-4 rounded-lg bg-[#f8fafc] px-4 py-3 text-sm">
-                            <span className="font-semibold text-emerald-600">
-                                {t("monthlyAccumulationAdjustedCount", { count: result.adjustedCount })}
-                            </span>
-                            {result.adjustedYearCount !== undefined && result.adjustedYearCount > 0 && (
-                                <span className="font-semibold text-teal-600">
-                                    {t("monthlyAccumulationAdjustedYearCount", { count: result.adjustedYearCount })}
-                                </span>
-                            )}
-                            <span className="text-[#5e3f3a]">
-                                {t("monthlyAccumulationUnchangedCount", { count: result.unchangedCount })}
-                            </span>
-                            <span className={result.skippedCount > 0 ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}>
-                                {t("monthlyAccumulationSkippedCount", { count: result.skippedCount })}
-                            </span>
-                            <span className="text-[#5e3f3a]">
-                                {t("monthlyAccumulationTotalDelta", { hours: result.totalDeltaHours.toFixed(2) })}
-                            </span>
-                            {result.totalDeltaYearHours !== undefined && result.totalDeltaYearHours !== 0 && (
-                                <span className="text-[#5e3f3a]">
-                                    {t("monthlyAccumulationTotalDeltaYear", { hours: result.totalDeltaYearHours.toFixed(2) })}
-                                </span>
-                            )}
-                        </div>
-
-                        {result.skippedRows.length > 0 && (
-                            <div className="max-h-96 overflow-y-auto rounded-lg border border-[#e0e3e5]">
-                                <table className="min-w-full border-collapse text-left text-sm">
-                                    <thead>
-                                        <tr className="border-b border-[#e0e3e5] bg-[#fff4f2] text-xs font-semibold uppercase tracking-[0.15em] text-[#930006]">
-                                            <th className="px-3 py-2">{t("monthlyAccumulationColCode")}</th>
-                                            <th className="px-3 py-2">{t("monthlyAccumulationColReason")}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {result.skippedRows.map((row, index) => (
-                                            <tr key={`${row.employeeCode}-${index}`} className="border-b border-[#f1f5f9]">
-                                                <td className="px-3 py-2 font-semibold text-[#191c1e]">{row.employeeCode}</td>
-                                                <td className="px-3 py-2 text-[#930006]">{row.reason}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-
-                        <div className="flex justify-end">
-                            <button
-                                onClick={handleClose}
-                                className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
-                            >
-                                {t("importClose")}
-                            </button>
-                        </div>
-                    </div>
-                )}
+                    )}
                 </div>
             </div>
         </div>

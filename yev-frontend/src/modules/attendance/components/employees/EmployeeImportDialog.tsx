@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, X } from "lucide-react";
+import { Building2, Download, FileSpreadsheet, Loader2, UserPlus, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 
@@ -16,6 +16,10 @@ import {
 import ExportFilteredButton from "./ExportFilteredButton";
 import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import { getApiErrorMessage } from "@/lib/apiError";
+import InfoTooltip from "@/components/ui/InfoTooltip";
+import { IconButton, IconFlag } from "@/components/ui/ListToolbar";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/common/EmptyState";
 
 interface EmployeeImportDialogProps {
     isOpen: boolean;
@@ -26,6 +30,7 @@ interface EmployeeImportDialogProps {
 
 export default function EmployeeImportDialog({ isOpen, onClose, onImported, exportFilter }: EmployeeImportDialogProps) {
     const t = useTranslations("Attendance.Employee");
+    const tCommon = useTranslations("Common");
     const [file, setFile] = useState<File | null>(null);
     const [mode, setMode] = useState<EmployeeImportMode>(EMPLOYEE_IMPORT_MODE.add);
     const [isPreviewing, setIsPreviewing] = useState(false);
@@ -166,17 +171,18 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                 className="z-60 mx-4 flex max-h-[85vh] w-full max-w-6xl flex-col rounded-xl border border-[#e0e3e5] bg-white shadow-xl"
             >
                 <div className="flex items-center justify-between border-b border-[#e0e3e5] p-6 pb-4">
-                    <div>
+                    <div className="flex items-center gap-1.5">
                         <h3 id="import-employee-title" className="text-lg font-semibold text-[#191c1e]">
                             {t("importTitle")}
                         </h3>
+                        <InfoTooltip text={t("importDescription")} />
                     </div>
                     <button
                         type="button"
                         onClick={handleClose}
                         disabled={isBusy}
                         className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
-                        aria-label={t("importClose")}
+                        aria-label={tCommon("close")}
                     >
                         <X className="h-5 w-5" />
                     </button>
@@ -189,10 +195,12 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                 {t("importCreatedCount", { count: result.createdEmployeeCount })}
                             </span>
                             <span className="text-[#5e3f3a]">{t("importUpdatedCount", { count: result.updatedEmployeeCount })}</span>
-                            <span className="text-[#5e3f3a]">
-                                {t("importNewDepartmentCount", { count: result.createdDepartmentCount })}
-                            </span>
-                            <span className="text-[#5e3f3a]">{t("importNewGroupCount", { count: result.createdGroupCount })}</span>
+                            {result.createdDepartmentCount > 0 && (
+                                <span className="text-[#5e3f3a]">{t("importNewDepartmentCount", { count: result.createdDepartmentCount })}</span>
+                            )}
+                            {result.createdGroupCount > 0 && (
+                                <span className="text-[#5e3f3a]">{t("importNewGroupCount", { count: result.createdGroupCount })}</span>
+                            )}
                             {result.resignedCount > 0 && (
                                 <span className="text-[#930006]">{t("importRemovedCount", { count: result.resignedCount })}</span>
                             )}
@@ -261,18 +269,12 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                 type="button"
                                 onClick={handlePreview}
                                 disabled={!file || isBusy}
-                                className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                {isPreviewing ? t("importPreviewing") : t("importPreviewButton")}
+                                {isPreviewing && <Loader2 className="h-4 w-4 animate-spin" />}
+                                {t("importPreviewButton")}
                             </button>
-                            <button
-                                type="button"
-                                onClick={handleDownloadTemplate}
-                                disabled={isDownloadingTemplate}
-                                className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <Download className="h-3.5 w-3.5" /> {t("importDownloadTemplate")}
-                            </button>
+                            <IconButton icon={Download} label={tCommon("downloadTemplate")} onClick={handleDownloadTemplate} disabled={isDownloadingTemplate} />
                             <ExportFilteredButton download={() => EmployeeImportApi.exportEmployees(exportFilter)} fallbackFileName="NhanVien.xlsx" />
                         </div>
 
@@ -280,25 +282,35 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                             <div className="flex flex-wrap items-center gap-4 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold">
                                 <span className="text-[#191c1e]">{t("importSummaryTotal", { count: summary.totalRows })}</span>
                                 <span className="text-emerald-600">{t("importSummaryValid", { count: summary.validRows })}</span>
-                                <span className={summary.invalidRows > 0 ? "text-[#930006]" : "text-[#5e3f3a]"}>
+                                <span
+                                    className={summary.invalidRows > 0 ? "text-[#930006]" : "text-[#5e3f3a]"}
+                                    title={summary.invalidRows > 0 ? t("importSummaryHint") : undefined}
+                                >
                                     {t("importSummaryInvalid", { count: summary.invalidRows })}
                                 </span>
-                                <span className="text-[#5e3f3a]">
-                                    {t("importNewDepartmentCount", { count: summary.newDepartmentCount })} ·{" "}
-                                    {t("importNewGroupCount", { count: summary.newGroupCount })}
-                                </span>
+                                {summary.newDepartmentCount > 0 && (
+                                    <span className="text-[#5e3f3a]">{t("importNewDepartmentCount", { count: summary.newDepartmentCount })}</span>
+                                )}
+                                {summary.newGroupCount > 0 && (
+                                    <span className="text-[#5e3f3a]">{t("importNewGroupCount", { count: summary.newGroupCount })}</span>
+                                )}
                                 {removedRows.length > 0 && (
                                     <span className="text-[#930006]">{t("importRemovedCount", { count: removedRows.length })}</span>
                                 )}
-                                {summary.invalidRows > 0 && <span className="text-[#930006]">{t("importSummaryHint")}</span>}
                             </div>
                         )}
 
                         <div className="flex-1 overflow-auto p-2">
                             {rows.length === 0 ? (
-                                <div className="px-4 py-12 text-center text-sm text-[#5e3f3a]">
-                                    {isPreviewing ? t("importReadingFile") : t("importNoPreviewYet")}
-                                </div>
+                                isPreviewing ? (
+                                    <div className="space-y-2 p-2">
+                                        {Array.from({ length: 6 }, (_, i) => (
+                                            <Skeleton key={i} className="h-6 w-full" />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <EmptyState icon={FileSpreadsheet} title={t("importNoPreviewYet")} />
+                                )
                             ) : (
                                 <table className="min-w-full border-collapse text-left text-xs">
                                     <thead>
@@ -336,13 +348,11 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                                                         .join(" · ") || "-"}
                                                 </td>
                                                 <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">
-                                                    {[
-                                                        row.isNewEmployee && t("importNewEmployeeTag"),
-                                                        row.isNewDepartment && t("importNewDepartmentTag"),
-                                                        row.isNewGroup && t("importNewGroupTag"),
-                                                    ]
-                                                        .filter(Boolean)
-                                                        .join(", ") || "-"}
+                                                    <span className="inline-flex gap-1">
+                                                        {row.isNewEmployee && <IconFlag icon={UserPlus} label={t("importNewEmployeeTag")} tone="success" />}
+                                                        {row.isNewDepartment && <IconFlag icon={Building2} label={t("importNewDepartmentTag")} tone="neutral" />}
+                                                        {row.isNewGroup && <IconFlag icon={Users} label={t("importNewGroupTag")} tone="neutral" />}
+                                                    </span>
                                                 </td>
                                                 <td className="px-3 py-2">
                                                     {row.errors.length === 0 ? "-" : <div className="text-[#930006]">{row.errors.join("; ")}</div>}
@@ -380,16 +390,17 @@ export default function EmployeeImportDialog({ isOpen, onClose, onImported, expo
                         disabled={isBusy}
                         className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {result ? t("importClose") : t("importCancel")}
+                        {result ? tCommon("close") : tCommon("cancel")}
                     </button>
                     {!result && (
                         <button
                             type="button"
                             onClick={handleConfirm}
                             disabled={!canConfirm || isBusy}
-                            className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isConfirming ? t("importConfirming") : t("importConfirmButton")}
+                            {isConfirming && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {tCommon("import")}
                         </button>
                     )}
                 </div>

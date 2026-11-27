@@ -1,23 +1,24 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from "react";
 import { toast } from "react-toastify";
 import { useTranslations } from "next-intl";
 import {
     AlertTriangle,
     CalendarClock,
     Clock,
+    Factory,
     FileSpreadsheet,
     History,
-    Inbox,
     Link2,
     Pencil,
     PenLine,
-    Search,
     SlidersHorizontal,
     Trash2,
     Upload,
     UserCheck,
+    UserX,
+    type LucideIcon,
 } from "lucide-react";
 
 import { EmployeeApi, type EmployeeScopeDto } from "@/modules/attendance/api/employee.api";
@@ -31,7 +32,8 @@ import type { GroupDto } from "@/modules/attendance/types/group.dto";
 import { SearchableSelect, type SelectOption } from "@/components/ui/SearchableSelect";
 import ActionMenu from "@/components/ui/ActionMenu";
 import RowActionsMenu, { type RowAction } from "@/components/ui/RowActionsMenu";
-import { Badge } from "@/components/ui/Badge";
+import { StyledSelect } from "@/components/ui/StyledSelect";
+import { ErrorBar, FilterActions, IconFlag, ListToolbar, SearchField, TableStatusRows, fieldClassName } from "@/components/ui/ListToolbar";
 import EmployeeForm, { type EmployeeFormValues } from "./EmployeeForm";
 import type { EmployeeExportFilter } from "@/modules/attendance/types/employee-import.dto";
 import EmployeeImportDialog from "./EmployeeImportDialog";
@@ -56,8 +58,7 @@ import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { useFitViewport } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 15;
-const filterTrigger = (width: string) =>
-    `h-9 ${width} rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]`;
+const filterTrigger = (width: string) => `${fieldClassName} ${width} pr-8`;
 
 const toProductionOptions = (options: ProductionOptionDto[]): SelectOption[] =>
     options.map((o) => ({ value: o.id, label: o.nameVn ? `${o.code} - ${o.nameVn}` : o.code, searchText: o.code.toLowerCase() }));
@@ -142,25 +143,22 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     }, []);
 
     useEffect(() => {
+        // Wait for the scope before filling dropdowns so a restricted user never sees the full company list.
         EmployeeApi.getMyScope()
-            .then(setScope)
+            .then((nextScope) => {
+                setScope(nextScope);
+                if (nextScope.companyWide) {
+                    DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
+                    GroupApi.getAllGroups().then(setGroups).catch((err) => console.error(err));
+                    WorkshopApi.getAllWorkshops().then(setWorkshops).catch((err) => console.error(err));
+                } else {
+                    setDepartments(nextScope.departments);
+                    setGroups(nextScope.groups);
+                    setWorkshops(nextScope.workshops);
+                }
+            })
             .catch((err) => console.error(err));
     }, []);
-
-    // Wait for the scope before loading dropdowns to avoid flashing the full company list; when restricted,
-    // use BE's `scope` lists since the scope may span several departments/groups.
-    useEffect(() => {
-        if (scope === null) return;
-        if (scope.companyWide) {
-            DepartmentApi.getAllDepartments().then(setDepartments).catch((err) => console.error(err));
-            GroupApi.getAllGroups().then(setGroups).catch((err) => console.error(err));
-            WorkshopApi.getAllWorkshops().then(setWorkshops).catch((err) => console.error(err));
-        } else {
-            setDepartments(scope.departments);
-            setGroups(scope.groups);
-            setWorkshops(scope.workshops);
-        }
-    }, [scope]);
 
     const handleSelectDepartment = (nextId: number | "") => {
         setDepartmentId(nextId);
@@ -222,11 +220,23 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         setSelectedIds([]);
         setPageIndex(1);
     };
-    const resignedSelectOptions: SelectOption[] = [
-        { value: 0, label: t("statusWorking"), searchText: t("statusWorking").toLowerCase() },
-        { value: 1, label: t("statusResigned"), searchText: t("statusResigned").toLowerCase() },
+    const resignedSelectOptions: { value: number | ""; label: string }[] = [
+        { value: "", label: t("filterStatusAll") },
+        { value: 0, label: t("statusWorking") },
+        { value: 1, label: t("statusResigned") },
     ];
     const resigned = resignedFilter === "" ? undefined : resignedFilter === 1;
+
+    const handleReset = () => {
+        setKeyword("");
+        setAppliedKeyword("");
+        setWorkshopId("");
+        handleSelectDepartment("");
+        handleSelectTeam("");
+        setShiftTeamId("");
+        setCongDoan("");
+        handleSelectResigned("");
+    };
 
     const selectedCongDoan = congDoan === "" ? undefined : congDoanOptions[congDoan];
     const congDoanSelectOptions: SelectOption[] = congDoanOptions.map((value, index) => ({
@@ -425,8 +435,18 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     ];
     const employeeExcelActions =
         employeeExcelItems.length > 0 ? (
-            <ActionMenu label={t("excelActionsLabel")} icon={<FileSpreadsheet className="h-3.5 w-3.5" />} items={employeeExcelItems} />
+            <ActionMenu label={t("excelActionsLabel")} icon={<FileSpreadsheet className="h-4 w-4" />} items={employeeExcelItems} iconOnly />
         ) : null;
+
+    const productionFilterCount = [teamId, productionLineId, shiftTeamId, congDoan].filter((v) => v !== "").length;
+    // Columns pinned to one value by the filters only repeat it on every row; a one-pair group pins Line × Ca (and Team, which follows the Line).
+    const selectedGroup = groupId === "" ? undefined : groups.find((g) => g.id === groupId);
+    const singlePairGroup = (selectedGroup?.lines?.length ?? 0) === 1;
+    const showLine = productionLineId === "" && !singlePairGroup;
+    const showTeam = teamId === "" && showLine;
+    const showShift = shiftTeamId === "" && !singlePairGroup;
+    const showCongDoan = congDoan === "";
+    const columnCount = 10 + (canSelect ? 1 : 0) + [showLine, showTeam, showShift, showCongDoan].filter(Boolean).length;
 
     const getRowActions = (employee: EmployeeDto): RowAction[] => [
         ...(canUpdateEmployee ? [{ label: tCommon("edit"), icon: Pencil, onClick: () => openEditForm(employee) }] : []),
@@ -448,111 +468,106 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     return (
         <div className="space-y-3">
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                <div className="flex flex-col gap-3 border-b border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 md:flex-row md:items-center md:justify-between">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <input
-                            value={keyword}
-                            onChange={(event) => setKeyword(event.target.value)}
-                            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder={t("searchPlaceholder")}
-                            className="h-9 w-48 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
-                        <button
-                            onClick={handleSearch}
-                            disabled={isLoading}
-                            title={tCommon("search")}
-                            aria-label={tCommon("search")}
-                            className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                        >
-                            <Search className="h-4 w-4" />
-                        </button>
+                <ListToolbar
+                    actions={
+                        <>
+                            {canSelect && selectedIds.length > 0 && canUpdateEmployee && (
+                                <button
+                                    type="button"
+                                    onClick={() => setBulkAction("restore")}
+                                    className="inline-flex h-9 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                                >
+                                    <UserCheck className="h-4 w-4" /> {t("restoreResignedBulk", { count: selectedIds.length })}
+                                </button>
+                            )}
+                            {canSelect && selectedIds.length > 0 && canDeleteEmployee && (
+                                <button
+                                    type="button"
+                                    onClick={() => setBulkAction("delete")}
+                                    className="inline-flex h-9 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-[#930006] px-3 text-sm font-semibold text-white transition hover:bg-[#7a0005]"
+                                >
+                                    <Trash2 className="h-4 w-4" /> {t("bulkDeleteButton", { count: selectedIds.length })}
+                                </button>
+                            )}
+                            {employeeExcelActions}
+                        </>
+                    }
+                >
+                    <SearchField value={keyword} onChange={setKeyword} onEnter={handleSearch} placeholder={t("searchPlaceholder")} />
+                    <SearchableSelect
+                        options={workshopOptions}
+                        value={workshopId}
+                        onChange={handleSelectWorkshop}
+                        placeholder={t("filterWorkshopPlaceholder")}
+                        ariaLabel={t("filterWorkshopPlaceholder")}
+                        triggerClassName={filterTrigger("w-24")}
+                    />
+                    {showDepartmentFilter && (
                         <SearchableSelect
-                            options={workshopOptions}
-                            value={workshopId}
-                            onChange={handleSelectWorkshop}
-                            placeholder={t("filterWorkshopPlaceholder")}
-                            triggerClassName={filterTrigger("w-24")}
-                        />
-                        {showDepartmentFilter && (
-                            <SearchableSelect
-                                options={departmentOptions}
-                                value={departmentId}
-                                onChange={handleSelectDepartment}
-                                placeholder={t("filterDepartmentPlaceholder")}
-                                triggerClassName={filterTrigger("w-36")}
-                            />
-                        )}
-                        <SearchableSelect
-                            options={groupOptions}
-                            value={groupId}
-                            onChange={handleSelectGroup}
-                            placeholder={t("filterGroupPlaceholder")}
+                            options={departmentOptions}
+                            value={departmentId}
+                            onChange={handleSelectDepartment}
+                            placeholder={t("filterDepartmentPlaceholder")}
+                            ariaLabel={t("filterDepartmentPlaceholder")}
                             triggerClassName={filterTrigger("w-36")}
                         />
+                    )}
+                    <SearchableSelect
+                        options={groupOptions}
+                        value={groupId}
+                        onChange={handleSelectGroup}
+                        placeholder={t("filterGroupPlaceholder")}
+                        ariaLabel={t("filterGroupPlaceholder")}
+                        triggerClassName={filterTrigger("w-36")}
+                    />
+                    <FilterPopover icon={Factory} label={t("productionFilters")} count={productionFilterCount}>
                         <SearchableSelect
                             options={toProductionOptions(teamOptions)}
                             value={teamId}
                             onChange={handleSelectTeam}
                             placeholder={tProduction("filterTeamPlaceholder")}
-                            triggerClassName={filterTrigger("w-24")}
+                            ariaLabel={tProduction("filterTeamPlaceholder")}
+                            triggerClassName={filterTrigger("w-36")}
                         />
                         <SearchableSelect
                             options={toProductionOptions(lineOptions)}
                             value={productionLineId}
                             onChange={handleSelectLine}
                             placeholder={tProduction("filterBlockPlaceholder")}
-                            triggerClassName={filterTrigger("w-24")}
+                            ariaLabel={tProduction("filterBlockPlaceholder")}
+                            triggerClassName={filterTrigger("w-36")}
                         />
                         <SearchableSelect
                             options={toProductionOptions(shiftTeamOptions)}
                             value={shiftTeamId}
                             onChange={handleSelectShiftTeam}
                             placeholder={tProduction("filterShiftTeamPlaceholder")}
-                            triggerClassName={filterTrigger("w-28")}
+                            ariaLabel={tProduction("filterShiftTeamPlaceholder")}
+                            triggerClassName={filterTrigger("w-36")}
                         />
                         <SearchableSelect
                             options={congDoanSelectOptions}
                             value={congDoan}
                             onChange={handleSelectCongDoan}
                             placeholder={tProduction("filterCongDoanPlaceholder")}
-                            triggerClassName={filterTrigger("w-32")}
+                            ariaLabel={tProduction("filterCongDoanPlaceholder")}
+                            triggerClassName={filterTrigger("w-36")}
                         />
-                        <SearchableSelect
+                    </FilterPopover>
+                    <div className="w-28">
+                        <StyledSelect
                             options={resignedSelectOptions}
                             value={resignedFilter}
                             onChange={handleSelectResigned}
-                            placeholder={t("filterStatusPlaceholder")}
-                            triggerClassName={filterTrigger("w-32")}
+                            emptyLabel={t("filterStatusPlaceholder")}
+                            ariaLabel={t("filterStatusPlaceholder")}
+                            triggerClassName={filterTrigger("w-full")}
                         />
-                        {employeeExcelActions}
-                        {canSelect && selectedIds.length > 0 && (
-                            <>
-                                {canUpdateEmployee && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setBulkAction("restore")}
-                                        className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                                    >
-                                        <UserCheck className="h-4 w-4" /> {t("restoreResignedBulk", { count: selectedIds.length })}
-                                    </button>
-                                )}
-                                {canDeleteEmployee && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setBulkAction("delete")}
-                                        className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg bg-[#e3000f] px-3 text-sm font-semibold text-white transition hover:bg-[#b40009]"
-                                    >
-                                        <Trash2 className="h-4 w-4" /> {t("bulkDeleteButton", { count: selectedIds.length })}
-                                    </button>
-                                )}
-                            </>
-                        )}
                     </div>
-                </div>
+                    <FilterActions onSearch={handleSearch} onReset={handleReset} disabled={isLoading} />
+                </ListToolbar>
 
-                {error && (
-                    <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
-                )}
+                <ErrorBar message={error} />
 
                 <div
                     ref={tableScrollRef}
@@ -580,38 +595,23 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                 <th className="px-2 py-1.5">{t("colWorkshop")}</th>
                                 <th className="px-2 py-1.5">{t("colGroup")}</th>
                                 <th className="px-2 py-1.5">{t("colJobTitle")}</th>
-                                <th className="px-2 py-1.5">{tProduction("colBlock")}</th>
-                                <th className="px-2 py-1.5">{tProduction("colTeam")}</th>
-                                <th className="px-2 py-1.5">{tProduction("colShiftTeam")}</th>
-                                <th className="px-2 py-1.5">{tProduction("colCongDoan")}</th>
+                                {showLine && <th className="px-2 py-1.5">{tProduction("colBlock")}</th>}
+                                {showTeam && <th className="px-2 py-1.5">{tProduction("colTeam")}</th>}
+                                {showShift && <th className="px-2 py-1.5">{tProduction("colShiftTeam")}</th>}
+                                {showCongDoan && <th className="px-2 py-1.5">{tProduction("colCongDoan")}</th>}
                                 <th className="px-2 py-1.5">{tProduction("colTaskName")}</th>
-                                <th className="px-2 py-1.5">{t("colMonthToDate")}</th>
-                                <th className="px-2 py-1.5">{t("colYearToDate")}</th>
+                                <th className="px-2 py-1.5 text-right">{t("colMonthToDate")}</th>
+                                <th className="px-2 py-1.5 text-right">{t("colYearToDate")}</th>
                                 <th className="sticky right-0 z-10 w-10 bg-[#f8fafc] px-2 py-1.5 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                                     <span className="sr-only">{tCommon("actions")}</span>
                                 </th>
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && employees.length === 0 && (
-                                <tr>
-                                    <td colSpan={canSelect ? 15 : 14} className="px-4 py-12">
-                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
-                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
-                                            {t("noData")}
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
+                            <TableStatusRows loading={isLoading} empty={employees.length === 0} columns={columnCount} emptyText={t("noData")} />
                             {employees.map((employee) => {
-                                const isMonthOverLimit = employee.monthToDate > setting.monthlyOtHourLimit;
-                                const isYearOverLimit = employee.yearToDate > setting.yearlyOtHourLimit;
-                                const accumulationBadgeClass = (overLimit: boolean) =>
-                                    `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                                        overLimit
-                                            ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]"
-                                            : "border-[#e0e3e5] bg-[#f8fafc] text-[#5e3f3a]"
-                                    }`;
+                                const monthLimit = employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit;
+                                const yearLimit = employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit;
                                 return (
                                 <tr key={employee.id} className="whitespace-nowrap border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]">
                                     {canSelect && (
@@ -627,12 +627,10 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                     )}
                                     <td className="py-1.5 pl-3 pr-2 text-sm font-semibold text-[#191c1e]">{employee.code}</td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
-                                        {employee.lastName} {employee.firstName}
-                                        {employee.resignedAt && (
-                                            <span className="ml-1.5">
-                                                <Badge variant="warning">{t("statusResigned")}</Badge>
-                                            </span>
-                                        )}
+                                        <span className="inline-flex items-center gap-1.5">
+                                            {employee.lastName} {employee.firstName}
+                                            {employee.resignedAt && <IconFlag icon={UserX} label={t("statusResigned")} tone="warning" />}
+                                        </span>
                                     </td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.userName ?? "-"}</td>
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
@@ -649,33 +647,23 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                                         )}
                                         {employee.groupNameVn && <div className="text-xs text-[#5e3f3a]">{employee.groupNameVn}</div>}
                                     </td>
-                                    <td className="px-2 py-1.5 text-sm">
-                                        {employee.jobTitleName ? (
-                                            <Badge variant="info">{employee.jobTitleName}</Badge>
-                                        ) : (
-                                            <span className="text-xs italic text-[#8a8f94]">{t("noJobTitle")}</span>
+                                    <td className="px-2 py-1.5 text-sm text-[#191c1e]">
+                                        {employee.jobTitleName ?? (
+                                            <span className="text-[#8a8f94]" title={t("noJobTitle")}>
+                                                -
+                                            </span>
                                         )}
                                     </td>
+                                    {showLine && <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.lineCode ?? "-"}</td>}
+                                    {showTeam && <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.teamCode ?? "-"}</td>}
+                                    {showShift && <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.shiftTeamCode ?? "-"}</td>}
+                                    {showCongDoan && <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.congDoan ?? "-"}</td>}
                                     <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">
-                                        {employee.lineCode ?? "-"}
+                                        {employee.taskName ?? "-"}
                                         {employee.staffKind && <span className="ml-1 text-xs text-[#8a8f94]">{employee.staffKind}</span>}
                                     </td>
-                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.teamCode ?? "-"}</td>
-                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.shiftTeamCode ?? "-"}</td>
-                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.congDoan ?? "-"}</td>
-                                    <td className="px-2 py-1.5 text-sm text-[#5e3f3a]">{employee.taskName ?? "-"}</td>
-                                    <td className="px-2 py-1.5 text-sm">
-                                        <span className={accumulationBadgeClass(isMonthOverLimit)}>
-                                            {isMonthOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                            {employee.monthToDate}h
-                                        </span>
-                                    </td>
-                                    <td className="px-2 py-1.5 text-sm">
-                                        <span className={accumulationBadgeClass(isYearOverLimit)}>
-                                            {isYearOverLimit && <AlertTriangle className="h-3 w-3" />}
-                                            {employee.yearToDate}h
-                                        </span>
-                                    </td>
+                                    <HoursCell hours={employee.monthToDate} limit={monthLimit} isCustom={employee.customMonthlyOtHourLimit !== null} />
+                                    <HoursCell hours={employee.yearToDate} limit={yearLimit} isCustom={employee.customYearlyOtHourLimit !== null} />
                                     <td className="sticky right-0 w-10 bg-inherit px-2 py-1.5 text-right text-sm shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.08)]">
                                         <RowActionsMenu actions={getRowActions(employee)} />
                                     </td>
@@ -770,6 +758,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 <AccumulationHistoryModal
                     employeeId={historyEmployee.id}
                     employeeLabel={`${historyEmployee.lastName} ${historyEmployee.firstName} (${historyEmployee.code})`}
+                    monthlyLimit={historyEmployee.customMonthlyOtHourLimit}
+                    yearlyLimit={historyEmployee.customYearlyOtHourLimit}
                     canEdit={canUpdateAccumulation}
                     onClose={() => setHistoryEmployee(null)}
                 />
@@ -790,5 +780,69 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         </div>
     );
 });
+
+// Plain number unless over the person's own limit (custom or default); a custom limit gets a small marker.
+function HoursCell({ hours, limit, isCustom }: { hours: number; limit: number; isCustom: boolean }) {
+    const t = useTranslations("Attendance.Employee");
+    const isOver = hours > limit;
+    return (
+        <td className={`px-2 py-1.5 text-right text-sm tabular-nums ${isOver ? "font-semibold text-[#930006]" : "text-[#191c1e]"}`}>
+            <span className="inline-flex items-center gap-1" title={isOver ? t("overLimitTitle", { limit }) : undefined}>
+                {isOver && <AlertTriangle className="h-3.5 w-3.5" role="img" aria-label={t("overLimitTitle", { limit })} />}
+                {hours}h
+                {isCustom && (
+                    <span role="img" aria-label={t("customLimitTitle", { limit })} title={t("customLimitTitle", { limit })}>
+                        <SlidersHorizontal className="h-3 w-3 text-[#8a8f94]" aria-hidden />
+                    </span>
+                )}
+            </span>
+        </td>
+    );
+}
+
+// Secondary filters behind one toolbar button; the badge counts the active ones.
+function FilterPopover({ icon: Icon, label, count, children }: { icon: LucideIcon; label: string; count: number; children: ReactNode }) {
+    const [open, setOpen] = useState(false);
+    // React events bubble through portals, so a click inside a child dropdown's portaled panel still counts as inside.
+    const insideRef = useRef(false);
+
+    useEffect(() => {
+        if (!open) return;
+        const handleDown = () => {
+            if (!insideRef.current) setOpen(false);
+            insideRef.current = false;
+        };
+        const handleKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
+        document.addEventListener("mousedown", handleDown);
+        document.addEventListener("keydown", handleKey);
+        return () => {
+            document.removeEventListener("mousedown", handleDown);
+            document.removeEventListener("keydown", handleKey);
+        };
+    }, [open]);
+
+    const active = open || count > 0;
+    return (
+        <div className="relative" onMouseDown={() => (insideRef.current = true)}>
+            <button
+                type="button"
+                onClick={() => setOpen((current) => !current)}
+                aria-expanded={open}
+                className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-sm font-medium transition ${
+                    active ? "border-[#e9bcb6] bg-[#fff4f2] text-[#e3000f]" : "border-[#e0e3e5] bg-white text-[#5e3f3a] hover:bg-[#f2f4f6]"
+                }`}
+            >
+                <Icon className="h-4 w-4" />
+                {label}
+                {count > 0 && <span className="rounded-full bg-[#e3000f] px-1.5 text-xs font-semibold leading-5 text-white">{count}</span>}
+            </button>
+            {open && (
+                <div className="absolute left-0 top-full z-30 mt-1 grid w-max grid-cols-2 gap-2 rounded-lg border border-[#e0e3e5] bg-white p-2 shadow-lg">
+                    {children}
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default EmployeeList;
