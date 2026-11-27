@@ -50,7 +50,12 @@ export function usbLabel(usb: { alias?: string | null; friendlyName: string | nu
 }
 
 // Classes with a label in usbLog.deviceClass; any other class shows its raw name.
-export const DEVICE_CLASSES = ["DiskDrive", "WPD", "Image"];
+export const DEVICE_CLASSES = ["DiskDrive", "WPD", "Image", "Bluetooth"];
+
+// Mirrors UsbDeviceClasses.IsApprovable: scanners (Image) are logged only.
+export function isApprovableClass(usb: { deviceClass: string }) {
+    return usb.deviceClass === "DiskDrive" || usb.deviceClass === "WPD" || usb.deviceClass === "Bluetooth";
+}
 
 export function deviceClassLabel(t: (key: string) => string, deviceClass: string) {
     return DEVICE_CLASSES.includes(deviceClass) ? t(`deviceClass.${deviceClass}`) : deviceClass;

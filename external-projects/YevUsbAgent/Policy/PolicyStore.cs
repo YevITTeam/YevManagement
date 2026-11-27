@@ -4,7 +4,8 @@ namespace YevUsbAgent;
 
 public sealed class Policy
 {
-    public static readonly Policy Off = new(PolicyModes.Off, null, new HashSet<string>(), new HashSet<string>(), false, null, 0);
+    // Before the first sync nothing is approved yet, so everything is blocked until IT grants it (or the web says otherwise).
+    public static readonly Policy BlockAll = new(PolicyModes.Enforce, null, new HashSet<string>(), new HashSet<string>(), false, null, 0);
 
     public Policy(int mode, string? version, HashSet<string> approved, HashSet<string> readOnly, bool trackCopyIn, string? uninstallPasswordHash,
         int syncSeconds)
@@ -31,6 +32,17 @@ public sealed class Policy
     public bool IsApproved(string key, string serial) => serial.Length > 0 && Approved.Contains(key);
 
     public bool IsReadOnly(string key, string serial) => serial.Length > 0 && ReadOnly.Contains(key);
+
+    // Null = no policy (Off). Audit only reports what Enforce would block.
+    public int? Decide(string key, string serial)
+    {
+        if (Mode == PolicyModes.Off) return null;
+        if (IsApproved(key, serial)) return PolicyResults.Approved;
+
+        var enforce = Mode == PolicyModes.Enforce;
+        if (IsReadOnly(key, serial)) return enforce ? PolicyResults.ReadOnly : PolicyResults.Approved;
+        return enforce ? PolicyResults.Blocked : PolicyResults.NotApproved;
+    }
 }
 
 // Last policy pulled from the server, persisted so blocking keeps working offline and across restarts.
@@ -44,7 +56,7 @@ public sealed class PolicyStore
     {
         Directory.CreateDirectory(dataDir);
         _path = PathIn(dataDir);
-        _current = Load(_path) ?? Policy.Off;
+        _current = Load(_path) ?? Policy.BlockAll;
     }
 
     public static string PathIn(string dataDir) => Path.Combine(dataDir, "policy.json");
@@ -84,7 +96,6 @@ public sealed class PolicyStore
 
     private static HashSet<string> ToSet(List<string>? keys) => (keys ?? new List<string>()).Select(x => x.ToUpperInvariant()).ToHashSet();
 
-    // A PC that has never synced cannot know whether it is under Enforce, so it starts in Off.
     // A tampered file fails to decrypt and is treated as missing; plain JSON is what agents before 1.4 wrote.
     public static Policy? Load(string path)
     {

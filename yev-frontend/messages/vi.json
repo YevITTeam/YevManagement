@@ -2767,8 +2767,9 @@
     },
     "deviceClass": {
       "DiskDrive": "Ổ lưu trữ",
-      "WPD": "Điện thoại",
-      "Image": "Máy ảnh / scan"
+      "WPD": "Điện thoại / máy ảnh",
+      "Image": "Máy ảnh / scan",
+      "Bluetooth": "Bluetooth"
     },
     "stats": {
       "loadError": "Không tải được thống kê USB.",
@@ -2875,7 +2876,7 @@
         "audit": "Thử",
         "enforce": "Chặn"
       },
-      "modeTitle": "Tắt: chỉ ghi log. Thử: ghi lại USB nào sẽ bị chặn, không khoá. Chặn: USB chưa cấp phép bị chặn hẳn (agent trước 1.3 chỉ chặn ghi), USB cấp phép chỉ đọc thì không ghi được; agent áp dụng trong khoảng 1 phút.",
+      "modeTitle": "Tắt: chỉ ghi log. Thử: ghi lại USB nào sẽ bị chặn, không khoá. Chặn: USB, điện thoại/máy ảnh, Bluetooth chưa cấp phép bị chặn hẳn (điện thoại/Bluetooth từ agent 1.5; agent trước 1.3 chỉ chặn ghi USB), USB cấp phép chỉ đọc thì không ghi được; agent áp dụng trong khoảng 1 phút.",
       "loadError": "Không thể tải chế độ chặn USB.",
       "saveSuccess": "Đã lưu chế độ chặn USB.",
       "saveFailed": "Lưu chế độ chặn USB thất bại.",

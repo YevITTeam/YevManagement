@@ -21,6 +21,7 @@ builder.Services.AddSingleton(new PolicyStore(dataDir));
 builder.Services.AddSingleton<Updater>();
 builder.Services.AddHostedService<Lifecycle>();
 builder.Services.AddHostedService<UsbMonitor>();
+builder.Services.AddHostedService<BluetoothMonitor>();
 builder.Services.AddHostedService<Uploader>();
 builder.Services.AddHostedService<PolicySync>();
 

@@ -118,9 +118,11 @@ public sealed class PolicyFile
     public int SyncSeconds { get; set; }
 }
 
-// Disks this agent disabled in Windows; kept on disk because a disabled disk has no letter left to find it by.
+// Devices this agent disabled in Windows; kept on disk because a disabled disk has no letter left to find it by.
 public sealed class BlockedDisk
 {
+    // A phone/camera transfer node rather than a disk; still listed by the phone scan while disabled.
+    public bool Phone { get; set; }
     public string PnpId { get; set; } = "";
     public string Key { get; set; } = "";
     public string VendorId { get; set; } = "";

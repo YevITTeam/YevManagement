@@ -22,7 +22,7 @@ import UsbExportButton from "./UsbExportButton";
 import { ErrorBar, FilterActions, IconButton, IconFlag, ListToolbar, SearchField, TableStatusRows, fieldClassName, rowClassName, theadRowClassName } from "@/components/ui/ListToolbar";
 import { UsbOwnerCell, UsbOwnerFilterFields, useUsbOwnerOptions } from "./UsbOwnerFilter";
 import UsbPolicyBar from "./UsbPolicyBar";
-import { ACCESS_LEVEL_OPTIONS, DEVICE_CLASSES, USB_ACCESS_LEVEL, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
+import { ACCESS_LEVEL_OPTIONS, DEVICE_CLASSES, USB_ACCESS_LEVEL, deviceClassLabel, isApprovableClass, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { TableScroll } from "@/components/ui/TableScroll";
 
@@ -271,6 +271,7 @@ export default function UsbDeviceList() {
                             <TableStatusRows loading={isLoading} empty={rows.length === 0} columns={columns} />
                             {rows.map((row) => {
                                 const isDisk = row.deviceClass === "DiskDrive";
+                                const approvable = isApprovableClass(row);
                                 const isApproved = row.isApproved || row.approvedMachines.length > 0;
                                 return (
                                     <tr key={row.id} className={`${rowClassName} align-top`}>
@@ -312,7 +313,7 @@ export default function UsbDeviceList() {
                                                     )}
                                                     {row.approvalNote && <div className="text-xs text-[#5e3f3a]">{row.approvalNote}</div>}
                                                 </div>
-                                            ) : isDisk ? (
+                                            ) : approvable ? (
                                                 <Badge variant="neutral">{t("common.notApproved")}</Badge>
                                             ) : (
                                                 <span className="text-xs text-[#8a8f94]">{t("devices.logOnly")}</span>
@@ -333,7 +334,7 @@ export default function UsbDeviceList() {
                                                             <IconButton icon={ShieldOff} label={t("common.revoke")} size="sm" variant="danger" onClick={() => setRevoking(row)} />
                                                         </>
                                                     ) : (
-                                                        isDisk &&
+                                                        approvable &&
                                                         row.serialNumber && <IconButton icon={ShieldCheck} label={t("common.approve")} size="sm" variant="ghost" onClick={() => openApprove(row)} />
                                                     )}
                                                     <IconButton icon={Tag} label={t("devices.setAlias")} size="sm" variant="ghost" onClick={() => openAlias(row)} />
@@ -386,10 +387,13 @@ export default function UsbDeviceList() {
                     <span className={fieldLabelClassName}>{t("devices.scope")}</span>
                     <StyledSelect value={scope} onChange={setScope} options={scopeOptions} triggerClassName={`${dialogFieldClassName} pr-8`} />
                 </label>
-                <label className="block">
-                    <span className={fieldLabelClassName}>{t("devices.access")}</span>
-                    <StyledSelect value={accessLevel} onChange={setAccessLevel} options={accessLevelOptions} triggerClassName={`${dialogFieldClassName} pr-8`} />
-                </label>
+                {/* Only storage can be read-only; phones and Bluetooth are allowed or blocked. */}
+                {approving?.deviceClass === "DiskDrive" && (
+                    <label className="block">
+                        <span className={fieldLabelClassName}>{t("devices.access")}</span>
+                        <StyledSelect value={accessLevel} onChange={setAccessLevel} options={accessLevelOptions} triggerClassName={`${dialogFieldClassName} pr-8`} />
+                    </label>
+                )}
                 {scope === "machines" && (
                     <div>
                         <span className={fieldLabelClassName}>{t("common.machine")}</span>

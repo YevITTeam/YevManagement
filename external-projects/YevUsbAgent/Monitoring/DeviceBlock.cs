@@ -99,6 +99,37 @@ internal static class DeviceBlock
         }
     }
 
+    // Phone/camera transfer node (MTP/PTP): disabling it cuts file access, the phone still charges.
+    public static bool DisableNode(string pnpId, ILogger logger)
+    {
+        if (!RunPnpUtil("/disable-device", pnpId, logger)) return false;
+        for (var i = 0; i < 10; i++)
+        {
+            if (IsDisabled(pnpId)) return true;
+            Thread.Sleep(300);
+        }
+        Enable(pnpId, logger);
+        return false;
+    }
+
+    // Built-in SD readers keep one device for every card, so a blocked card is cut off at the volume instead; it
+    // comes back on re-insert, when the agent blocks it again.
+    public static void Offline(IEnumerable<string> letters)
+    {
+        foreach (var letter in letters)
+        {
+            using var volume = CreateFileW(@"\\.\" + letter.TrimEnd('\\'), GenericRead | GenericWrite, ShareReadWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
+            if (volume.IsInvalid) continue;
+            Ioctl(volume, FsctlDismountVolume);
+            Ioctl(volume, IoctlVolumeOffline);
+        }
+    }
+
+    public static void Online(IEnumerable<string> letters)
+    {
+        foreach (var letter in letters) Online(letter);
+    }
+
     private static void Online(string letter)
     {
         using var volume = CreateFileW(@"\\.\" + letter.TrimEnd('\\'), GenericRead | GenericWrite, ShareReadWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);

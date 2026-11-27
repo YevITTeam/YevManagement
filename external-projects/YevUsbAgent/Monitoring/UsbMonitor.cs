@@ -40,12 +40,14 @@ public sealed partial class UsbMonitor : BackgroundService
     private sealed record UsbDrive(string Letter, string? Label, long? Capacity, string? Model, UsbIdentity Identity, uint DiskIndex,
         string PnpId, bool SharedSerial);
 
-    private sealed record Phone(string? Name, string DeviceClass, UsbIdentity Identity);
+    // BlockNodes = its MTP/PTP/ADB nodes; empty for scanners and other log-only imaging devices.
+    private sealed record Phone(string? Name, string DeviceClass, UsbIdentity Identity, List<string> BlockNodes);
 
     private sealed class Tracked
     {
         public required Guid SessionId { get; init; }
         public UsbDrive? Drive { get; init; }
+        public Phone? Phone { get; init; }
         public DriveSession? Watcher { get; set; }
         public int? PolicyResult { get; set; }
         // Set while a block waits for open files to close; after BlockGrace the volume is locked anyway.
@@ -178,7 +180,7 @@ public sealed partial class UsbMonitor : BackgroundService
             if (!_sessions.ContainsKey(key) && !_sessions.ContainsKey(BlockedKey(drive.PnpId))) OpenDrive(key, drive, drives.Values);
 
         // A disabled disk has no letter, so it is found through the list of disks this agent disabled.
-        foreach (var blocked in _blocked.Values.ToList())
+        foreach (var blocked in _blocked.Values.Where(b => !b.Phone).ToList())
             if (!_sessions.ContainsKey(BlockedKey(blocked.PnpId)) && DeviceBlock.IsPresent(blocked.PnpId) && DeviceBlock.IsDisabled(blocked.PnpId))
                 OpenDisabled(blocked);
 
@@ -193,7 +195,7 @@ public sealed partial class UsbMonitor : BackgroundService
             : !drives.ContainsKey(k)).ToList();
         foreach (var key in gone) Close(key);
 
-        foreach (var tracked in _sessions.Values.Where(t => t.Drive != null && !t.Disabled && t.Watcher == null))
+        foreach (var tracked in _sessions.Values.Where(t => t.Drive != null && !t.Disabled && t.Watcher == null && !IsOfflineCard(t)))
             tracked.Watcher = StartWatcher(tracked.SessionId, tracked.Drive!);
 
         if (_policy.Revision != _appliedRevision || _reevaluationPending) Reevaluate(drives.Values);
@@ -205,16 +207,15 @@ public sealed partial class UsbMonitor : BackgroundService
         _copyIn.Process(readable);
     }
 
-    private int? Decide(UsbIdentity identity)
-    {
-        var policy = _policy.Current;
-        if (policy.Mode == PolicyModes.Off) return null;
-        if (policy.IsApproved(identity.Key, identity.Serial)) return PolicyResults.Approved;
+    private int? Decide(UsbIdentity identity) => _policy.Current.Decide(identity.Key, identity.Serial);
 
-        var enforce = policy.Mode == PolicyModes.Enforce;
-        if (policy.IsReadOnly(identity.Key, identity.Serial)) return enforce ? PolicyResults.ReadOnly : PolicyResults.Approved;
-        return enforce ? PolicyResults.Blocked : PolicyResults.NotApproved;
-    }
+    // Phones and cameras have no read-only mode: anything short of a block lets them through.
+    private int? DecidePhone(UsbIdentity identity) => Decide(identity) is PolicyResults.ReadOnly ? PolicyResults.Approved : Decide(identity);
+
+    private static bool IsCard(UsbDrive drive) => drive.Identity.VendorId == "SD";
+
+    // A blocked built-in SD card has its volume offline; watching it would only fail every poll.
+    private static bool IsOfflineCard(Tracked tracked) => tracked.PolicyResult == PolicyResults.Blocked && IsCard(tracked.Drive!);
 
     // Applies a decision to the disk. Only disks this agent locked or disabled are ever given back, so a stick with a
     // hardware write-protect switch is left alone. Disabled = the disk is now off in Windows and has no volume.
@@ -224,7 +225,7 @@ public sealed partial class UsbMonitor : BackgroundService
         var letters = present.Where(d => d.DiskIndex == drive.DiskIndex).Select(d => d.Letter).Distinct().ToList();
 
         // A built-in SD reader keeps one disk device for every card, so disabling it would block approved cards too.
-        if (decision == PolicyResults.Blocked && drive.Identity.VendorId != "SD")
+        if (decision == PolicyResults.Blocked && !IsCard(drive))
         {
             var outcome = DeviceBlock.Disable(drive.PnpId, letters, force, _logger);
             if (outcome == LockOutcome.Deferred) return (false, null, false);
@@ -244,9 +245,11 @@ public sealed partial class UsbMonitor : BackgroundService
             if (outcome == LockOutcome.Failed) return (true, PolicyResults.BlockFailed, false);
             // Unchanged is recorded too: an attribute left from an earlier plug-in must still be cleared on approval.
             if (_locked.Add(key)) SaveLocked();
+            if (decision == PolicyResults.Blocked && IsCard(drive)) DeviceBlock.Offline(letters);
             return (true, decision, false);
         }
 
+        if (IsCard(drive)) DeviceBlock.Online(letters);
         if (!_locked.Contains(key)) return (true, decision, false);
 
         var unlock = DiskLock.Apply(drive.DiskIndex, letters, readOnly: false, force, _logger);
@@ -292,7 +295,7 @@ public sealed partial class UsbMonitor : BackgroundService
         foreach (var (key, tracked) in _sessions.ToList())
         {
             if (!_sessions.ContainsKey(key) || tracked.PolicyResult != PolicyResults.Blocked || tracked.Disabled
-                || tracked.Drive is not { } drive || drive.Identity.VendorId == "SD" || DateTime.UtcNow < tracked.NextFullBlockAt) continue;
+                || tracked.Drive is not { } drive || IsCard(drive) || DateTime.UtcNow < tracked.NextFullBlockAt) continue;
             tracked.NextFullBlockAt = DateTime.UtcNow + FullBlockRetry;
 
             var sameDisk = SameDisk(drive);
@@ -324,7 +327,11 @@ public sealed partial class UsbMonitor : BackgroundService
 
         var tracked = disabled
             ? new Tracked { SessionId = sessionId, Drive = drive with { Letter = "" }, PolicyResult = result }
-            : new Tracked { SessionId = sessionId, Drive = drive, Watcher = StartWatcher(sessionId, drive), PolicyResult = result };
+            : new Tracked
+            {
+                SessionId = sessionId, Drive = drive, PolicyResult = result,
+                Watcher = result == PolicyResults.Blocked && IsCard(drive) ? null : StartWatcher(sessionId, drive)
+            };
         _sessions[disabled ? BlockedKey(drive.PnpId) : key] = tracked;
         SaveActiveSessions();
         _logger.LogInformation("USB connected: {Model} {Letter} (serial {Serial}, policy {Result})", drive.Model, drive.Letter, identity.Serial, result);
@@ -366,6 +373,7 @@ public sealed partial class UsbMonitor : BackgroundService
     private void OpenPhone(string key, Phone phone)
     {
         var sessionId = Guid.NewGuid();
+        var result = phone.BlockNodes.Count == 0 ? null : EnforcePhone(phone, DecidePhone(phone.Identity));
         _queue.Enqueue(new AgentEvent
         {
             Type = EventTypes.Connected,
@@ -375,12 +383,41 @@ public sealed partial class UsbMonitor : BackgroundService
             SerialNumber = phone.Identity.Serial,
             FriendlyName = phone.Name,
             WindowsUser = UserSession.GetConsoleUser(),
-            DeviceClass = phone.DeviceClass
+            DeviceClass = phone.DeviceClass,
+            PolicyResult = result
         });
 
-        _sessions[key] = new Tracked { SessionId = sessionId };
+        _sessions[key] = new Tracked { SessionId = sessionId, Phone = phone, PolicyResult = result };
         SaveActiveSessions();
-        _logger.LogInformation("Device connected: {Name} ({Class})", phone.Name, phone.DeviceClass);
+        _logger.LogInformation("Device connected: {Name} ({Class}, serial {Serial}, policy {Result})", phone.Name, phone.DeviceClass, phone.Identity.Serial, result);
+        NotifyPhone(phone, result);
+    }
+
+    // Blocked = every transfer node disabled; Windows keeps them disabled on re-plug, like a blocked disk.
+    private int? EnforcePhone(Phone phone, int? decision)
+    {
+        if (decision == PolicyResults.Blocked)
+        {
+            foreach (var node in phone.BlockNodes.Where(n => !DeviceBlock.IsDisabled(n)))
+            {
+                if (!DeviceBlock.DisableNode(node, _logger)) return PolicyResults.BlockFailed;
+                _blocked[node] = new BlockedDisk
+                {
+                    Phone = true, PnpId = node, Key = phone.Identity.Key, VendorId = phone.Identity.VendorId,
+                    ProductId = phone.Identity.ProductId, Serial = phone.Identity.Serial, Model = phone.Name
+                };
+                SaveBlocked();
+            }
+            return decision;
+        }
+
+        foreach (var node in phone.BlockNodes.Where(_blocked.ContainsKey))
+        {
+            DeviceBlock.Enable(node, _logger);
+            _blocked.Remove(node);
+            SaveBlocked();
+        }
+        return decision;
     }
 
     // Policy changed (approved, revoked, mode switched): bring plugged-in disks in line. Re-run every poll while a
@@ -401,6 +438,18 @@ public sealed partial class UsbMonitor : BackgroundService
             // It comes back with a letter and opens a fresh session under the new decision.
             if (_sessions.ContainsKey(BlockedKey(blocked.PnpId))) Close(BlockedKey(blocked.PnpId));
             _logger.LogInformation("Re-enabled USB {Serial}.", blocked.Serial);
+        }
+
+        foreach (var tracked in _sessions.Values.Where(t => t.Phone is { BlockNodes.Count: > 0 }))
+        {
+            var phone = tracked.Phone!;
+            var decision = DecidePhone(phone.Identity);
+            if (decision == tracked.PolicyResult) continue;
+
+            tracked.PolicyResult = EnforcePhone(phone, decision);
+            _queue.Enqueue(new AgentEvent { Type = EventTypes.Policy, SessionId = tracked.SessionId, PolicyResult = tracked.PolicyResult });
+            _logger.LogInformation("Device {Name} policy is now {Result}", phone.Name, tracked.PolicyResult);
+            NotifyPhone(phone, tracked.PolicyResult);
         }
 
         foreach (var (key, tracked) in _sessions.ToList())
@@ -427,7 +476,8 @@ public sealed partial class UsbMonitor : BackgroundService
             if (disabled) MarkDisabled(key, tracked, sameDisk, result);
             else
             {
-                foreach (var (_, t) in sameDisk) t.Watcher = StartWatcher(t.SessionId, t.Drive!);
+                if (!(result == PolicyResults.Blocked && IsCard(tracked.Drive)))
+                    foreach (var (_, t) in sameDisk) t.Watcher = StartWatcher(t.SessionId, t.Drive!);
                 tracked.NextFullBlockAt = DateTime.UtcNow + FullBlockRetry;
             }
 
@@ -479,6 +529,14 @@ public sealed partial class UsbMonitor : BackgroundService
         else if (result == PolicyResults.ReadOnly)
             UserSession.ShowToast("USB chỉ được phép đọc",
                 $"{name} chỉ đọc được, không chép dữ liệu vào được. Serial: {serial}. Liên hệ IT nếu cần ghi.", _logger);
+    }
+
+    private void NotifyPhone(Phone phone, int? result)
+    {
+        if (result != PolicyResults.Blocked) return;
+        var serial = phone.Identity.Serial.Length > 0 ? phone.Identity.Serial : "không có";
+        UserSession.ShowToast("Thiết bị chưa được cấp phép",
+            $"{phone.Name ?? "Điện thoại / máy ảnh"} đã bị chặn chép dữ liệu (vẫn sạc pin được). Serial: {serial}. Liên hệ IT để được cấp phép.", _logger);
     }
 
     private void Close(string key)
@@ -549,13 +607,17 @@ public sealed partial class UsbMonitor : BackgroundService
             ? new UsbIdentity("SD", "0000", (disk["SerialNumber"] as string)?.Trim() ?? "")
             : null;
 
-    // WPD = MTP phones and media players, Image = PTP cameras/iPhones and scanners. Logged only, never blocked.
+    private static readonly string[] TransferServices = { "WUDFWpdMtp", "WUDFWpdPtp", "WUDFWpdFs" };
+
+    // WPD/MTP/PTP and Android ADB nodes carry files and are blockable; other Image nodes (scanners) are logged only.
+    // Disabled nodes are still listed, so a blocked phone keeps its session.
     private static Dictionary<string, Phone> ScanPhones()
     {
         var result = new Dictionary<string, Phone>();
 
         using var searcher = new ManagementObjectSearcher(
-            "SELECT PNPDeviceID, Name, PNPClass FROM Win32_PnPEntity WHERE PNPClass = 'WPD' OR PNPClass = 'Image'");
+            "SELECT PNPDeviceID, Name, PNPClass, Service FROM Win32_PnPEntity WHERE PNPClass = 'WPD' OR PNPClass = 'Image' "
+            + "OR PNPClass = 'AndroidUsbDeviceClass' OR Service = 'WUDFWpdMtp' OR Service = 'WUDFWpdPtp' OR Service = 'WUDFWpdFs'");
         foreach (ManagementObject entity in searcher.Get())
         {
             using (entity)
@@ -568,7 +630,19 @@ public sealed partial class UsbMonitor : BackgroundService
                 var identity = usbId == null ? null : ParseUsbId(usbId);
                 if (identity == null) continue;
 
-                result.TryAdd(PhonePrefix + usbId, new Phone(entity["Name"] as string, entity["PNPClass"] as string ?? "", identity));
+                var pnpClass = entity["PNPClass"] as string ?? "";
+                var transfer = pnpClass is "WPD" or "AndroidUsbDeviceClass"
+                               || TransferServices.Contains(entity["Service"] as string ?? "", StringComparer.OrdinalIgnoreCase);
+                var name = entity["Name"] as string;
+                var key = PhonePrefix + usbId;
+                var phone = result.GetValueOrDefault(key) ?? new Phone(name, pnpClass, identity, new List<string>());
+                if (transfer)
+                {
+                    phone.BlockNodes.Add(pnpId);
+                    // Phones report as WPD whatever node came first; the transfer node's name is the phone's.
+                    phone = phone with { DeviceClass = "WPD", Name = pnpClass == "WPD" ? name : phone.Name ?? name };
+                }
+                result[key] = phone;
             }
         }
         return result;

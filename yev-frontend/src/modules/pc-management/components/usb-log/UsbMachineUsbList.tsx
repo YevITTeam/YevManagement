@@ -17,7 +17,7 @@ import type { UsbMachineUsbDto } from "@/modules/pc-management/types/usb-log.dto
 import { ErrorBar, IconButton, IconFlag, StatusDot, TableStatusRows, rowClassName, theadRowClassName } from "@/components/ui/ListToolbar";
 import UsbLogList from "./UsbLogList";
 import { UsbFileCount } from "./UsbSessionFiles";
-import { POLICY_META, USB_ACCESS_LEVEL, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
+import { POLICY_META, USB_ACCESS_LEVEL, deviceClassLabel, isApprovableClass, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 
 const usbName = (row: UsbMachineUsbDto) => usbLabel(row);
 
@@ -114,7 +114,7 @@ export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineU
                                   ? POLICY_META[row.lastPolicyResult]
                                   : undefined;
                             const policyTitle = meta && (approved ? t(row.isApproved ? "machineUsbs.approvedAll" : "machineUsbs.approvedHere") : t(`policy.${meta.key}.title`));
-                            const approvable = row.deviceClass === "DiskDrive" && row.serialNumber !== "" && !row.isApproved;
+                            const approvable = isApprovableClass(row) && row.serialNumber !== "" && !row.isApproved;
                             return (
                                 <Fragment key={row.usbDeviceId}>
                                     <tr

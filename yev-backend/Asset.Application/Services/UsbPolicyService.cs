@@ -320,7 +320,8 @@ namespace Asset.Application.Services
                 usb.IsApproved = false;
             }
 
-            usb.AccessLevel = request.AccessLevel;
+            // Only disks can be made read-only; a phone or Bluetooth approval is all-or-nothing.
+            usb.AccessLevel = usb.DeviceClass == UsbDeviceClasses.DiskDrive ? request.AccessLevel : (int)UsbAccessLevel.ReadWrite;
             usb.BranchId = request.BranchId;
             usb.DepartmentId = request.DepartmentId;
             usb.ApprovedBy = CurrentUser();
@@ -403,8 +404,8 @@ namespace Asset.Application.Services
         private async Task<UsbDevice> GetApprovableAsync(int usbDeviceId)
         {
             var usb = (await _unitOfWork.UsbDevices.GetByIdAsync(usbDeviceId)).OrThrowNotFound("Thiết bị USB", usbDeviceId);
-            if (usb.DeviceClass != UsbDeviceClasses.DiskDrive)
-                throw new DomainException("Chỉ cấp phép được thiết bị lưu trữ.");
+            if (!UsbDeviceClasses.IsApprovable(usb.DeviceClass))
+                throw new DomainException("Thiết bị này chỉ ghi nhật ký, không cần cấp phép.");
             // Serial-less sticks share one identity per model, so approving one would approve them all.
             if (usb.SerialNumber.Length == 0)
                 throw new DomainException("USB không có số serial nên không cấp phép riêng được.");

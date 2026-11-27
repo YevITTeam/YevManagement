@@ -23,7 +23,7 @@ public partial class UsbDevice
 
     public DateTime LastSeenAt { get; set; }
 
-    // PnP class: "DiskDrive" for storage; "WPD"/"Image" are phones and cameras, logged only and never approved or blocked.
+    // UsbDeviceClasses: storage, phones/cameras (WPD), scanners (Image, log only) or the agent's Bluetooth pseudo devices.
     public string DeviceClass { get; set; } = UsbDeviceClasses.DiskDrive;
 
     // Approved on every machine; per-machine approvals live in Machines. Needs a real serial to tell sticks apart.
@@ -57,4 +57,9 @@ public partial class UsbDevice
 public static class UsbDeviceClasses
 {
     public const string DiskDrive = "DiskDrive";
+    public const string Wpd = "WPD";
+    // Serial "SEND"/"RECEIVE" = one fsquirt.exe run; each direction is approved separately.
+    public const string Bluetooth = "Bluetooth";
+
+    public static bool IsApprovable(string deviceClass) => deviceClass is DiskDrive or Wpd or Bluetooth;
 }
