@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useLocale } from "next-intl";
-import { CircleAlert } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { Info } from "lucide-react";
 
 import { OtCaseApi } from "@/modules/attendance/api/ot-case.api";
 import type { OtCaseDto } from "@/modules/attendance/types/ot-case.dto";
@@ -19,7 +19,7 @@ function loadAllCases() {
     return allCasesPromise;
 }
 
-// OT case code with a "!" button that opens the descriptions (OtCase.Description / DescriptionJp, by locale) of every
+// OT case code with an info button that opens the descriptions (OtCase.Description / DescriptionJp, by locale) of every
 // case with the current one highlighted. showAll=false (public email page, no token) shows just the current case.
 // Fixed positioning keeps the panel from being clipped by scrollable tables.
 export default function OtCaseBadge({
@@ -34,6 +34,7 @@ export default function OtCaseBadge({
     showAll?: boolean;
 }) {
     const locale = useLocale();
+    const t = useTranslations("Attendance.OtCase");
     const buttonRef = useRef<HTMLButtonElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -86,11 +87,12 @@ export default function OtCaseBadge({
                 ref={buttonRef}
                 type="button"
                 onClick={toggle}
-                aria-label={code}
+                title={t("explainCode", { code })}
+                aria-label={t("explainCode", { code })}
                 aria-expanded={position !== null}
                 className="cursor-pointer rounded-full text-[#8a8f94] transition hover:text-[#e3000f]"
             >
-                <CircleAlert className="h-3.5 w-3.5" />
+                <Info className="h-3.5 w-3.5" />
             </button>
             {position && (
                 <div

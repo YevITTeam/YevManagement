@@ -4,8 +4,8 @@ import { useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { TimeRange } from "@/modules/attendance/components/ot-form/TimeRange";
 import { toast } from "react-toastify";
-import { useTranslations } from "next-intl";
-import { Car, Check, ChevronDown, Clock, FileText, History, MessageCircle, Printer, Trash2, Upload, User, UserX, Utensils, X } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { Car, Check, ChevronDown, Clock, FileText, History, MessageCircle, Pencil, Printer, RotateCcw, Trash2, Upload, User, UserX, X } from "lucide-react";
 
 import { OtFormApi } from "@/modules/attendance/api/ot-form.api";
 import type { OtFormApprovalStepDto, OtFormDto, OtFormEditLogDto, OtFormEmployeeDto } from "@/modules/attendance/types/ot-form.dto";
@@ -18,16 +18,24 @@ import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { formatHours } from "@/modules/attendance/lib/time";
 import { openPaperScan, PAPER_SCAN_BADGE, MAX_PAPER_SCAN_BYTES } from "@/modules/attendance/lib/paperScan";
 import { Badge } from "@/components/ui/Badge";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { IconButton, IconFlag } from "@/components/ui/ListToolbar";
+import FormDialog from "@/components/common/FormDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
-import { useRouter } from "@/navigation";
+import { Link, useRouter } from "@/navigation";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSetting";
 import AccumulationHistoryModal from "@/modules/attendance/components/employees/AccumulationHistoryModal";
-import { MealTicketTypeBadge } from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
+import {
+    AccumulationHours,
+    exceededLimits,
+    mealCountsText,
+    MealTicketTypeBadge,
+    ProcessPartTile,
+} from "@/modules/attendance/components/ot-form/MealTicketTypeBadge";
 import OtFormPrintView from "@/modules/attendance/components/ot-form/OtFormPrintView";
-import { formOverLimit } from "@/modules/attendance/lib/otFormPrintTemplate";
 
 interface OtFormDetailProps {
     id: number;
@@ -75,33 +83,10 @@ function stepNameByOrder(form: OtFormDto, stepOrder: number | null): string {
     return form.approvalSteps.find((s) => s.stepOrder === stepOrder)?.jobTitleNameSnapshot ?? `#${stepOrder}`;
 }
 
-// Process-part items default to "No" when form.processPart is null.
-function ProcessPartTile({
-    icon,
-    label,
-    active,
-    activeLabel,
-    inactiveLabel,
-}: {
-    icon: ReactNode;
-    label: string;
-    active: boolean;
-    activeLabel: string;
-    inactiveLabel: string;
-}) {
-    return (
-        <span
-            title={active ? activeLabel : inactiveLabel}
-            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${
-                active
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-[#e0e3e5] bg-white text-[#9aa0a6] line-through"
-            }`}
-        >
-            {icon}
-            {label}
-        </span>
-    );
+// Name in the current locale; the other language goes to the tooltip.
+function LocalizedName({ vn, jp, locale }: { vn: string | null; jp: string | null; locale: string }) {
+    const [main, other] = locale === "ja" && jp ? [jp, vn] : [vn || jp || "-", vn ? jp : null];
+    return <span title={other || undefined}>{main}</span>;
 }
 
 // `wide` spans both grid columns.
@@ -117,6 +102,7 @@ function InfoField({ label, children, wide = false }: { label: string; children:
 export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps) {
     const t = useTranslations("Attendance.OtFormDetail");
     const tCommon = useTranslations("Common");
+    const locale = useLocale();
     const enumLabels = useEnumLabels();
     const { user } = useAuth();
     const router = useRouter();
@@ -204,7 +190,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
     // Admin only; blocked once Completed (status=1, accumulation already counted).
     const canDelete = !readOnly && hasPermission(user, "Attendance.OTForm.Delete") && form?.status !== 1;
 
-    // Production-line forms show Line/Team/shift both in the info block (distinct values of active employees) and per row.
+    // Distinct Line/Team/shift of active employees; a per-row column only appears when the form spans more than one.
     const productionSummary = useMemo(() => {
         if (!form?.isProductionForm) return null;
         const distinct = (values: (string | null)[]) => Array.from(new Set(values.filter((v): v is string => Boolean(v))));
@@ -313,7 +299,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                 reason: removeReason.trim(),
             });
             setForm(updated);
-            toast.success(t("removeSuccess", { name: removeTarget.fullName }));
+            toast.success(t(isFormCreator ? "removeFromFormSuccess" : "removeSuccess", { name: removeTarget.fullName }));
             setRemoveTarget(null);
         } catch (err) {
             console.error(err);
@@ -378,7 +364,15 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
     };
 
     if (isLoading) {
-        return <div className="py-16 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>;
+        return (
+            <div className="space-y-4">
+                <Skeleton className="h-7 w-56" />
+                <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+                    <Skeleton className="h-64 w-full rounded-xl" />
+                    <Skeleton className="h-96 w-full rounded-xl" />
+                </div>
+            </div>
+        );
     }
 
     if (error || !form) {
@@ -391,8 +385,20 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
     const totalWorkedHours = activeEmployees.reduce((sum, employee) => sum + employee.actualHours, 0);
     // Notes column only when at least one active employee has a note.
     const hasNotes = activeEmployees.some((employee) => Boolean(employee.noteVn || employee.noteJp));
-    // Columns after code + name (the "removed" row spans the rest).
-    const removedColSpan = 5 + (hasNotes ? 1 : 0) + (form.isProductionForm ? 3 : 0) + (canRemoveEmployee ? 1 : 0);
+    const showLineCol = (productionSummary?.lines.length ?? 0) > 1;
+    const showTeamCol = (productionSummary?.teams.length ?? 0) > 1;
+    const showShiftCol = (productionSummary?.shiftTeams.length ?? 0) > 1;
+    // Columns after the employee cell (the "removed" row spans the rest).
+    const removedColSpan =
+        5 + Number(hasNotes) + Number(showLineCol) + Number(showTeamCol) + Number(showShiftCol) + Number(canRemoveEmployee);
+    const mealCounts = mealCountsText(form.processPart, t);
+    const removeLabel = isFormCreator ? t("removeFromFormButton") : t("removeEmployeeButton");
+    const headerButtonClass =
+        "inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]";
+    const fieldLabelClass = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+    const textareaClass =
+        "w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+    const hintClass = "rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-xs text-[#930006]";
 
     return (
         <div className="space-y-4">
@@ -400,10 +406,16 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                 <div>
                     <h1 className="text-xl font-semibold text-[#191c1e]">{t("titleWithId", { id: form.id })}</h1>
                     <p className="mt-1 text-[15px] text-[#5e3f3a]">
-                        {bilingualText(form.departmentNameVn, form.departmentNameJp)} — {bilingualText(form.groupNameVn, form.groupNameJp)}
+                        <LocalizedName vn={form.departmentNameVn} jp={form.departmentNameJp} locale={locale} />
+                        {form.groupNameVn && (
+                            <>
+                                {" — "}
+                                <LocalizedName vn={form.groupNameVn} jp={form.groupNameJp} locale={locale} />
+                            </>
+                        )}
                     </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                     <span
                         className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold ${otFormStatusClasses[form.status] ?? otFormStatusClasses[0]}`}
                     >
@@ -412,34 +424,34 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                     {canEdit && (
                         <button
                             onClick={() => router.push({ pathname: "/ot/forms/edit", query: { id: String(form.id) } })}
-                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            title={t("editButton")}
+                            aria-label={t("editButton")}
+                            className={headerButtonClass}
                         >
-                            {t("editButton")}
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">{t("editButton")}</span>
                         </button>
                     )}
                     {canResubmit && (
                         <button
                             onClick={() => router.push({ pathname: "/ot/forms/edit", query: { id: String(form.id) } })}
-                            title={form.resubmitDeadline ? t("resubmitDeadline", { date: new Date(form.resubmitDeadline).toLocaleString("vi-VN") }) : undefined}
-                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
+                            title={
+                                form.resubmitDeadline
+                                    ? t("resubmitDeadline", { date: new Date(form.resubmitDeadline).toLocaleString("vi-VN") })
+                                    : t("resubmitButton")
+                            }
+                            aria-label={t("resubmitButton")}
+                            className={headerButtonClass}
                         >
-                            {t("resubmitButton")}
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">{t("resubmitButton")}</span>
                         </button>
                     )}
-                    <button
-                        onClick={() => setIsPrintOpen(true)}
-                        className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                    >
-                        {t("printButton")}
+                    <button onClick={() => setIsPrintOpen(true)} title={t("printButton")} aria-label={t("printButton")} className={headerButtonClass}>
+                        <Printer className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">{t("printButton")}</span>
                     </button>
-                    {canDelete && (
-                        <button
-                            onClick={openDeleteModal}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#930006] bg-white px-3 py-1.5 text-xs font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
-                        >
-                            <Trash2 className="h-3.5 w-3.5" /> {t("deleteButton")}
-                        </button>
-                    )}
+                    {canDelete && <IconButton icon={Trash2} label={t("deleteButton")} onClick={openDeleteModal} variant="danger" size="sm" />}
                 </div>
             </div>
 
@@ -448,26 +460,26 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                 <div className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-1">
                     <section className="space-y-3.5 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
                         <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+                            <InfoField label={t("timeLabel")} wide>
+                                <span className="inline-flex flex-wrap items-center gap-x-1.5">
+                                    {formatDate(form.date)}
+                                    <span className="text-[#8a8f94]">·</span>
+                                    <TimeRange start={formatTime(form.startTime)} end={formatTime(form.endTime)} hours={form.totalHour} />
+                                </span>
+                            </InfoField>
                             <InfoField label={t("otCaseLabel")}>
                                 <OtCaseBadge code={form.otCaseCode} description={form.otCaseDescription} descriptionJp={form.otCaseDescriptionJp} />
                             </InfoField>
-                            <InfoField label={t("dateLabel")}>{formatDate(form.date)}</InfoField>
-                            <InfoField label={t("reasonLabel")} wide>
-                                {bilingualText(form.reasonNameVn, form.reasonNameJp)}
-                            </InfoField>
-                            <InfoField label={t("timeLabel")}>
-                                <TimeRange start={formatTime(form.startTime)} end={formatTime(form.endTime)} hours={form.totalHour} />
-                            </InfoField>
-                            <InfoField label={t("createdByLabel")}>{form.createdByFullName ?? form.createdByUserName}</InfoField>
                             {productionSummary && (
                                 <>
                                     <InfoField label={t("colBlockCode")}>{productionSummary.lines.join(", ") || "—"}</InfoField>
                                     <InfoField label={t("colTeamCode")}>{productionSummary.teams.join(", ") || "—"}</InfoField>
-                                    <InfoField label={t("colShiftTeam")} wide>
-                                        {productionSummary.shiftTeams.join(", ") || "—"}
-                                    </InfoField>
+                                    <InfoField label={t("colShiftTeam")}>{productionSummary.shiftTeams.join(", ") || "—"}</InfoField>
                                 </>
                             )}
+                            <InfoField label={t("reasonLabel")} wide>
+                                {bilingualText(form.reasonNameVn, form.reasonNameJp)}
+                            </InfoField>
                             {form.subReason && (
                                 <InfoField label={t("subReasonLabel")} wide>
                                     {form.subReason}
@@ -475,17 +487,10 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                             )}
                         </div>
 
-                        {/* Always shown even when processPart is null (defaults to "No"), otherwise users assume info is missing. */}
+                        {/* Off items stay visible struck through; meal is on for every form, so only its non-zero counts show. */}
                         <div className="space-y-2 border-t border-[#e0e3e5] pt-3.5">
                             <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">{t("processPartTitle")}</h2>
-                            <div className="flex flex-wrap gap-1.5">
-                                <ProcessPartTile
-                                    icon={<Utensils size={12} />}
-                                    label={t("eatFieldLabel")}
-                                    active={Boolean(form.processPart?.isEat)}
-                                    activeLabel={t("yes")}
-                                    inactiveLabel={t("no")}
-                                />
+                            <div className="flex flex-wrap items-center gap-1.5">
                                 <ProcessPartTile
                                     icon={<Car size={12} />}
                                     label={t("transportationFieldLabel")}
@@ -500,23 +505,14 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                     activeLabel={t("yes")}
                                     inactiveLabel={t("no")}
                                 />
+                                {mealCounts && <span className="text-xs font-semibold text-[#191c1e]">{mealCounts}</span>}
                             </div>
-                            {form.processPart?.isEat && (
-                                <p className="text-xs font-semibold text-[#191c1e]">
-                                    {[
-                                        t("mainTicketLabel", { count: form.processPart.mainTicketCount }),
-                                        t("secondaryTicketLabel", { count: form.processPart.secondaryTicketCount }),
-                                        t("milkLabel", { count: form.processPart.milkCount }),
-                                    ].join("  ·  ")}
-                                </p>
-                            )}
                             {form.processPart?.anotherSuggestionVn && (
                                 <div className="flex items-start gap-2 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 py-2 text-xs text-[#5e3f3a]">
-                                    <MessageCircle size={14} className="mt-0.5 shrink-0" />
-                                    <span>
-                                        <span className="font-semibold text-[#191c1e]">{t("anotherSuggestionFieldLabel")}: </span>
-                                        {bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}
+                                    <span role="img" title={t("anotherSuggestionFieldLabel")} aria-label={t("anotherSuggestionFieldLabel")} className="mt-0.5 shrink-0">
+                                        <MessageCircle size={14} aria-hidden />
                                     </span>
+                                    <span>{bilingualText(form.processPart.anotherSuggestionVn, form.processPart.anotherSuggestionJp)}</span>
                                 </div>
                             )}
                         </div>
@@ -625,7 +621,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                     ? "border-[#930006] bg-[#930006] text-white"
                                                     : view.state === "current"
                                                     ? "border-[#9a5b00] bg-[#fff4e5] text-[#9a5b00]"
-                                                    : "border-[#e0e3e5] bg-white text-[#9aa0a6]"
+                                                    : "border-[#e0e3e5] bg-white text-[#8a8f94]"
                                             }`}
                                         >
                                             {view.state === "done" && <Check size={14} />}
@@ -635,7 +631,7 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                         </span>
                                         <div className="min-w-0 flex-1 space-y-0.5 pt-0.5">
                                             <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-                                                <span className={`text-sm font-semibold ${isMuted ? "text-[#9aa0a6]" : "text-[#191c1e]"}`}>
+                                                <span className={`text-sm font-semibold ${isMuted ? "text-[#8a8f94]" : "text-[#191c1e]"}`}>
                                                     {view.step.jobTitleNameSnapshot}
                                                 </span>
                                                 {history && (
@@ -673,15 +669,11 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                             : undefined
                                                     }
                                                 >
-                                                    {view.step.candidates.length > 1
-                                                        ? t("waitingShortMulti", { count: view.step.candidates.length })
-                                                        : t("waitingShort")}
+                                                    {t("waitingShort")}
                                                 </div>
                                             ) : view.state === "skipped" ? (
-                                                <div className="text-xs text-[#9aa0a6]">{t("skippedShort")}</div>
-                                            ) : (
-                                                <div className="text-xs text-[#9aa0a6]">{t("notProcessedYet")}</div>
-                                            )}
+                                                <div className="text-xs text-[#8a8f94]">{t("skippedShort")}</div>
+                                            ) : null}
                                             {/* Candidates snapshotted at creation; only for unprocessed steps (processed ones show the real approver). */}
                                             {!history && (view.state === "current" || view.state === "upcoming") && view.step.candidates.length > 0 && (
                                                 <div className="flex flex-wrap gap-1 pt-1">
@@ -741,24 +733,23 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                             <h2 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                 {t("employeeListTitle", { count: form.numberOfEmployee })}
                             </h2>
-                            <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-white px-3 py-0.5 text-xs font-semibold text-[#191c1e]">
-                                {t("totalWorkedHoursLabel", { hours: formatHours(totalWorkedHours) })}
+                            <span
+                                title={t("totalWorkedHoursLabel")}
+                                className="inline-flex items-center gap-1 rounded-full border border-[#e0e3e5] bg-white px-3 py-0.5 text-xs font-semibold tabular-nums text-[#191c1e]"
+                            >
+                                <Clock className="h-3.5 w-3.5 text-[#8a8f94]" aria-hidden />
+                                {formatHours(totalWorkedHours)}
                             </span>
                         </div>
                         {/* The list can be hundreds of rows: scroll inside the table with a sticky header instead of stretching the page. */}
-                        <div className="max-h-[560px] overflow-auto">
+                        <div className="relative max-h-[560px] overflow-auto">
                             <table className="min-w-full border-collapse text-left [&_td]:border-r [&_td]:border-[#eef1f3] [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-[#e0e3e5]">
                                 <thead className="sticky top-0 z-10">
-                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                        <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colEmployeeCode")}</th>
-                                        <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colFullName")}</th>
-                                        {form.isProductionForm && (
-                                            <>
-                                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colBlockCode")}</th>
-                                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colTeamCode")}</th>
-                                                <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colShiftTeam")}</th>
-                                            </>
-                                        )}
+                                    <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                        <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colEmployee")}</th>
+                                        {showLineCol && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colBlockCode")}</th>}
+                                        {showTeamCol && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colTeamCode")}</th>}
+                                        {showShiftCol && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colShiftTeam")}</th>}
                                         <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colTime")}</th>
                                         <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 text-center align-bottom">{t("colHours")}</th>
                                         <th colSpan={2} className="whitespace-nowrap border-b border-[#e0e3e5] px-3 py-1.5 text-center">{t("colAccumulation")}</th>
@@ -766,41 +757,44 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                         {hasNotes && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom">{t("colNote")}</th>}
                                         {canRemoveEmployee && <th rowSpan={2} className="whitespace-nowrap px-3 py-2.5 align-bottom" />}
                                     </tr>
-                                    <tr className="border-b border-[#e0e3e5] bg-[#fbfcfd] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                    <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
                                         <th className="whitespace-nowrap px-3 py-1.5 text-center">{t("colMonth")}</th>
                                         <th className="whitespace-nowrap px-3 py-1.5 text-center">{t("colYear")}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {form.employees.map((employee) => {
-                                        const over = formOverLimit(employee, setting);
-                                        const isMonthOverLimit = over.month.over;
-                                        const isYearOverLimit = over.year.over;
-                                        const isOverLimit = isMonthOverLimit || isYearOverLimit;
-                                        const hours = employee.actualHours;
+                                        const employeeCell = (
+                                            <>
+                                                <span className="mr-2 tabular-nums text-[#5e3f3a]">{employee.employeeCode}</span>
+                                                <span className="font-medium text-[#191c1e]">{employee.fullName}</span>
+                                            </>
+                                        );
                                         // Removed: keep the row as an audit trail, dimmed and struck through, with the reason instead of the numbers.
                                         if (employee.isRemoved) {
+                                            const level = stepNameByOrder(form, employee.removedAtLevel);
                                             return (
                                                 <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#f8fafc] opacity-60">
-                                                    <td className="whitespace-nowrap px-3 py-2.5 text-sm">
-                                                        <span className="inline-flex items-center rounded-md border border-[#d5dade] bg-white px-2 py-0.5 font-mono text-xs font-semibold text-[#191c1e] line-through">
-                                                            {employee.employeeCode}
+                                                    <td className="whitespace-nowrap px-3 py-2.5 text-sm line-through">{employeeCell}</td>
+                                                    <td
+                                                        colSpan={removedColSpan}
+                                                        title={employee.removedAt ? formatDateTime(employee.removedAt) : undefined}
+                                                        className="px-3 py-2.5 text-xs text-[#930006]"
+                                                    >
+                                                        <span className="inline-flex items-center gap-1.5">
+                                                            <UserX className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                                            {t(employee.removeReason ? "removedInlineNote" : "removedInlineNoteNoReason", {
+                                                                name: employee.removedByFullName ?? employee.removedByUserName ?? "",
+                                                                level: level ? ` (${level})` : "",
+                                                                reason: employee.removeReason ?? "",
+                                                            })}
                                                         </span>
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-3 py-2.5 text-sm font-medium text-[#191c1e] line-through">{employee.fullName}</td>
-                                                    <td colSpan={removedColSpan} className="px-3 py-2.5 text-xs text-[#930006]">
-                                                        {t(employee.removeReason ? "removedInlineNote" : "removedInlineNoteNoReason", {
-                                                            name: employee.removedByFullName ?? employee.removedByUserName ?? "",
-                                                            level: stepNameByOrder(form, employee.removedAtLevel),
-                                                            reason: employee.removeReason ?? "",
-                                                        })}
-                                                        {employee.removedAt && (
-                                                            <span className="ml-2 text-[#9aa0a6]">({formatDateTime(employee.removedAt)})</span>
-                                                        )}
                                                     </td>
                                                 </tr>
                                             );
                                         }
+                                        const over = exceededLimits(employee, setting);
+                                        const isOverLimit = over.month !== null || over.year !== null;
                                         return (
                                             <tr
                                                 key={employee.employeeId}
@@ -808,33 +802,28 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                     isOverLimit ? "bg-[#fff4f2] hover:bg-[#ffe9e6]" : "bg-white even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
                                                 }`}
                                             >
-                                                <td className="whitespace-nowrap px-3 py-2.5 text-sm">
-                                                    <span className="inline-flex items-center whitespace-nowrap rounded-md border border-[#d5dade] bg-white px-2.5 py-0.5 font-mono text-xs font-semibold text-[#191c1e]">
-                                                        {employee.employeeCode}
-                                                    </span>
-                                                </td>
-                                                <td className="whitespace-nowrap px-3 py-2.5 text-sm font-medium text-[#191c1e]">{employee.fullName}</td>
-                                                {form.isProductionForm && (
-                                                    <>
-                                                        <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">{employee.blockCodeSnapshot ?? "—"}</td>
-                                                        <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">{employee.teamCodeSnapshot ?? "—"}</td>
-                                                        <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">{employee.shiftTeamCodeSnapshot ?? "—"}</td>
-                                                    </>
-                                                )}
+                                                <td className="whitespace-nowrap px-3 py-2.5 text-sm">{employeeCell}</td>
+                                                {showLineCol && <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">{employee.blockCodeSnapshot ?? "—"}</td>}
+                                                {showTeamCol && <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">{employee.teamCodeSnapshot ?? "—"}</td>}
+                                                {showShiftCol && <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">{employee.shiftTeamCodeSnapshot ?? "—"}</td>}
                                                 <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[#5e3f3a]">
                                                     <TimeRange start={formatTime(employee.startTime)} end={formatTime(employee.endTime)} />
                                                 </td>
-                                                <td className="px-3 py-2.5 text-center text-sm">
-                                                    <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
-                                                        {formatHours(hours)}
-                                                    </span>
+                                                <td className="px-3 py-2.5 text-center text-sm font-semibold tabular-nums text-[#191c1e]">
+                                                    {formatHours(employee.actualHours)}
                                                 </td>
-                                                <td className={`px-3 py-2.5 text-center text-sm ${isMonthOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
-                                                    {employee.monthToDate}h
+                                                <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm">
+                                                    <AccumulationHours
+                                                        hours={employee.monthToDate}
+                                                        overTitle={over.month !== null ? t("overMonthlyHint", { limit: over.month }) : undefined}
+                                                    />
                                                 </td>
-                                                <td className={`whitespace-nowrap px-3 py-2.5 text-center text-sm ${isYearOverLimit ? "font-semibold text-[#930006]" : "text-[#5e3f3a]"}`}>
+                                                <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm">
                                                     <span className="inline-flex items-center gap-1">
-                                                        {employee.yearToDate}h
+                                                        <AccumulationHours
+                                                            hours={employee.yearToDate}
+                                                            overTitle={over.year !== null ? t("overYearlyHint", { limit: over.year }) : undefined}
+                                                        />
                                                         {canApprove && (
                                                             <button
                                                                 type="button"
@@ -848,18 +837,12 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                         )}
                                                     </span>
                                                 </td>
-                                                {/* Meal ticket type plus a "didn't eat" label; production-line forms always eat (DidEat true), so no label there. */}
+                                                {/* Production-line forms always eat (DidEat true), so the "eats later" flag is office-only. */}
                                                 <td className="whitespace-nowrap px-3 py-2.5 text-center text-sm">
                                                     <span className="inline-flex items-center justify-center gap-1.5">
                                                         <MealTicketTypeBadge type={employee.mealTicketType} t={t} />
                                                         {!form.isProductionForm && !employee.didEat && (
-                                                            <span
-                                                                title={t("didEatNoHint")}
-                                                                className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#9a5b00]"
-                                                            >
-                                                                <X size={11} />
-                                                                {t("didEatNo")}
-                                                            </span>
+                                                            <IconFlag icon={Clock} tone="warning" label={t("didEatNoHint")} />
                                                         )}
                                                     </span>
                                                 </td>
@@ -872,8 +855,8 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                                                             <button
                                                                 type="button"
                                                                 onClick={() => openRemove(employee)}
-                                                                title={t("removeEmployeeButton")}
-                                                                aria-label={t("removeEmployeeButton")}
+                                                                title={removeLabel}
+                                                                aria-label={removeLabel}
                                                                 className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-[#e9bcb6] bg-white p-1.5 text-[#930006] transition hover:bg-[#fff4f2]"
                                                             >
                                                                 <UserX className="h-3.5 w-3.5" />
@@ -889,159 +872,133 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                         </div>
                     </section>
 
-                    <details className="group overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-5 py-3 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a] [&::-webkit-details-marker]:hidden">
-                            <span>
-                                {t("editLogTitle")} ({form.editLogs.length})
-                            </span>
-                            <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
-                        </summary>
-                        <div className="border-t border-[#e0e3e5] px-5 py-3">
-                            {form.editLogs.length === 0 ? (
-                                <p className="text-sm text-[#9aa0a6]">{t("editLogEmpty")}</p>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full border-collapse text-left">
-                                        <thead>
-                                            <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColTime")}</th>
-                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColActor")}</th>
-                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColEmployee")}</th>
-                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColAction")}</th>
-                                                <th className="whitespace-nowrap px-3 py-2">{t("editLogColChange")}</th>
+                    {form.editLogs.length > 0 && (
+                        <details className="group overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-5 py-3 text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a] [&::-webkit-details-marker]:hidden">
+                                <span>
+                                    {t("editLogTitle")} ({form.editLogs.length})
+                                </span>
+                                <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+                            </summary>
+                            <div className="overflow-x-auto border-t border-[#e0e3e5] px-5 py-3">
+                                <table className="min-w-full border-collapse text-left">
+                                    <thead>
+                                        <tr className="border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                                            <th className="whitespace-nowrap px-3 py-2">{t("editLogColTime")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("editLogColActor")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("editLogColEmployee")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("editLogColAction")}</th>
+                                            <th className="whitespace-nowrap px-3 py-2">{t("editLogColChange")}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {form.editLogs.map((log, index) => (
+                                            <tr key={index} className="border-b border-[#f1f5f9] text-sm">
+                                                <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{formatDateTime(log.actionAt)}</td>
+                                                <td className="px-3 py-2 text-[#191c1e]">{log.actionByFullName ?? log.actionByUserName}</td>
+                                                <td className="px-3 py-2 text-[#191c1e]">{log.employeeCodeSnapshot ?? "-"}</td>
+                                                <td className="px-3 py-2 text-[#5e3f3a]">{editLogActionLabel(log)}</td>
+                                                <td className="px-3 py-2 text-[#191c1e]">
+                                                    {log.actionType === 5
+                                                        ? log.newValue
+                                                        : log.oldValue != null || log.newValue != null
+                                                        ? t("editLogChangeValue", { oldValue: log.oldValue ?? "-", newValue: log.newValue ?? "-" })
+                                                        : "-"}
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            {form.editLogs.map((log, index) => (
-                                                <tr key={index} className="border-b border-[#f1f5f9] text-sm">
-                                                    <td className="whitespace-nowrap px-3 py-2 text-[#5e3f3a]">{formatDateTime(log.actionAt)}</td>
-                                                    <td className="px-3 py-2 text-[#191c1e]">{log.actionByFullName ?? log.actionByUserName}</td>
-                                                    <td className="px-3 py-2 text-[#191c1e]">{log.employeeCodeSnapshot ?? "-"}</td>
-                                                    <td className="px-3 py-2 text-[#5e3f3a]">{editLogActionLabel(log)}</td>
-                                                    <td className="px-3 py-2 text-[#191c1e]">
-                                                        {log.actionType === 5
-                                                            ? log.newValue
-                                                            : log.oldValue != null || log.newValue != null
-                                                            ? t("editLogChangeValue", { oldValue: log.oldValue ?? "-", newValue: log.newValue ?? "-" })
-                                                            : "-"}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-                    </details>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                    )}
                 </div>
             </div>
 
-
-{showApprovalActions && (
+            {showApprovalActions && (
                 <div className="sticky bottom-0 z-20 flex justify-end gap-3 border-t border-[#e0e3e5] bg-[#f8fafc]/95 py-3 backdrop-blur">
                     <button
                         onClick={() => openAction("reject")}
-                        className="cursor-pointer rounded-lg border border-[#930006] bg-white px-4 py-2 text-sm font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[#930006] bg-white px-4 py-2 text-sm font-semibold text-[#930006] transition hover:bg-[#fff4f2]"
                     >
+                        <X className="h-4 w-4" />
                         {t("rejectButton")}
                     </button>
                     <button
                         onClick={() => openAction("approve")}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009]"
                     >
+                        <Check className="h-4 w-4" />
                         {t("approveButton")}
                     </button>
                 </div>
             )}
 
-            {actionOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
-                    <div className="fixed inset-0 bg-black/40" onClick={closeAction} />
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
-                    >
-                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
-                            <h3 className="text-lg font-semibold text-[#191c1e]">
-                                {actionOpen === "approve" ? t("modalTitleApprove") : t("modalTitleReject")}
-                            </h3>
-                            <button
-                                onClick={closeAction}
-                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                aria-label={tCommon("close")}
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
+            <FormDialog
+                isOpen={actionOpen !== null}
+                title={actionOpen === "approve" ? t("modalTitleApprove") : t("modalTitleReject")}
+                danger={actionOpen === "reject"}
+                onClose={closeAction}
+                onSubmit={actionOpen === "approve" ? handleApprove : handleReject}
+                loading={isSubmittingAction}
+                submitLabel={
+                    isSubmittingAction ? tCommon("processing") : actionOpen === "approve" ? t("confirmApprove") : t("confirmReject")
+                }
+                cancelLabel={tCommon("cancel")}
+                maxWidthClassName="max-w-lg"
+            >
+                <label className="block">
+                    <span className={fieldLabelClass}>
+                        {actionOpen === "reject" ? (
+                            <>
+                                {t("reasonLabel")} <span className="text-[#930006]">*</span>
+                            </>
+                        ) : (
+                            t("commentLabel")
+                        )}
+                    </span>
+                    <textarea
+                        value={comment}
+                        onChange={(event) => setComment(event.target.value)}
+                        disabled={isSubmittingAction}
+                        rows={3}
+                        required={actionOpen === "reject"}
+                        className={textareaClass}
+                    />
+                </label>
 
-                        <div className="space-y-4">
-                            <label className="block">
-                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {t("commentLabel")} {actionOpen === "reject" && <span className="text-[#930006]">*</span>}
-                                </span>
-                                <textarea
-                                    value={comment}
-                                    onChange={(event) => setComment(event.target.value)}
-                                    disabled={isSubmittingAction}
-                                    rows={3}
-                                    required={actionOpen === "reject"}
-                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                                />
-                            </label>
+                <label className="block">
+                    <span className={fieldLabelClass}>
+                        {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
+                    </span>
+                    <input
+                        type="password"
+                        value={secondaryPassword}
+                        onChange={(event) => setSecondaryPassword(event.target.value)}
+                        disabled={isSubmittingAction}
+                        autoComplete="off"
+                        className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+                    />
+                </label>
 
-                            <label className="block">
-                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {t("secondaryPasswordLabel")} <span className="text-[#930006]">*</span>
-                                </span>
-                                <input
-                                    type="password"
-                                    value={secondaryPassword}
-                                    onChange={(event) => setSecondaryPassword(event.target.value)}
-                                    disabled={isSubmittingAction}
-                                    autoComplete="off"
-                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                                />
-                            </label>
-
-                            {hasSecondaryPassword === false && (
-                                <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-xs text-[#930006]">
-                                    {t("secondaryPasswordMissingHint")}
-                                </div>
-                            )}
-
-                            {actionOpen === "approve" && requireSignatureToApprove && hasMySignature === false && (
-                                <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-3 py-2 text-xs text-[#930006]">
-                                    {t("approveSignatureMissingHint")}
-                                </div>
-                            )}
-
-                            <div className="flex justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={closeAction}
-                                    disabled={isSubmittingAction}
-                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {tCommon("cancel")}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={actionOpen === "approve" ? handleApprove : handleReject}
-                                    disabled={isSubmittingAction}
-                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {isSubmittingAction
-                                        ? tCommon("processing")
-                                        : actionOpen === "approve"
-                                        ? t("confirmApprove")
-                                        : t("confirmReject")}
-                                </button>
-                            </div>
-                        </div>
+                {hasSecondaryPassword === false && (
+                    <div className={hintClass}>
+                        {t("secondaryPasswordMissingHint")}{" "}
+                        <Link href="/ot/secondary-password" className="font-semibold underline hover:text-[#e3000f]">
+                            {t("setupLink")}
+                        </Link>
                     </div>
-                </div>
-            )}
+                )}
+
+                {actionOpen === "approve" && requireSignatureToApprove && hasMySignature === false && (
+                    <div className={hintClass}>
+                        {t("approveSignatureMissingHint")}{" "}
+                        <Link href="/ot/signature" className="font-semibold underline hover:text-[#e3000f]">
+                            {t("setupLink")}
+                        </Link>
+                    </div>
+                )}
+            </FormDialog>
 
             {isPrintOpen &&
                 createPortal(
@@ -1055,128 +1012,68 @@ export default function OtFormDetail({ id, readOnly = false }: OtFormDetailProps
                     document.body
                 )}
 
-            {isDeleteModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
-                    <div className="fixed inset-0 bg-black/40" onClick={closeDeleteModal} />
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
-                    >
-                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
-                            <h3 className="text-lg font-semibold text-[#191c1e]">{t("deleteModalTitle", { id: form.id })}</h3>
-                            <button
-                                onClick={closeDeleteModal}
-                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                aria-label={tCommon("close")}
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
+            <FormDialog
+                isOpen={isDeleteModalOpen}
+                title={t("deleteModalTitle", { id: form.id })}
+                danger
+                onClose={closeDeleteModal}
+                onSubmit={handleDeleteForm}
+                loading={isDeletingForm}
+                submitLabel={isDeletingForm ? tCommon("processing") : t("confirmDelete")}
+                cancelLabel={tCommon("cancel")}
+                maxWidthClassName="max-w-lg"
+            >
+                <p className="text-sm text-[#5e3f3a]">{t("deleteModalDesc")}</p>
+                <label className="block">
+                    <span className={fieldLabelClass}>
+                        {t("deleteReasonLabel")} <span className="text-[#930006]">*</span>
+                    </span>
+                    <textarea
+                        value={deleteReason}
+                        onChange={(event) => setDeleteReason(event.target.value)}
+                        disabled={isDeletingForm}
+                        rows={3}
+                        required
+                        className={textareaClass}
+                    />
+                </label>
+            </FormDialog>
 
-                        <div className="space-y-4">
-                            <p className="text-sm text-[#5e3f3a]">{t("deleteModalDesc")}</p>
-
-                            <label className="block">
-                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {t("deleteReasonLabel")} <span className="text-[#930006]">*</span>
-                                </span>
-                                <textarea
-                                    value={deleteReason}
-                                    onChange={(event) => setDeleteReason(event.target.value)}
-                                    disabled={isDeletingForm}
-                                    rows={3}
-                                    required
-                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                                />
-                            </label>
-
-                            <div className="flex justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={closeDeleteModal}
-                                    disabled={isDeletingForm}
-                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {tCommon("cancel")}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleDeleteForm}
-                                    disabled={isDeletingForm}
-                                    className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {isDeletingForm ? tCommon("processing") : t("confirmDelete")}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {removeTarget && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
-                    <div className="fixed inset-0 bg-black/40" onClick={closeRemove} />
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        className="z-60 mx-4 w-full max-w-lg rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl"
-                    >
-                        <div className="mb-4 flex items-center justify-between border-b border-[#e0e3e5] pb-4">
-                            <h3 className="text-lg font-semibold text-[#191c1e]">{t("removeModalTitle", { name: removeTarget.fullName })}</h3>
-                            <button
-                                onClick={closeRemove}
-                                className="cursor-pointer text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                aria-label={tCommon("close")}
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            <p className="text-sm text-[#5e3f3a]">{t("removeModalDesc")}</p>
-
-                            <label className="block">
-                                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {t("removeReasonLabel")} <span className="text-[#930006]">*</span>
-                                </span>
-                                <textarea
-                                    value={removeReason}
-                                    onChange={(event) => setRemoveReason(event.target.value)}
-                                    disabled={isRemovingEmployee}
-                                    rows={3}
-                                    required
-                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                                />
-                            </label>
-
-                            <div className="flex justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={closeRemove}
-                                    disabled={isRemovingEmployee}
-                                    className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {tCommon("cancel")}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleRemoveEmployee}
-                                    disabled={isRemovingEmployee}
-                                    className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {isRemovingEmployee ? tCommon("processing") : t("confirmRemove")}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <FormDialog
+                isOpen={removeTarget !== null}
+                title={removeTarget ? t(isFormCreator ? "removeFromFormModalTitle" : "removeModalTitle", { name: removeTarget.fullName }) : ""}
+                danger
+                onClose={closeRemove}
+                onSubmit={handleRemoveEmployee}
+                loading={isRemovingEmployee}
+                submitLabel={isRemovingEmployee ? tCommon("processing") : isFormCreator ? t("removeFromFormButton") : t("confirmRemove")}
+                cancelLabel={tCommon("cancel")}
+                maxWidthClassName="max-w-lg"
+            >
+                <p className="text-sm text-[#5e3f3a]" title={t("removeModalHint")}>
+                    {t("removeModalDesc")}
+                </p>
+                <label className="block">
+                    <span className={fieldLabelClass}>
+                        {isFormCreator ? t("reasonLabel") : t("removeReasonLabel")} <span className="text-[#930006]">*</span>
+                    </span>
+                    <textarea
+                        value={removeReason}
+                        onChange={(event) => setRemoveReason(event.target.value)}
+                        disabled={isRemovingEmployee}
+                        rows={3}
+                        required
+                        className={textareaClass}
+                    />
+                </label>
+            </FormDialog>
 
             {historyEmployee && (
                 <AccumulationHistoryModal
                     employeeId={historyEmployee.employeeId}
                     employeeLabel={`${historyEmployee.fullName} (${historyEmployee.employeeCode})`}
+                    monthlyLimit={historyEmployee.customMonthlyOtHourLimit}
+                    yearlyLimit={historyEmployee.customYearlyOtHourLimit}
                     onClose={() => setHistoryEmployee(null)}
                 />
             )}

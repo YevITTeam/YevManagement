@@ -11,6 +11,8 @@ interface FormDialogProps {
     submitLabel: string;
     cancelLabel: string;
     maxWidthClassName?: string;
+    /** Dark-red submit for destructive actions (delete, reject, remove). */
+    danger?: boolean;
     children: ReactNode;
 }
 
@@ -27,6 +29,7 @@ export default function FormDialog({
     submitLabel,
     cancelLabel,
     maxWidthClassName = "max-w-sm",
+    danger,
     children,
 }: FormDialogProps) {
     useEffect(() => {
@@ -72,7 +75,9 @@ export default function FormDialog({
                         type="button"
                         onClick={onSubmit}
                         disabled={loading}
-                        className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                        className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                            danger ? "bg-[#930006] hover:bg-[#6f0004]" : "bg-[#e3000f] hover:bg-[#b40009]"
+                        }`}
                     >
                         {submitLabel}
                     </button>

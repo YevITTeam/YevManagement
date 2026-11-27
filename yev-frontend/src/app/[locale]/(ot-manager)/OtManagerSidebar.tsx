@@ -122,7 +122,7 @@ export default function OtManagerSidebar() {
                                         <span className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 rounded-full bg-[#e3000f]" />
                                     )}
                                 </span>
-                                {!collapsed && <span className="truncate">{t(item.key)}</span>}
+                                {!collapsed && <span className="whitespace-nowrap">{t(item.key)}</span>}
                                 {!collapsed && badgeCount > 0 && (
                                     <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#e3000f] px-1.5 text-xs font-semibold text-white">
                                         {badgeCount > 99 ? "99+" : badgeCount}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Printer, RectangleHorizontal, RectangleVertical, X } from "lucide-react";
+import { FileDown, Loader2, Printer, RectangleHorizontal, RectangleVertical, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
 
@@ -51,6 +51,7 @@ const PAPER_OPTIONS = [
 
 export default function OtFormPrintView({ id, onClose }: OtFormPrintViewProps) {
     const t = useTranslations("Attendance.OtFormPrint");
+    const tCommon = useTranslations("Common");
     const [form, setForm] = useState<OtFormDto | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [manualPaperSize, setManualPaperSize] = useState<PaperSize>("a4");
@@ -102,7 +103,8 @@ export default function OtFormPrintView({ id, onClose }: OtFormPrintViewProps) {
         <button
             onClick={onClose}
             className="cursor-pointer rounded-md p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
-            aria-label="Close"
+            aria-label={tCommon("close")}
+            title={tCommon("close")}
         >
             <X className="h-5 w-5" />
         </button>
@@ -115,7 +117,7 @@ export default function OtFormPrintView({ id, onClose }: OtFormPrintViewProps) {
                     <span className="text-sm text-[#930006]">{error}</span>
                 ) : (
                     <span className="inline-flex items-center gap-2 text-sm text-[#5e3f3a]">
-                        <Loader2 className="h-4 w-4 animate-spin" /> {t("loading")}
+                        <Loader2 className="h-4 w-4 animate-spin" /> {tCommon("loading")}
                     </span>
                 )}
                 {closeButton}
@@ -155,9 +157,11 @@ export default function OtFormPrintView({ id, onClose }: OtFormPrintViewProps) {
                     <button
                         onClick={exportPdf}
                         disabled={isExporting}
-                        className="inline-flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                        title={t("exportPdfButton")}
+                        aria-label={t("exportPdfButton")}
+                        className="inline-flex cursor-pointer items-center rounded-md border border-[#e0e3e5] bg-white p-2 text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {t("exportPdfButton")}
+                        {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
                     </button>
                     <button
                         onClick={() => window.print()}

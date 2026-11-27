@@ -71,7 +71,12 @@ export function SearchField({
             <input
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && onEnter()}
+                onKeyDown={(event) => {
+                    // Keep Enter from submitting a surrounding <form>.
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    onEnter();
+                }}
                 placeholder={placeholder}
                 aria-label={t("search")}
                 className={`${fieldClassName} w-full pl-8`}

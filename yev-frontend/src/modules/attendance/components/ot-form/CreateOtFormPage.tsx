@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, Car, Check, Printer, RefreshCw, Undo2, UserMinus, Users, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarX2, Car, OctagonX, PenLine, Printer, RefreshCw, SearchX, Undo2, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "@/navigation";
@@ -31,6 +31,11 @@ import { MultiSelect } from "@/components/ui/MultiSelect";
 import { RequiredMark } from "@/components/ui/RequiredMark";
 import InfoTooltip from "@/components/ui/InfoTooltip";
 import TimePicker24h from "@/components/ui/TimePicker24h";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { IconButton, IconFlag, SearchField } from "@/components/ui/ListToolbar";
+import { EmptyState } from "@/components/common/EmptyState";
+import FormDialog from "@/components/common/FormDialog";
+import OtCaseBadge from "@/modules/attendance/components/OtCaseBadge";
 import { UserSignatureApi } from "@/modules/attendance/api/user-signature.api";
 import SecondaryPasswordDialog from "@/modules/attendance/components/secondary-password/SecondaryPasswordDialog";
 import { SecondaryPasswordApi } from "@/modules/attendance/api/secondary-password.api";
@@ -42,10 +47,10 @@ import { useAttendanceSetting } from "@/modules/attendance/hooks/useAttendanceSe
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useDragScroll } from "@/modules/common/hooks/useDragScroll";
 import { isOvernight } from "@/modules/attendance/lib/time";
-import { MEAL_TICKET_MAIN, MEAL_TICKET_NONE, MEAL_TICKET_SECONDARY, computeActualHours, computeMealTicketType, isEarlyMealWindowOt, splitHoursByDay } from "@/modules/attendance/lib/mealTicket";
+import { MEAL_TICKET_MAIN, MEAL_TICKET_SECONDARY, computeActualHours, computeMealTicketType, isEarlyMealWindowOt, splitHoursByDay } from "@/modules/attendance/lib/mealTicket";
 import { MealTicketTypeBadge } from "./MealTicketTypeBadge";
 
-const fieldLabelClassName = "mb-1.5 block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]";
+const fieldLabelClassName = "mb-1 block text-xs font-medium text-[#5e3f3a]";
 const fieldClassName =
     "h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
 
@@ -127,7 +132,7 @@ function AccumulationCell({
     const total = Math.round((hours + extraHours) * 100) / 100;
     const isOver = total > limit;
     const withinRaisedLimit = !isOver && sharedLimit !== undefined && total > sharedLimit;
-    const overClassName = kind === "Daily" ? "font-semibold text-[#930006]" : "font-semibold text-[#b45309]";
+    const overClassName = kind === "Daily" ? "font-semibold text-[#930006]" : "font-semibold text-[#9a5b00]";
     return (
         <td
             className={`whitespace-nowrap px-3 py-2 text-center align-top text-sm ${isOver ? overClassName : "text-[#5e3f3a]"}`}
@@ -147,19 +152,18 @@ function AccumulationCell({
     );
 }
 
-// Pills next to the employee name: red when the day total would pass the daily limit (form is blocked), amber when the
+const th3PillClassName = "inline-flex items-center rounded-full border border-[#f5d0a9] bg-[#fff4e5] px-1.5 py-0.5 text-[10px] font-semibold text-[#9a5b00]";
+
+// Flags next to the employee name: red when the day total would pass the daily limit (form is blocked), amber when the
 // month/year total would pass the limit (form becomes TH3).
-function OverLimitBadges({ t, overDay, overTh3 }: { t: (key: string) => string; overDay: boolean; overTh3: boolean }) {
-    if (!overDay && !overTh3) return null;
+function OverLimitBadges({ t, overDay, overTh3, overlap }: { t: (key: string) => string; overDay: boolean; overTh3: boolean; overlap: boolean }) {
+    if (!overDay && !overTh3 && !overlap) return null;
     return (
-        <span className="ml-1.5 inline-flex items-center gap-1">
-            {overDay && (
-                <span title={t("badgeOverDailyTooltip")} className="inline-flex items-center rounded-full border border-[#ffdad6] bg-[#fff0ef] px-1.5 py-0.5 text-[10px] font-semibold text-[#930006]">
-                    {t("badgeOverDaily")}
-                </span>
-            )}
+        <span className="ml-1.5 inline-flex items-center gap-1 align-middle">
+            {overlap && <IconFlag icon={CalendarX2} label={t("colOverlapWarning")} tone="danger" />}
+            {overDay && <IconFlag icon={OctagonX} label={t("badgeOverDailyTooltip")} tone="danger" />}
             {overTh3 && (
-                <span title={t("badgeTh3Tooltip")} className="inline-flex items-center rounded-full border border-[#fde68a] bg-[#fffbeb] px-1.5 py-0.5 text-[10px] font-semibold text-[#b45309]">
+                <span title={t("badgeTh3Tooltip")} className={th3PillClassName}>
                     TH3
                 </span>
             )}
@@ -405,6 +409,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     const exceedsTh3 = exceedsTh3For(selectedEmployeeIds);
     const otCaseCode = exceedsTh3 ? "TH3" : baseOtCaseCode;
     const otCaseId = isEditMode ? loadedOtCaseId : (otCases.find((c) => c.code === otCaseCode)?.id ?? null);
+    const otCase = otCases.find((c) => c.id === otCaseId);
 
     // Group-mode create: narrows the table only; hidden rows keep their selection.
     const [employeeQuery, setEmployeeQuery] = useState("");
@@ -427,8 +432,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
           })
         : [];
     const visibleGroupEmployees = groupSections.flatMap((section) => section.visibleEmployees);
+    const hasEmployeeTable = isEditMode || (isCoreFormInfoFilled && groupIds.length > 0 && groupEmployees.length > 0);
 
-    // Signature is only required at approval, so this is a soft hint that never blocks submit.
+    // Soft hint only: BE blocks creation without a signature just when the creator must self-sign the requester box.
     const [hasSignature, setHasSignature] = useState<boolean | null>(null);
     // Secondary password is required to save, both create and edit.
     const [hasSecondaryPassword, setHasSecondaryPassword] = useState<boolean | null>(null);
@@ -753,6 +759,37 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     };
     const handleEmployeeDidEatChange = (employeeId: number, didEat: boolean) => setEmployeesDidEat([employeeId], didEat);
 
+    const renderTimeCell = (employeeId: number, rowStart: string, rowEnd: string, disabled: boolean, outOfRange = false) => (
+        <td className="relative whitespace-nowrap px-3 py-2 align-top">
+            <span className="inline-flex items-center gap-1">
+                <span role="group" aria-label={t("fieldStartTime")}>
+                    <TimePicker24h compact value={rowStart} onChange={(value) => handleEmployeeOverrideChange(employeeId, "startTime", value)} disabled={disabled} />
+                </span>
+                <span className="text-[#8a8f94]">–</span>
+                <span role="group" aria-label={t("fieldEndTime")}>
+                    <TimePicker24h compact value={rowEnd} onChange={(value) => handleEmployeeOverrideChange(employeeId, "endTime", value)} disabled={disabled} />
+                </span>
+            </span>
+            {outOfRange && (
+                <AlertTriangle aria-label={t("employeeTimeOutOfRange", { start: startTime, end: endTime })} className="absolute right-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white text-[#930006]">
+                    <title>{t("employeeTimeOutOfRange", { start: startTime, end: endTime })}</title>
+                </AlertTriangle>
+            )}
+        </td>
+    );
+
+    const renderNoteCell = (employeeId: number, disabled: boolean) => (
+        <td className="px-3 py-2 align-top">
+            <input
+                value={employeeOverrides[employeeId]?.noteVn ?? ""}
+                onChange={(event) => handleEmployeeOverrideChange(employeeId, "noteVn", event.target.value)}
+                aria-label={t("colNote")}
+                disabled={disabled}
+                className="h-7 w-full rounded-md border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
+            />
+        </td>
+    );
+
     // Bulk toggle covers only the rows that show the checkbox: selected, group allows it, outside the early window.
     const ateLaterBulkIds = selectedEmployeeIds.filter(
         (id) =>
@@ -761,7 +798,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     );
     const allAteLater = ateLaterBulkIds.length > 0 && ateLaterBulkIds.every((id) => !didEatOf(id));
     const ateLaterHeader = (
-        <th rowSpan={2} className="h-px w-px whitespace-normal p-0 text-center align-bottom leading-tight">
+        <th rowSpan={2} title={t("ateLaterHint")} className="h-px w-px whitespace-normal p-0 text-center align-bottom leading-tight">
             <label className="flex h-full cursor-pointer flex-col items-center justify-end gap-1 px-2 py-2 has-disabled:cursor-not-allowed">
                 {t("colAteLater")}
                 <input
@@ -971,7 +1008,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
     };
 
     if (isLoadingInitial) {
-        return <div className="py-16 text-center text-sm text-[#5e3f3a]">{tCommon("loading")}</div>;
+        return (
+            <div className="space-y-4" aria-busy="true" aria-label={tCommon("loading")}>
+                <Skeleton className="h-7 w-56" />
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)]">
+                    <Skeleton className="h-[34rem] rounded-xl" />
+                    <Skeleton className="h-[34rem] rounded-xl" />
+                </div>
+            </div>
+        );
     }
 
     if (loadError) {
@@ -984,7 +1029,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <h1 className="text-xl font-semibold text-[#191c1e]">{t("titleCreate")}</h1>
                 </div>
-                <div className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">
+                <div title={t("blockedNoScopeHint")} className="rounded-lg border border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">
                     {t("blockedNoScopeMessage")}
                 </div>
             </div>
@@ -998,13 +1043,17 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             </div>
 
             {!isEditMode && hasSignature === false && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-3 text-sm text-[#9a5b00]">
+                <div
+                    title={t("noSignatureHint")}
+                    className="flex flex-wrap items-center gap-3 rounded-lg border border-[#f5d0a9] bg-[#fff4e5] px-4 py-2 text-sm text-[#9a5b00]"
+                >
                     <span>{t("noSignatureMessage")}</span>
                     <button
                         type="button"
                         onClick={() => router.push("/ot/signature")}
-                        className="cursor-pointer rounded-lg border border-[#9a5b00] px-3 py-1.5 text-xs font-semibold text-[#9a5b00] transition hover:bg-[#fff0d8]"
+                        className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#9a5b00] px-3 py-1 text-xs font-semibold text-[#9a5b00] transition hover:bg-[#fff0d8]"
                     >
+                        <PenLine className="h-3.5 w-3.5" />
                         {t("registerSignatureButton")}
                     </button>
                 </div>
@@ -1013,10 +1062,6 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid items-start gap-4 lg:min-h-[34rem] lg:grid-cols-[minmax(0,25rem)_minmax(0,1fr)] lg:items-stretch">
                 <section className="space-y-3.5 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm">
-                    <div className="flex items-center justify-between gap-2">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("formInfoTitle")}</h2>
-
-                    </div>
                     <div className="grid gap-x-3 gap-y-3 sm:grid-cols-2">
                         <label className="block">
                             <span className={fieldLabelClassName}>{t("fieldDepartment")}<RequiredMark /></span>
@@ -1024,7 +1069,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 options={visibleDepartments.map((d) => ({ value: d.id, label: d.label, searchText: d.label.toLowerCase() }))}
                                 value={departmentId ?? ""}
                                 onChange={handleDepartmentChange}
-                                placeholder={t("fieldDepartmentPlaceholder")}
+                                placeholder=""
+                                ariaLabel={t("fieldDepartment")}
                                 disabled={isSubmitting || isEditMode || isScopeDepartmentLocked}
                             />
                         </label>
@@ -1036,7 +1082,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
                                     value={groupId ?? ""}
                                     onChange={() => {}}
-                                    placeholder={t("fieldGroupPlaceholder")}
+                                    placeholder=""
+                                    ariaLabel={t("fieldGroup")}
                                     disabled
                                 />
                             ) : (
@@ -1044,7 +1091,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     options={visibleGroups.map((g) => ({ value: g.id, label: g.label, searchText: g.label.toLowerCase() }))}
                                     values={groupIds}
                                     onChange={handleGroupIdsChange}
-                                    placeholder={departmentId ? t("fieldGroupPlaceholder") : t("fieldGroupPlaceholderNeedDepartment")}
+                                    placeholder={departmentId ? "" : t("fieldGroupPlaceholderNeedDepartment")}
+                                    ariaLabel={t("fieldGroup")}
                                     disabled={isSubmitting || !departmentId}
                                 />
                             )}
@@ -1064,23 +1112,38 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         className={fieldClassName.replace("w-full", "w-40")}
                                     />
                                 </label>
-                                <div className="flex items-end gap-3">
-                                    <label className="block">
-                                        <span className={fieldLabelClassName}>{t("fieldStartTime")}<RequiredMark /></span>
-                                        <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting} />
-                                    </label>
-                                    <label className="block">
-                                        <span className={fieldLabelClassName}>{t("fieldEndTime")}<RequiredMark /></span>
-                                        <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting} />
-                                    </label>
-                                    {/* Form hours are only the outer frame; the daily limit is warned per employee row. */}
-                                    <span className="flex h-9 items-center" title={t("fieldTotalHour")}>
-                                        <span className="rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-semibold tabular-nums text-[#5e3f3a]">
-                                            {totalHour}h
+                                <div>
+                                    <span className={fieldLabelClassName}>{t("fieldTime")}<RequiredMark /></span>
+                                    <div className="flex items-center gap-1.5">
+                                        <span role="group" aria-label={t("fieldStartTime")}>
+                                            <TimePicker24h value={startTime} onChange={setStartTime} disabled={isSubmitting} />
                                         </span>
-                                        {isOvernightForm && <span className="ml-1.5 whitespace-nowrap text-xs font-semibold text-[#9a5b00]">{t("nextDayLabel")}</span>}
-                                    </span>
+                                        <span className="text-[#8a8f94]">–</span>
+                                        <span role="group" aria-label={t("fieldEndTime")}>
+                                            <TimePicker24h value={endTime} onChange={setEndTime} disabled={isSubmitting} />
+                                        </span>
+                                    </div>
                                 </div>
+                                {/* Form hours are only the outer frame; the daily limit is warned per employee row. */}
+                                <span className="flex h-9 items-center gap-1.5">
+                                    <span title={t("fieldTotalHour")} className="rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2 py-0.5 text-xs font-semibold tabular-nums text-[#5e3f3a]">
+                                        {totalHour}h
+                                    </span>
+                                    {isOvernightForm && (
+                                        <span title={t("nextDayHint")} className="text-xs font-semibold text-[#9a5b00]">
+                                            {t("nextDayLabel")}
+                                        </span>
+                                    )}
+                                    {/* The case is derived (date, calendar, limits), so it is a read-only chip; several groups show theirs per group. */}
+                                    {!isMultiGroup && otCase && (
+                                        <span
+                                            title={`${t("fieldOtCase")} — ${t(isEditMode ? "otCaseAutoHintEdit" : exceedsTh3 ? "otCaseAutoHintTh3" : touchesNonWorkingDay ? "otCaseAutoHintNonWorking" : "otCaseAutoHintWorking")}`}
+                                            className={otCase.code === "TH3" ? th3PillClassName.replace("text-[10px]", "text-xs") : "inline-flex items-center rounded-full border border-[#e0e3e5] bg-white px-1.5 py-0.5 text-xs font-semibold text-[#5e3f3a]"}
+                                        >
+                                            <OtCaseBadge code={otCase.code} description={otCase.description} descriptionJp={otCase.descriptionJp} />
+                                        </span>
+                                    )}
+                                </span>
                             </div>
                             {isTimeRangeInvalid && (
                                 <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-[#930006]">
@@ -1095,7 +1158,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         today > holidayDeadline ? "border-[#e9bcb6] bg-[#fff4f2] text-[#930006]" : "border-[#f5d0a9] bg-[#fff4e5] text-[#9a5b00]"
                                     }`}
                                 >
-                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                    <CalendarClock className="h-3.5 w-3.5 shrink-0" />
                                     {t(today > holidayDeadline ? "holidaySignOverdue" : "holidaySignDeadline", { deadline: formatDeadline(holidayDeadline) })}
                                     <InfoTooltip text={`${t("holidaySignRuleWeekend")} ${t("holidaySignRuleOther")} ${t("holidaySignReason")}`} />
                                 </p>
@@ -1108,38 +1171,11 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                 options={reasons.map((r) => ({ value: r.id, label: r.reasonNameVn, searchText: r.reasonNameVn.toLowerCase() }))}
                                 value={reasonId ?? ""}
                                 onChange={(v) => setReasonId(v === "" ? null : v)}
-                                placeholder={t("fieldReasonPlaceholder")}
+                                placeholder=""
+                                ariaLabel={t("fieldReason")}
                                 disabled={isSubmitting}
                             />
                         </label>
-
-                        {/* With several groups each group header shows its own case. */}
-                        {!isMultiGroup && (
-                        <label className="block sm:col-span-2">
-                            <span className={`${fieldLabelClassName.replace("block", "flex")} items-center gap-1`}>
-                                {t("fieldOtCase")}<RequiredMark />
-                                {!isEditMode && otCaseCode && (
-                                    <InfoTooltip
-                                        text={t(exceedsTh3 ? "otCaseAutoHintTh3" : touchesNonWorkingDay ? "otCaseAutoHintNonWorking" : "otCaseAutoHintWorking")}
-                                    />
-                                )}
-                                {isEditMode && <InfoTooltip text={t("otCaseAutoHintEdit")} />}
-                            </span>
-                            <SearchableSelect
-                                options={otCases.map((otCase) => ({
-                                    value: otCase.id,
-                                    label: otCase.description ? `${otCase.code}: ${otCase.description}` : otCase.code,
-                                    searchText: `${otCase.code} ${otCase.description ?? ""}`.toLowerCase(),
-                                }))}
-                                value={otCaseId ?? ""}
-                                onChange={() => {}}
-                                placeholder={t("fieldOtCasePlaceholder")}
-                                disabled
-                            />
-                        </label>
-                        )}
-
-                        
                     </div>
 
                     <label className="block">
@@ -1155,9 +1191,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
 
                     <div className="space-y-2.5 border-t border-[#e0e3e5] pt-3">
                     {/* Always shown: meals are mandatory, only shuttle/photo room are optional. */}
-                    <span className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                        {t("otherSupportLabel")}
-                    </span>
+                    <span className="block text-xs font-semibold text-[#5e3f3a]">{t("otherSupportLabel")}</span>
 
                     {supportSections.map((section) => {
                         const part = processParts[section.key] ?? emptyProcessPart;
@@ -1183,28 +1217,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             />
                         </div>
 
-                        <div className="space-y-1.5">
-                            {/* Counts are auto-filled from each person's OT hours; once overridden, "Recalculate" restores them. */}
-                            <div className="flex items-center justify-between gap-2 text-xs">
-                                <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("mealTicketCountsTitle")}</span>
-                                {!isEditMode &&
-                                    (!isManual ? (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-semibold text-emerald-700">
-                                            <Check className="h-3 w-3" /> {t("mealTicketAutoBadge")}
-                                        </span>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            onClick={() => setManualMealTicketKeys((current) => ({ ...current, [section.key]: false }))}
-                                            disabled={isSubmitting}
-                                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-2.5 py-1 font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            <RefreshCw className="h-3.5 w-3.5" /> {t("mealTicketRecalcButton")}
-                                        </button>
-                                    ))}
-                            </div>
-
-                            <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
+                        {/* Counts are auto-filled from each person's OT hours; once overridden, the recalc button restores them. */}
+                        <div className="flex flex-wrap items-end gap-x-4 gap-y-2.5">
                             <label className="block">
                                 <span className={fieldLabelClassName}>{t("mainTicketLabel")}</span>
                                 <input
@@ -1243,7 +1257,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     className={`${compactFieldClassName.replace("w-full", "w-20")} text-center`}
                                 />
                             </label>
-                            </div>
+                            {!isEditMode && isManual && (
+                                <IconButton
+                                    icon={RefreshCw}
+                                    label={t("mealTicketRecalcButton")}
+                                    onClick={() => setManualMealTicketKeys((current) => ({ ...current, [section.key]: false }))}
+                                    disabled={isSubmitting}
+                                />
+                            )}
                         </div>
 
                         <label className="block">
@@ -1262,19 +1283,10 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                 </section>
 
                 <section className="flex flex-col gap-4 rounded-xl border border-[#e0e3e5] bg-white p-5 shadow-sm lg:h-0 lg:min-h-full">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            {t("employeeListTitle")}
-                        </h2>
-                        <div className={`flex flex-wrap items-center justify-end gap-2 ${isEditMode || isGroupCreate ? "w-full sm:w-auto" : ""}`}>
-                            {isGroupCreate && groupEmployees.length > 0 && (
-                                <input
-                                    value={employeeQuery}
-                                    onChange={(event) => setEmployeeQuery(event.target.value)}
-                                    placeholder={t("employeeSearchPlaceholder")}
-                                    aria-label={t("employeeSearchPlaceholder")}
-                                    className="h-8 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-xs text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] sm:w-56"
-                                />
+                    {hasEmployeeTable && (
+                        <div className="flex flex-wrap items-center gap-2">
+                            {isGroupCreate && (
+                                <SearchField value={employeeQuery} onChange={setEmployeeQuery} onEnter={() => {}} placeholder={t("employeeSearchPlaceholder")} wide />
                             )}
                             {isEditMode && (
                                 <div className="w-full sm:w-64">
@@ -1292,17 +1304,21 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             if (item) handlePickAddEmployee(item);
                                         }}
                                         placeholder={t("addEmployeeSectionTitle")}
+                                        ariaLabel={t("addEmployeeSectionTitle")}
                                         disabled={isSubmitting}
-                                        triggerClassName="h-8 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-8 text-xs! text-[#191c1e] outline-none transition focus:border-[#e3000f]"
+                                        triggerClassName="h-9 w-full rounded-md border border-[#e0e3e5] bg-white px-2.5 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f]"
                                     />
                                 </div>
                             )}
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-medium text-[#5e3f3a]">
+                            <span
+                                title={t("selectedCount", { count: selectedEmployeeIds.length })}
+                                className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-3 py-1 text-xs font-semibold tabular-nums text-[#5e3f3a]"
+                            >
                                 <Users className="h-3.5 w-3.5" />
-                                {t("selectedCount", { count: selectedEmployeeIds.length })}
+                                {selectedEmployeeIds.length}
                             </span>
                         </div>
-                    </div>
+                    )}
                     {isEditMode ? (
                         // editEmployees stays the original list; adds/removals are staged and applied in one save (one secondary password).
                         <div className="space-y-4 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
@@ -1313,18 +1329,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         >
                             <table className={tableClassName}>
                                 <thead className="sticky top-0 z-10 bg-white">
-                                    <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
-                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
+                                    <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("employeeListTitle")}</th>
                                         <th colSpan={2} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
-                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
-                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colTime")}</th>
                                         {showAteLaterColumn && ateLaterHeader}
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
                                         <th rowSpan={2} className="sticky right-0 z-10 bg-white px-2 py-2" />
                                     </tr>
-                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
                                         <th className="px-3 py-2 text-center">{t("colMonth")}</th>
                                         <th className="px-3 py-2 text-center">{t("colYear")}</th>
                                     </tr>
@@ -1335,15 +1349,12 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         if (removalReason !== undefined) {
                                             return (
                                                 <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-[#fff4f2] opacity-70">
-                                                    <td className="whitespace-nowrap px-3 py-2 align-top text-sm font-semibold text-[#191c1e] line-through">
-                                                        {employee.employeeCode}
-                                                    </td>
-                                                    <td
-                                                        className="px-3 py-2 align-top text-sm text-[#930006]"
-                                                        colSpan={showAteLaterColumn ? 8 : 7}
-                                                    >
-                                                        <span className="line-through">{employee.fullName}</span> —{" "}
-                                                        {removalReason ? t("willBeRemovedNote", { reason: removalReason }) : t("willBeRemovedNoteNoReason")}
+                                                    <td className="px-3 py-2 align-top text-sm text-[#930006]" colSpan={showAteLaterColumn ? 7 : 6}>
+                                                        <span className="whitespace-nowrap line-through">
+                                                            <span className="mr-1.5 font-semibold text-[#191c1e]">{employee.employeeCode}</span>
+                                                            {employee.fullName}
+                                                        </span>{" "}
+                                                        — {removalReason ? t("willBeRemovedNote", { reason: removalReason }) : t("willBeRemovedNoteNoReason")}
                                                     </td>
                                                     <td className={stickyActionCellClassName}>
                                                         <button
@@ -1368,26 +1379,13 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                         const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, currentDidEat, setting);
                                         return (
                                             <tr key={employee.employeeId} className="border-b border-[#f1f5f9] bg-white even:bg-[#f8fafc]">
-                                                <td className="whitespace-nowrap px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">
-                                                    {employee.employeeCode}
+                                                <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#191c1e]">
+                                                    <span className="mr-1.5 font-semibold">{employee.employeeCode}</span>
+                                                    {employee.fullName}
                                                 </td>
-                                                <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#191c1e]">{employee.fullName}</td>
                                                 <AccumulationCell t={t} code={employee.employeeCode} kind="Monthly" hours={employee.monthToDate} limit={employee.customMonthlyOtHourLimit ?? setting.monthlyOtHourLimit} sharedLimit={setting.monthlyOtHourLimit} />
                                                 <AccumulationCell t={t} code={employee.employeeCode} kind="Yearly" hours={employee.yearToDate} limit={employee.customYearlyOtHourLimit ?? setting.yearlyOtHourLimit} sharedLimit={setting.yearlyOtHourLimit} />
-                                                <td className="px-3 py-2 align-top">
-                                                    <TimePicker24h compact
-                                                        value={currentStartTime}
-                                                        onChange={(value) => handleEmployeeOverrideChange(employee.employeeId, "startTime", value)}
-                                                        disabled={isSubmitting}
-                                                    />
-                                                </td>
-                                                <td className="relative px-3 py-2 align-top">
-                                                    <TimePicker24h compact
-                                                        value={currentEndTime}
-                                                        onChange={(value) => handleEmployeeOverrideChange(employee.employeeId, "endTime", value)}
-                                                        disabled={isSubmitting}
-                                                    />
-                                                </td>
+                                                {renderTimeCell(employee.employeeId, currentStartTime, currentEndTime, isSubmitting)}
                                                 {showAteLaterColumn && (
                                                     <td className="h-px p-0 align-top">
                                                         {earlyWindow || !canEatLater(employee.employeeId) ? null : (
@@ -1407,27 +1405,17 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     </td>
                                                 )}
                                                 <td className="px-3 py-2 align-top">
-                                                    {mealTicketType !== MEAL_TICKET_NONE && <MealTicketTypeBadge type={mealTicketType} t={t} />}
+                                                    <MealTicketTypeBadge type={mealTicketType} t={t} />
                                                 </td>
-                                                <td className="px-3 py-2 align-top">
-                                                    <input
-                                                        value={employeeOverrides[employee.employeeId]?.noteVn ?? ""}
-                                                        onChange={(event) =>
-                                                            handleEmployeeOverrideChange(employee.employeeId, "noteVn", event.target.value)
-                                                        }
-                                                        placeholder={t("notePlaceholder")}
-                                                        disabled={isSubmitting}
-                                                        className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                                                    />
-                                                </td>
+                                                {renderNoteCell(employee.employeeId, isSubmitting)}
                                                 <td className={stickyActionCellClassName}>
                                                     {selectedEmployeeIds.length > 1 && (
                                                         <button
                                                             type="button"
                                                             onClick={() => openRemoveEmployee(employee)}
                                                             disabled={isSubmitting}
-                                                            title={t("removeEmployeeButton")}
-                                                            aria-label={t("removeEmployeeButton")}
+                                                            title={t(isFormCreator ? "removeFromFormButton" : "removeEmployeeButton")}
+                                                            aria-label={t(isFormCreator ? "removeFromFormButton" : "removeEmployeeButton")}
                                                             className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-[#e9bcb6] bg-white text-[#930006] hover:bg-[#fff4f2] transition disabled:cursor-not-allowed disabled:opacity-50"
                                                         >
                                                             <UserMinus className="h-4 w-4" />
@@ -1450,29 +1438,16 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                             const mealTicketType = computeMealTicketType(currentStartTime, currentEndTime, currentDidEat, setting);
                                             return (
                                                 <tr key={employeeId} className="border-b border-[#f1f5f9] bg-emerald-50">
-                                                    <td className="whitespace-nowrap px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">{meta.employeeCode}</td>
                                                     <td className="whitespace-nowrap px-3 py-2 align-top text-sm text-[#191c1e]">
-                                                        {meta.fullName}{" "}
-                                                        <span className="ml-1 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-                                                            {t("newlyAddedBadge")}
+                                                        <span className="mr-1.5 font-semibold">{meta.employeeCode}</span>
+                                                        {meta.fullName}
+                                                        <span className="ml-1.5 inline-flex align-middle">
+                                                            <IconFlag icon={UserPlus} label={t("newlyAddedBadge")} tone="success" />
                                                         </span>
                                                     </td>
                                                     <td className="px-3 py-2 text-center align-top text-sm text-[#8a8f94]">—</td>
                                                     <td className="px-3 py-2 text-center align-top text-sm text-[#8a8f94]">—</td>
-                                                    <td className="px-3 py-2 align-top">
-                                                        <TimePicker24h compact
-                                                            value={currentStartTime}
-                                                            onChange={(value) => handleEmployeeOverrideChange(employeeId, "startTime", value)}
-                                                            disabled={isSubmitting}
-                                                        />
-                                                    </td>
-                                                    <td className="relative px-3 py-2 align-top">
-                                                        <TimePicker24h compact
-                                                            value={currentEndTime}
-                                                            onChange={(value) => handleEmployeeOverrideChange(employeeId, "endTime", value)}
-                                                            disabled={isSubmitting}
-                                                        />
-                                                    </td>
+                                                    {renderTimeCell(employeeId, currentStartTime, currentEndTime, isSubmitting)}
                                                     {showAteLaterColumn && (
                                                         <td className="h-px p-0 align-top">
                                                             {earlyWindow || !canEatLater(employeeId) ? null : (
@@ -1490,17 +1465,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         </td>
                                                     )}
                                                     <td className="px-3 py-2 align-top">
-                                                        {mealTicketType !== MEAL_TICKET_NONE && <MealTicketTypeBadge type={mealTicketType} t={t} />}
+                                                        <MealTicketTypeBadge type={mealTicketType} t={t} />
                                                     </td>
-                                                    <td className="px-3 py-2 align-top">
-                                                        <input
-                                                            value={employeeOverrides[employeeId]?.noteVn ?? ""}
-                                                            onChange={(event) => handleEmployeeOverrideChange(employeeId, "noteVn", event.target.value)}
-                                                            placeholder={t("notePlaceholder")}
-                                                            disabled={isSubmitting}
-                                                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                                                        />
-                                                    </td>
+                                                    {renderNoteCell(employeeId, isSubmitting)}
                                                     <td className={stickyActionCellClassName}>
                                                         <button
                                                             type="button"
@@ -1520,50 +1487,36 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                             </table>
                         </div>
 
-                        {removeTarget && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
-                                <div className="fixed inset-0 bg-black/40" onClick={closeRemoveEmployee} />
-                                <div role="dialog" aria-modal="true" className="z-60 mx-4 w-full max-w-md rounded-xl border border-[#e0e3e5] bg-white p-6 shadow-xl">
-                                    <h3 className="mb-3 text-lg font-semibold text-[#191c1e]">
-                                        {t("removeModalTitle", { name: removeTarget.fullName })}
-                                    </h3>
-                                    <p className="mb-3 text-sm text-[#5e3f3a]">{t("removeModalDesc")}</p>
-                                    <label className={fieldLabelClassName}>
-                                        {t("removeReasonLabel")} <span className="text-[#930006]">*</span>
-                                    </label>
-                                    <textarea
-                                        value={removeReasonInput}
-                                        onChange={(event) => setRemoveReasonInput(event.target.value)}
-                                        rows={3}
-                                        className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                                    />
-                                    <div className="mt-4 flex justify-end gap-3">
-                                        <button
-                                            type="button"
-                                            onClick={closeRemoveEmployee}
-                                            className="cursor-pointer rounded-lg border border-[#e0e3e5] bg-white px-4 py-2 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                                        >
-                                            {tCommon("cancel")}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={confirmRemoveEmployee}
-                                            className="cursor-pointer rounded-lg bg-[#930006] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7a0005]"
-                                        >
-                                            {t("confirmRemove")}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        <FormDialog
+                            isOpen={removeTarget !== null}
+                            title={t("removeModalTitle", { name: removeTarget?.fullName ?? "" })}
+                            danger
+                            onClose={closeRemoveEmployee}
+                            onSubmit={confirmRemoveEmployee}
+                            submitLabel={t("confirmRemove")}
+                            cancelLabel={tCommon("cancel")}
+                            maxWidthClassName="max-w-md"
+                        >
+                            <p className="text-sm text-[#5e3f3a]">{t("removeModalDesc")}</p>
+                            <label className="block">
+                                <span className={fieldLabelClassName}>{t("removeReasonLabel")}<RequiredMark /></span>
+                                <textarea
+                                    value={removeReasonInput}
+                                    onChange={(event) => setRemoveReasonInput(event.target.value)}
+                                    rows={3}
+                                    className="w-full rounded-lg border border-[#e0e3e5] bg-white px-3 py-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                                />
+                            </label>
+                        </FormDialog>
                         </div>
                     ) : !isCoreFormInfoFilled || groupIds.length === 0 ? (
-                        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-[#e0e3e5] bg-[#f8fafc] px-4 py-16 text-center text-sm text-[#5e3f3a]">
-                            <Users className="h-8 w-8 text-[#c7ccd1]" />
-                            {t("employeeListPlaceholder")}
+                        <div className="flex flex-1 items-center justify-center">
+                            <EmptyState icon={Users} title={t("employeeListPlaceholder")} />
                         </div>
                     ) : groupEmployees.length === 0 ? (
-                        <p className="text-sm text-[#5e3f3a]">{t("noEmployeesInGroup")}</p>
+                        <div className="flex flex-1 items-center justify-center">
+                            <EmptyState icon={Users} title={t("noEmployeesInGroup")} />
+                        </div>
                     ) : (
                         <div
                             ref={tableScrollRef}
@@ -1572,7 +1525,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         >
                             <table className={tableClassName}>
                                 <thead className="sticky top-0 z-10 bg-white">
-                                    <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    <tr className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
                                         <th rowSpan={2} className="h-px w-10 p-0 align-bottom">
                                             <label className="flex h-full cursor-pointer items-end justify-center px-3 py-2 has-disabled:cursor-not-allowed">
                                                 <input
@@ -1590,16 +1543,14 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                 />
                                             </label>
                                         </th>
-                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEmployeeCode")}</th>
-                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colFullName")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("employeeListTitle")}</th>
                                         <th colSpan={3} className="border-b border-[#e0e3e5] px-3 py-2 text-center">{t("colAccumulation")}</th>
-                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colStartTime")}</th>
-                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colEndTime")}</th>
+                                        <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colTime")}</th>
                                         {showAteLaterColumn && ateLaterHeader}
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colMealTicketType")}</th>
                                         <th rowSpan={2} className="px-3 py-2 align-bottom">{t("colNote")}</th>
                                     </tr>
-                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
+                                    <tr className="whitespace-nowrap border-b border-[#e0e3e5] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
                                         <th className="px-3 py-2 text-center">{t("colDay")}</th>
                                         <th className="px-3 py-2 text-center">{t("colMonth")}</th>
                                         <th className="px-3 py-2 text-center">{t("colYear")}</th>
@@ -1631,7 +1582,7 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                                 />
                                             </td>
-                                            <td colSpan={showAteLaterColumn ? 10 : 9} className="px-3 py-2 text-sm">
+                                            <td colSpan={showAteLaterColumn ? 8 : 7} className="px-3 py-2 text-sm">
                                                 <span className="inline-flex items-center gap-2">
                                                     <span className="font-semibold text-[#191c1e]">{groupLabel(section.groupId)}</span>
                                                     <span className="text-xs tabular-nums text-[#5e3f3a]">
@@ -1639,11 +1590,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     </span>
                                                     {caseCode && (
                                                         <span
-                                                            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
-                                                                caseCode === "TH3"
-                                                                    ? "border-[#fde68a] bg-[#fffbeb] text-[#b45309]"
-                                                                    : "border-[#e0e3e5] bg-white text-[#5e3f3a]"
-                                                            }`}
+                                                            title={t("fieldOtCase")}
+                                                            className={caseCode === "TH3" ? th3PillClassName : "inline-flex items-center rounded-full border border-[#e0e3e5] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[#5e3f3a]"}
                                                         >
                                                             {caseCode}
                                                         </span>
@@ -1690,40 +1638,17 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                         className="h-4 w-4 cursor-pointer accent-[#e3000f]"
                                                     />
                                                 </td>
-                                                <td className="whitespace-nowrap px-3 py-2 align-top text-sm font-semibold text-[#191c1e]">{employee.code}</td>
                                                 <td className="whitespace-nowrap px-3 py-2 align-top text-sm">
                                                     <span className={overlappingEmployeeIds.includes(employee.id) ? "line-through text-[#930006]" : "text-[#191c1e]"}>
+                                                        <span className="mr-1.5 font-semibold">{employee.code}</span>
                                                         {employee.lastName} {employee.firstName}
                                                     </span>
-                                                    <OverLimitBadges t={t} overDay={overDay} overTh3={overTh3} />
-                                                    {overlappingEmployeeIds.includes(employee.id) && (
-                                                        <div className="mt-1 text-xs font-semibold text-[#930006]">
-                                                            {t("colOverlapWarning")}
-                                                        </div>
-                                                    )}
+                                                    <OverLimitBadges t={t} overDay={overDay} overTh3={overTh3} overlap={overlappingEmployeeIds.includes(employee.id)} />
                                                 </td>
                                                 <AccumulationCell t={t} code={employee.code} kind="Daily" hours={employee.projectedDayToDate} limit={dailyOtHourLimit} extraHours={dayHours} />
                                                 <AccumulationCell t={t} code={employee.code} kind="Monthly" hours={employee.projectedMonthToDate} limit={monthLimit} sharedLimit={setting.monthlyOtHourLimit} extraHours={extraHours} />
                                                 <AccumulationCell t={t} code={employee.code} kind="Yearly" hours={employee.projectedYearToDate} limit={yearLimit} sharedLimit={setting.yearlyOtHourLimit} extraHours={extraHours} />
-                                                <td className="px-3 py-2 align-top">
-                                                    <TimePicker24h compact
-                                                        value={currentStartTime}
-                                                        onChange={(value) => handleEmployeeOverrideChange(employee.id, "startTime", value)}
-                                                        disabled={isSubmitting || !checked}
-                                                    />
-                                                </td>
-                                                <td className="relative px-3 py-2 align-top">
-                                                    <TimePicker24h compact
-                                                        value={currentEndTime}
-                                                        onChange={(value) => handleEmployeeOverrideChange(employee.id, "endTime", value)}
-                                                        disabled={isSubmitting || !checked}
-                                                    />
-                                                    {isTimeOutOfRange && (
-<AlertTriangle aria-label={t("employeeTimeOutOfRange", { start: startTime, end: endTime })} className="absolute right-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white text-[#930006]">
-<title>{t("employeeTimeOutOfRange", { start: startTime, end: endTime })}</title>
-</AlertTriangle>
-)}
-                                                </td>
+                                                {renderTimeCell(employee.id, currentStartTime, currentEndTime, isSubmitting || !checked, isTimeOutOfRange)}
                                                 {showAteLaterColumn && (
                                                     <td className="h-px p-0 align-top">
                                                         {earlyWindow || !canEatLater(employee.id) ? null : (
@@ -1741,17 +1666,9 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                                     </td>
                                                 )}
                                                 <td className="px-3 py-2 align-top">
-                                                    {mealTicketType !== MEAL_TICKET_NONE && <MealTicketTypeBadge type={mealTicketType} t={t} />}
+                                                    <MealTicketTypeBadge type={mealTicketType} t={t} />
                                                 </td>
-                                                <td className="px-3 py-2 align-top">
-                                                    <input
-                                                        value={employeeOverrides[employee.id]?.noteVn ?? ""}
-                                                        onChange={(event) => handleEmployeeOverrideChange(employee.id, "noteVn", event.target.value)}
-                                                        placeholder={t("notePlaceholder")}
-                                                        disabled={isSubmitting || !checked}
-                                                        className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-2 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]"
-                                                    />
-                                                </td>
+                                                {renderNoteCell(employee.id, isSubmitting || !checked)}
                                             </tr>
                                         );
                                     })}
@@ -1760,8 +1677,8 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                                     })}
                                     {employeeKeyword && visibleGroupEmployees.length === 0 && (
                                         <tr>
-                                            <td colSpan={showAteLaterColumn ? 11 : 10} className="px-3 py-8 text-center text-sm text-[#5e3f3a]">
-                                                {t("employeeSearchNoResult")}
+                                            <td colSpan={showAteLaterColumn ? 9 : 8}>
+                                                <EmptyState icon={SearchX} title={t("employeeSearchNoResult")} />
                                             </td>
                                         </tr>
                                     )}
@@ -1807,15 +1724,15 @@ export default function CreateOtFormPage({ otFormId }: CreateOtFormPageProps) {
                         <h3 id="holiday-sign-title" className="mb-3 flex items-center gap-2 text-lg font-semibold text-[#191c1e]">
                             <AlertTriangle className="h-5 w-5 shrink-0 text-[#930006]" />
                             {t("holidaySignTitle")}
+                            <InfoTooltip text={t("holidaySignReason")} />
                         </h3>
                         <p className="mb-3 text-sm font-semibold text-[#930006]">
                             {t(today > holidayDeadline ? "holidaySignOverdue" : "holidaySignDueToday", { deadline: formatDeadline(holidayDeadline) })}
                         </p>
-                        <ul className="mb-3 list-disc space-y-1 pl-5 text-sm text-[#5e3f3a]">
+                        <ul className="mb-5 list-disc space-y-1 pl-5 text-sm text-[#5e3f3a]">
                             <li>{t("holidaySignRuleWeekend")}</li>
                             <li>{t("holidaySignRuleOther")}</li>
                         </ul>
-                        <p className="mb-5 text-sm text-[#5e3f3a]">{t("holidaySignReason")}</p>
                         <div className="flex justify-end">
                             <button
                                 type="button"

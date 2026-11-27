@@ -14,12 +14,12 @@ type OtFormTabKey = "my-forms" | "pending-approvals" | "my-actions" | "my-partic
 // UI-only merge of the OT list screens; each tab still calls its own BE API via OtFormListPage `mode`.
 export default function OtFormTabsPage() {
     const t = useTranslations("Attendance.OtFormTabs");
-    const ALL_TABS: { key: OtFormTabKey; label: string }[] = [
-        { key: "my-forms", label: t("tabMyForms") },
-        { key: "pending-approvals", label: t("tabPendingApprovals") },
-        { key: "my-actions", label: t("tabMyActions") },
-        { key: "my-participations", label: t("tabMyParticipations") },
-        { key: "all-forms", label: t("tabAllForms") },
+    const ALL_TABS: { key: OtFormTabKey; label: string; title: string }[] = [
+        { key: "my-forms", label: t("tabMyForms"), title: t("descMyForms") },
+        { key: "pending-approvals", label: t("tabPendingApprovals"), title: t("descPendingApprovals") },
+        { key: "my-actions", label: t("tabMyActions"), title: t("descMyActions") },
+        { key: "my-participations", label: t("tabMyParticipations"), title: t("descMyParticipations") },
+        { key: "all-forms", label: t("tabAllForms"), title: t("descAllForms") },
     ];
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
@@ -63,6 +63,7 @@ export default function OtFormTabsPage() {
                         type="button"
                         role="tab"
                         aria-selected={isActive}
+                        title={tab.title}
                         onClick={() => selectTab(tab.key)}
                         className={`flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-semibold transition ${
                             isActive ? "bg-white text-[#191c1e] shadow-sm" : "text-[#5e3f3a] hover:text-[#191c1e]"
@@ -88,7 +89,7 @@ export default function OtFormTabsPage() {
             {visibleTabs.map((tab) =>
                 visitedTabs.has(tab.key) || activeTab === tab.key ? (
                     <div key={tab.key} className={activeTab === tab.key ? "" : "hidden"}>
-                        <OtFormListPage mode={tab.key} hideHeading tabs={tabBar} />
+                        <OtFormListPage mode={tab.key} tabs={tabBar} />
                     </div>
                 ) : null
             )}

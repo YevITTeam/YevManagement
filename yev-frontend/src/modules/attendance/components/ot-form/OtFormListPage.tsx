@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Calendar, Check, ChevronLeft, ChevronRight, Eye, FilterX, Inbox, Pencil, RefreshCw, Search, SlidersHorizontal, Users, X } from "lucide-react";
+import { CalendarClock, Check, CheckCheck, ChevronLeft, ChevronRight, Eye, Pencil, SearchX, SlidersHorizontal, Users, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useLocale, useTranslations } from "next-intl";
 import { getPathname, useRouter } from "@/navigation";
@@ -23,17 +23,26 @@ import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
-import { bilingualText } from "@/modules/attendance/lib/bilingual";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import { Pagination } from "@/components/ui/Pagination";
 import { readPersisted, usePersistOnChange, usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { TableScroll } from "@/components/ui/TableScroll";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/common/EmptyState";
+import { DateRange, ErrorBar, FilterActions, ListToolbar, TableStatusRows, fieldClassName, theadRowClassName } from "@/components/ui/ListToolbar";
 
 const PAGE_SIZE = 10;
-const advancedTriggerClassName =
-    "h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] disabled:cursor-not-allowed disabled:bg-[#f8fafc]";
+const advancedTriggerClassName = `${fieldClassName} w-44 pr-8`;
+
+// Name in the current locale (falls back to the other language); the other-language name goes to `title`.
+function localeName(locale: string, vn: string | null | undefined, jp: string | null | undefined): [string, string | undefined] {
+    const isJa = locale === "ja";
+    const name = (isJa ? jp || vn : vn || jp) || "—";
+    const other = (isJa ? vn : jp) || undefined;
+    return [name, other === name ? undefined : other];
+}
 
 function toDateStr(d: Date): string {
     const year = d.getFullYear();
@@ -51,15 +60,18 @@ type OtFormListMode = "my-forms" | "pending-approvals" | "my-actions" | "my-part
 
 interface OtFormListPageProps {
     mode: OtFormListMode;
-    // Embedded in OtFormTabsPage, which already has the heading.
-    hideHeading?: boolean;
-    // Tab bar placed at the start of the filter row so tabs, filters and table share one card.
+    // Tab bar rendered above the filter row so tabs, filters and table share one card.
     tabs?: ReactNode;
 }
 
 function formatDate(value: string) {
     if (!value) return "-";
     return new Date(value).toLocaleDateString("en-GB");
+}
+
+// The month switcher already shows the year.
+function formatDayMonth(value: string) {
+    return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" });
 }
 
 // The list has no approvalSteps, so the pending job title isn't shown; only "waiting for 1 of N" when
@@ -138,7 +150,7 @@ type ListSnapshot = {
     appliedFilters: typeof emptyAppliedFilters;
 };
 
-export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFormListPageProps) {
+export default function OtFormListPage({ mode, tabs }: OtFormListPageProps) {
     const t = useTranslations("Attendance.OtFormList");
     const tCommon = useTranslations("Common");
     const enumLabels = useEnumLabels();
@@ -146,7 +158,8 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
     const locale = useLocale();
     const { user } = useAuth();
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
-    const canBulkApprove = mode === "pending-approvals" && hasPermission(user, "Attendance.OTForm.Approve");
+    const isPendingTab = mode === "pending-approvals";
+    const canBulkApprove = isPendingTab && hasPermission(user, "Attendance.OTForm.Approve");
     const [forms, setForms] = useState<OtFormListItemDto[]>([]);
     const listKey = `list:ot/forms:${mode}`;
     const [saved] = useState(() => readPersisted<ListSnapshot>(listKey));
@@ -232,7 +245,8 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
         pageSize,
         fromDate: appliedFilters.fromDate || undefined,
         toDate: appliedFilters.toDate || undefined,
-        status: appliedFilters.status !== "" ? Number(appliedFilters.status) : undefined,
+        // Every pending form is InApproval, so the tab has no status filter (and ignores a stale persisted one).
+        status: !isPendingTab && appliedFilters.status !== "" ? Number(appliedFilters.status) : undefined,
         isProductionForm: appliedFilters.formType === "" ? undefined : appliedFilters.formType === "production",
         workshopId: appliedFilters.workshopId !== "" ? appliedFilters.workshopId : undefined,
         departmentId: appliedFilters.departmentId !== "" ? appliedFilters.departmentId : undefined,
@@ -479,16 +493,6 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
         }
     };
 
-    const title =
-        mode === "my-forms"
-            ? t("titleMyForms")
-            : mode === "pending-approvals"
-            ? t("titlePendingApprovals")
-            : mode === "my-actions"
-            ? t("titleMyActions")
-            : mode === "all-forms"
-            ? t("titleAllForms")
-            : t("titleMyParticipations");
     const advancedFilterCount = [
         appliedFilters.workshopId,
         appliedFilters.departmentId,
@@ -497,11 +501,15 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
         appliedFilters.productionLineId,
         appliedFilters.productionShiftTeamId,
     ].filter((value) => value !== "").length;
-    // The Line / shift column only applies to floor forms, so it is hidden for the office-only view.
-    const showLineColumn = appliedFilters.formType !== "office";
-    const columnCount = (mode === "my-forms" ? 9 : 8) + (canBulkApprove ? 1 : 0) - (showLineColumn ? 0 : 1);
+    // Columns that would repeat one value on every row of this tab are hidden.
+    const showCreator = mode !== "my-forms";
+    const showActions = mode === "my-forms";
+    const columnCount = 6 + (canBulkApprove ? 1 : 0) + (showCreator ? 1 : 0) + (showActions ? 1 : 0);
 
     const openForm = (id: number) => router.push({ pathname: "/ot/forms", query: { id: String(id) } });
+
+    const statusLabel = (status: number) =>
+        status === 0 ? t("statusPendingShort") : (enumLabels.otFormStatus[status] ?? t("unknownStatus"));
 
     const renderSelectBox = (id: number) => (
         <input
@@ -515,7 +523,7 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
 
     const renderStatus = (status: number) => (
         <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${otFormStatusClasses[status] ?? otFormStatusClasses[0]}`}>
-            {enumLabels.otFormStatus[status] ?? t("unknownStatus")}
+            {statusLabel(status)}
         </span>
     );
 
@@ -534,256 +542,197 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
             </button>
         ) : null;
 
+    // Office forms show the group; floor forms show "Line · shift team".
+    const subUnit = (form: OtFormListItemDto): [string, string | undefined] =>
+        form.isProductionForm
+            ? [[form.productionLineNames, form.productionShiftTeamNames].filter(Boolean).join(" · ") || "—", undefined]
+            : localeName(locale, form.groupNameVn, form.groupNameJp);
+
+    const bulkApproveLabel = t("bulkApproveButton", { count: selectedIds.length });
+
     return (
         <div className="space-y-4">
-            {!hideHeading && (
-                <div>
-                    <h1 className="text-xl font-semibold text-[#191c1e]">{title}</h1>
-                </div>
-            )}
-
             <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                {/* Own row: the five tabs never fit next to four labelled filters at laptop widths. */}
-                {tabs && <div className="px-4 pt-2.5">{tabs}</div>}
-                <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-[#e0e3e5] px-4 py-2.5 [&>label]:w-full sm:[&>label]:w-40">
-                    <label className="block">
-                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                            {t("filterFromDateLabel")}
-                        </span>
-                        <input
-                            type="date"
-                            value={fromDateInput}
-                            onChange={(event) => setFromDateInput(event.target.value)}
-                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
-                    </label>
-                    <label className="block">
-                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                            {t("filterToDateLabel")}
-                        </span>
-                        <input
-                            type="date"
-                            value={toDateInput}
-                            onChange={(event) => setToDateInput(event.target.value)}
-                            className="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                        />
-                    </label>
-                    <label className="block">
-                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                            {t("filterStatusLabel")}
-                        </span>
+                {/* Own row: five tabs plus the filters don't fit one line at 1366px. */}
+                {tabs && <div className="px-3 pt-2.5">{tabs}</div>}
+                <ListToolbar
+                    actions={
+                        canBulkApprove && selectedIds.length > 0 ? (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => openBulkAction("approve")}
+                                    title={bulkApproveLabel}
+                                    aria-label={bulkApproveLabel}
+                                    className="inline-flex h-9 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-[#e3000f] px-2.5 text-sm font-semibold text-white transition hover:bg-[#b40009] sm:px-3"
+                                >
+                                    <CheckCheck className="h-4 w-4" />
+                                    <span className="hidden sm:inline">{bulkApproveLabel}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => openBulkAction("reject")}
+                                    title={t("bulkRejectButton")}
+                                    aria-label={t("bulkRejectButton")}
+                                    className="inline-flex h-9 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-[#e0e3e5] bg-white px-2.5 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] sm:px-3"
+                                >
+                                    <X className="h-4 w-4" />
+                                    <span className="hidden sm:inline">{t("bulkRejectButton")}</span>
+                                </button>
+                            </>
+                        ) : undefined
+                    }
+                >
+                    <DateRange
+                        from={fromDateInput}
+                        to={toDateInput}
+                        onChange={(range) => {
+                            setFromDateInput(range.fromDate);
+                            setToDateInput(range.toDate);
+                        }}
+                    />
+                    {!isPendingTab && (
                         <StyledSelect
                             value={statusInput}
                             onChange={setStatusInput}
-                            triggerClassName="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                            ariaLabel={t("filterStatusLabel")}
+                            triggerClassName={`${fieldClassName} w-44 pr-8`}
                             options={[
                                 { value: "", label: t("filterAllStatus") },
-                                ...Object.entries(enumLabels.otFormStatus).map(([value, label]) => ({
+                                ...Object.keys(enumLabels.otFormStatus).map((value) => ({
                                     value,
-                                    label,
+                                    label: statusLabel(Number(value)),
                                     dotClassName: otFormStatusDotClasses[Number(value)],
                                 })),
                             ]}
                         />
-                    </label>
-                    <label className="block">
-                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                            {t("filterTypeLabel")}
-                        </span>
-                        <StyledSelect
-                            value={formTypeInput}
-                            onChange={setFormTypeInput}
-                            triggerClassName="h-9 w-full rounded-lg border border-[#e0e3e5] bg-white px-3 pr-9 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
-                            options={[
-                                { value: "", label: t("filterAllType") },
-                                { value: "office", label: t("typeOffice") },
-                                { value: "production", label: t("typeProduction") },
-                            ]}
-                        />
-                    </label>
-                    <div className="flex items-end gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setShowAdvancedFilter((current) => !current)}
-                            aria-expanded={showAdvancedFilter}
-                            title={t("filterAdvancedButton")}
-                            aria-label={t("filterAdvancedButton")}
-                            className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                            <SlidersHorizontal className="h-4 w-4" />
-                            {advancedFilterCount > 0 && (
-                                <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#e3000f] px-1 text-[10px] font-bold text-white">
-                                    {advancedFilterCount}
-                                </span>
-                            )}
-                        </button>
-                        <button
-                            onClick={handleResetFilter}
-                            disabled={isLoading}
-                            title={t("resetFilterButton")}
-                            aria-label={t("resetFilterButton")}
-                            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                            <FilterX className="h-4 w-4" />
-                        </button>
-                        <button
-                            onClick={handleSearch}
-                            disabled={isLoading}
-                            title={tCommon("search")}
-                            aria-label={tCommon("search")}
-                            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-[#e3000f] text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Search className="h-4 w-4" />
-                        </button>
-                    </div>
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
-                        {canBulkApprove && selectedIds.length > 0 && (
-                            <>
-                                <span className="whitespace-nowrap text-sm font-semibold text-[#191c1e]">{t("selectedCount", { count: selectedIds.length })}</span>
-                                <button
-                                    onClick={() => openBulkAction("approve")}
-                                    className="cursor-pointer whitespace-nowrap rounded-lg bg-[#e3000f] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#b40009]"
-                                >
-                                    {t("bulkApproveButton")}
-                                </button>
-                                <button
-                                    onClick={() => openBulkAction("reject")}
-                                    className="cursor-pointer whitespace-nowrap rounded-lg border border-[#e0e3e5] bg-white px-3 py-1.5 text-xs font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6]"
-                                >
-                                    {t("bulkRejectButton")}
-                                </button>
-                            </>
+                    )}
+                    <StyledSelect
+                        value={formTypeInput}
+                        onChange={setFormTypeInput}
+                        ariaLabel={t("filterTypeLabel")}
+                        triggerClassName={`${fieldClassName} w-40 pr-8`}
+                        options={[
+                            { value: "", label: t("filterAllType") },
+                            { value: "office", label: t("typeOffice") },
+                            { value: "production", label: t("typeProduction") },
+                        ]}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => setShowAdvancedFilter((current) => !current)}
+                        aria-expanded={showAdvancedFilter}
+                        title={t("filterAdvancedButton")}
+                        aria-label={t("filterAdvancedButton")}
+                        className={`relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-md border transition ${
+                            showAdvancedFilter ? "border-[#e9bcb6] bg-[#fff4f2] text-[#e3000f]" : "border-[#e0e3e5] bg-white text-[#5e3f3a] hover:bg-[#f2f4f6]"
+                        }`}
+                    >
+                        <SlidersHorizontal className="h-4 w-4" />
+                        {advancedFilterCount > 0 && (
+                            <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#e3000f] px-1 text-[10px] font-bold text-white">
+                                {advancedFilterCount}
+                            </span>
                         )}
-                        <button
-                            onClick={() => fetchForms()}
-                            disabled={isLoading}
-                            title={tCommon("refresh")}
-                            aria-label={tCommon("refresh")}
-                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-[#e0e3e5] bg-white text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:opacity-50"
-                        >
-                            <RefreshCw className="h-4 w-4" />
-                        </button>
-                    </div>
-                </div>
+                    </button>
+                    <FilterActions onSearch={handleSearch} onReset={handleResetFilter} onRefresh={() => fetchForms()} disabled={isLoading} />
+                </ListToolbar>
 
                 {showAdvancedFilter && (
-                    <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-[#e0e3e5] px-4 py-2.5 [&>label]:w-full sm:[&>label]:w-48">
-                        <label className="block">
-                            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                {t("filterWorkshopLabel")}
-                            </span>
-                            <SearchableSelect
-                                value={workshopId}
-                                onChange={setWorkshopId}
-                                placeholder={t("filterAllWorkshop")}
-                                triggerClassName={advancedTriggerClassName}
-                                options={workshopOptions.map((option) => ({
-                                    value: option.id,
-                                    label: option.workshopNameVn,
-                                    searchText: option.workshopNameVn.toLowerCase(),
-                                }))}
-                            />
-                        </label>
-                        <label className="block">
-                            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                {t("filterDepartmentLabel")}
-                            </span>
-                            <SearchableSelect
-                                value={departmentId}
-                                onChange={setDepartmentId}
-                                placeholder={t("filterAllDepartment")}
-                                triggerClassName={advancedTriggerClassName}
-                                options={departmentOptions.map((option) => ({
-                                    value: option.id,
-                                    label: option.departmentNameVn,
-                                    searchText: option.departmentNameVn.toLowerCase(),
-                                }))}
-                            />
-                        </label>
+                    <ListToolbar>
+                        <SearchableSelect
+                            value={workshopId}
+                            onChange={setWorkshopId}
+                            ariaLabel={t("filterWorkshopLabel")}
+                            placeholder={t("filterAllWorkshop")}
+                            triggerClassName={advancedTriggerClassName}
+                            options={workshopOptions.map((option) => ({
+                                value: option.id,
+                                label: localeName(locale, option.workshopNameVn, option.workshopNameJp)[0],
+                                searchText: `${option.workshopNameVn} ${option.workshopNameJp ?? ""}`.toLowerCase(),
+                            }))}
+                        />
+                        <SearchableSelect
+                            value={departmentId}
+                            onChange={setDepartmentId}
+                            ariaLabel={t("filterDepartmentLabel")}
+                            placeholder={t("filterAllDepartment")}
+                            triggerClassName={advancedTriggerClassName}
+                            options={departmentOptions.map((option) => ({
+                                value: option.id,
+                                label: localeName(locale, option.departmentNameVn, option.departmentNameJp)[0],
+                                searchText: `${option.departmentNameVn} ${option.departmentNameJp ?? ""}`.toLowerCase(),
+                            }))}
+                        />
                         {showOfficeGroupFilter && (
-                            <label className="block">
-                                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                    {t("filterGroupLabel")}
-                                </span>
-                                <SearchableSelect
-                                    value={groupId}
-                                    onChange={setGroupId}
-                                    disabled={departmentId === ""}
-                                    placeholder={t("filterAllGroup")}
-                                    triggerClassName={advancedTriggerClassName}
-                                    options={groupOptions.map((option) => ({
-                                        value: option.id,
-                                        label: option.groupNameVn,
-                                        searchText: option.groupNameVn.toLowerCase(),
-                                    }))}
-                                />
-                            </label>
+                            <SearchableSelect
+                                value={groupId}
+                                onChange={setGroupId}
+                                disabled={departmentId === ""}
+                                ariaLabel={t("filterGroupLabel")}
+                                placeholder={t("filterAllGroup")}
+                                triggerClassName={advancedTriggerClassName}
+                                options={groupOptions.map((option) => ({
+                                    value: option.id,
+                                    label: localeName(locale, option.groupNameVn, option.groupNameJp)[0],
+                                    searchText: `${option.groupNameVn} ${option.groupNameJp ?? ""}`.toLowerCase(),
+                                }))}
+                            />
                         )}
                         {showProductionFilter && (
                             <>
-                                <label className="block">
-                                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                        {t("filterProductionTeamLabel")}
-                                    </span>
-                                    <SearchableSelect
-                                        value={productionTeamId}
-                                        onChange={setProductionTeamId}
-                                        placeholder={t("filterAllProductionTeam")}
-                                        triggerClassName={advancedTriggerClassName}
-                                        options={teamOptions.map((option) => ({
-                                            value: option.id,
-                                            label: option.nameVn || option.code,
-                                            searchText: (option.nameVn || option.code).toLowerCase(),
-                                        }))}
-                                    />
-                                </label>
-                                <label className="block">
-                                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                        {t("filterProductionLineLabel")}
-                                    </span>
-                                    <SearchableSelect
-                                        value={productionLineId}
-                                        onChange={setProductionLineId}
-                                        placeholder={t("filterAllProductionLine")}
-                                        triggerClassName={advancedTriggerClassName}
-                                        options={lineOptions.map((option) => ({
-                                            value: option.id,
-                                            label: option.nameVn || option.code,
-                                            searchText: (option.nameVn || option.code).toLowerCase(),
-                                        }))}
-                                    />
-                                </label>
-                                <label className="block">
-                                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
-                                        {t("filterProductionShiftTeamLabel")}
-                                    </span>
-                                    <SearchableSelect
-                                        value={productionShiftTeamId}
-                                        onChange={setProductionShiftTeamId}
-                                        placeholder={t("filterAllProductionShiftTeam")}
-                                        triggerClassName={advancedTriggerClassName}
-                                        options={shiftTeamOptions.map((option) => ({
-                                            value: option.id,
-                                            label: option.nameVn || option.code,
-                                            searchText: (option.nameVn || option.code).toLowerCase(),
-                                        }))}
-                                    />
-                                </label>
+                                <SearchableSelect
+                                    value={productionTeamId}
+                                    onChange={setProductionTeamId}
+                                    ariaLabel={t("filterProductionTeamLabel")}
+                                    placeholder={t("filterAllProductionTeam")}
+                                    triggerClassName={advancedTriggerClassName}
+                                    options={teamOptions.map((option) => ({
+                                        value: option.id,
+                                        label: option.nameVn || option.code,
+                                        searchText: (option.nameVn || option.code).toLowerCase(),
+                                    }))}
+                                />
+                                <SearchableSelect
+                                    value={productionLineId}
+                                    onChange={setProductionLineId}
+                                    ariaLabel={t("filterProductionLineLabel")}
+                                    placeholder={t("filterAllProductionLine")}
+                                    triggerClassName={advancedTriggerClassName}
+                                    options={lineOptions.map((option) => ({
+                                        value: option.id,
+                                        label: option.nameVn || option.code,
+                                        searchText: (option.nameVn || option.code).toLowerCase(),
+                                    }))}
+                                />
+                                <SearchableSelect
+                                    value={productionShiftTeamId}
+                                    onChange={setProductionShiftTeamId}
+                                    ariaLabel={t("filterProductionShiftTeamLabel")}
+                                    placeholder={t("filterAllProductionShiftTeam")}
+                                    triggerClassName={advancedTriggerClassName}
+                                    options={shiftTeamOptions.map((option) => ({
+                                        value: option.id,
+                                        label: option.nameVn || option.code,
+                                        searchText: (option.nameVn || option.code).toLowerCase(),
+                                    }))}
+                                />
                             </>
                         )}
-                    </div>
+                    </ListToolbar>
                 )}
 
-                {mode === "pending-approvals" && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-4 py-2.5">
-                        <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                            <Calendar className="h-3.5 w-3.5" /> {t("calendarTitle")}
+                {isPendingTab && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#e0e3e5] bg-[#f8fafc] px-3 py-2">
+                        <span role="img" aria-label={t("calendarTitle")} title={t("calendarTitle")} className="text-[#5e3f3a]">
+                            <CalendarClock className="h-4 w-4" aria-hidden />
                         </span>
                         <div className="flex items-center gap-2">
                             <button
                                 type="button"
                                 onClick={goToPreviousMonth}
                                 className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                title={t("calendarPrevMonth")}
                                 aria-label={t("calendarPrevMonth")}
                             >
                                 <ChevronLeft className="h-4 w-4" />
@@ -795,13 +744,14 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                                 type="button"
                                 onClick={goToNextMonth}
                                 className="cursor-pointer rounded-md border border-[#e0e3e5] bg-white p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6]"
+                                title={t("calendarNextMonth")}
                                 aria-label={t("calendarNextMonth")}
                             >
                                 <ChevronRight className="h-4 w-4" />
                             </button>
                         </div>
                         {calendarCounts.length === 0 ? (
-                            <p className="text-xs text-[#9aa0a6]">{t("calendarEmpty")}</p>
+                            <span className="text-xs text-[#8a8f94]">{t("calendarEmpty")}</span>
                         ) : (
                             <div className="flex flex-wrap gap-2">
                                 {calendarCounts.map((item) => (
@@ -809,13 +759,14 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                                         key={item.date}
                                         type="button"
                                         onClick={() => pickCalendarDate(item.date)}
-                                        className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                                        title={formatDate(item.date)}
+                                        className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold tabular-nums transition ${
                                             appliedFilters.fromDate === item.date && appliedFilters.toDate === item.date
                                                 ? "border-[#e3000f] bg-[#fff4f2] text-[#e3000f]"
                                                 : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f2f4f6]"
                                         }`}
                                     >
-                                        {formatDate(item.date)}
+                                        {formatDayMonth(item.date)}
                                         <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#e3000f] px-1 text-[10px] font-bold text-white">
                                             {item.count}
                                         </span>
@@ -826,14 +777,12 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                     </div>
                 )}
 
-                {error && (
-                    <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
-                )}
+                <ErrorBar message={error} />
 
-                <TableScroll className="hidden md:block">
+                <TableScroll className="relative hidden md:block">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
+                            <tr className={theadRowClassName}>
                                 {canBulkApprove && (
                                     <th className="w-10 px-3 py-2.5">
                                         <input
@@ -845,125 +794,120 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                                         />
                                     </th>
                                 )}
-                                <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colDepartmentGroup")}</th>
-                                {showLineColumn && <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colProductionLine")}</th>}
-                                <th className="w-[1%] whitespace-nowrap px-3 py-2.5">{t("colOtCase")}</th>
-                                <th className="whitespace-nowrap px-3 py-2.5">{t("colDate")}</th>
-                                <th className="whitespace-nowrap px-3 py-2.5">{t("colTotalHour")}</th>
-                                <th className="whitespace-nowrap px-3 py-2.5">{t("colNumberOfEmployee")}</th>
-                                <th className="whitespace-nowrap px-3 py-2.5">{t("colCreatedBy")}</th>
-                                <th className="whitespace-nowrap px-3 py-2.5">{t("colStatus")}</th>
-                                {mode === "my-forms" && <th className="whitespace-nowrap px-3 py-2.5 text-right">{tCommon("actions")}</th>}
+                                <th className="px-3 py-2.5">{t("colDepartmentGroup")}</th>
+                                <th className="w-[1%] px-3 py-2.5">{t("colOtCase")}</th>
+                                <th className="px-3 py-2.5">{t("colDate")}</th>
+                                <th className="px-3 py-2.5 text-right">{t("colTotalHour")}</th>
+                                <th className="px-3 py-2.5 text-right">{t("colNumberOfEmployee")}</th>
+                                {showCreator && <th className="px-3 py-2.5">{t("colCreatedBy")}</th>}
+                                <th className="px-3 py-2.5">{isPendingTab ? t("colApprovalProgress") : t("colStatus")}</th>
+                                {showActions && <th className="px-3 py-2.5" aria-label={tCommon("actions")} />}
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && forms.length === 0 && (
-                                <tr>
-                                    <td colSpan={columnCount} className="px-4 py-12">
-                                        <div className="flex flex-col items-center gap-2 text-center text-sm text-[#5e3f3a]">
-                                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
-                                            {t("noData")}
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
-                            {forms.map((form) => (
-                                <tr
-                                    key={form.id}
-                                    onClick={() => openForm(form.id)}
-                                    className="cursor-pointer border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
-                                >
-                                    {canBulkApprove && (
-                                        <td className="px-3 py-2.5 align-top" onClick={(event) => event.stopPropagation()}>
-                                            {renderSelectBox(form.id)}
+                            <TableStatusRows loading={isLoading} empty={forms.length === 0} columns={columnCount} emptyText={t("noData")} />
+                            {forms.map((form) => {
+                                const [department, departmentOther] = localeName(locale, form.departmentNameVn, form.departmentNameJp);
+                                const [unit, unitOther] = subUnit(form);
+                                return (
+                                    <tr
+                                        key={form.id}
+                                        onClick={() => openForm(form.id)}
+                                        className="cursor-pointer border-b border-[#f1f5f9] bg-white transition-colors even:bg-[#f2f4f7] hover:bg-[#e8ecf1]"
+                                    >
+                                        {canBulkApprove && (
+                                            <td className="px-3 py-2.5 align-top" onClick={(event) => event.stopPropagation()}>
+                                                {renderSelectBox(form.id)}
+                                            </td>
+                                        )}
+                                        <td className="px-3 py-2.5 align-top">
+                                            <div
+                                                className="whitespace-nowrap text-sm font-semibold text-[#191c1e]"
+                                                title={[departmentOther, form.workshopNameVn].filter(Boolean).join(" · ")}
+                                            >
+                                                {department}
+                                            </div>
+                                            <div className="text-xs text-[#5e3f3a]" title={unitOther}>
+                                                {unit}
+                                            </div>
                                         </td>
-                                    )}
-                                    <td className="whitespace-nowrap px-3 py-2.5 align-top">
-                                        <div className="text-sm font-semibold text-[#191c1e]">
-                                            {bilingualText(form.departmentNameVn, form.departmentNameJp)}
-                                            <span className="block text-xs text-[#8a8f94]">{form.workshopNameVn}</span>
-                                        </div>
-                                        <div className="text-xs text-[#5e3f3a]">{bilingualText(form.groupNameVn, form.groupNameJp)}</div>
-                                    </td>
-                                    {showLineColumn && (
-                                        <td className="px-3 py-2.5 align-top text-xs text-[#5e3f3a]">
-                                            {form.isProductionForm ? (
-                                                <>
-                                                    <div>{form.productionLineNames || "—"}</div>
-                                                    {form.productionShiftTeamNames && (
-                                                        <div className="text-[#9aa0a6]">{form.productionShiftTeamNames}</div>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                "—"
-                                            )}
+                                        <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]">
+                                            <OtCaseBadge code={form.otCaseCode} description={form.otCaseDescription} descriptionJp={form.otCaseDescriptionJp} />
                                         </td>
-                                    )}
-                                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]"><OtCaseBadge code={form.otCaseCode} description={form.otCaseDescription} descriptionJp={form.otCaseDescriptionJp} /></td>
-                                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#191c1e]">{formatDate(form.date)}</td>
-                                    <td className="px-3 py-2.5 align-top text-sm text-[#191c1e]">
-                                        <span className="inline-flex items-center rounded-full border border-[#e0e3e5] bg-[#f8fafc] px-2.5 py-0.5 text-xs font-semibold text-[#191c1e]">
-                                            {form.totalHour}h
-                                        </span>
-                                    </td>
-                                    <td className="px-3 py-2.5 align-top text-sm text-[#191c1e]">{form.numberOfEmployee}</td>
-                                    <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#5e3f3a]">
-                                        {form.createdByFullName ?? form.createdByUserName}
-                                    </td>
-                                    <td className="px-3 py-2.5 align-top">
-                                        <div className="space-y-1">
-                                            {renderStatus(form.status)}
-                                            <ApprovalSummaryCell
-                                                summary={form.approvalSummary}
-                                                status={form.status}
-                                                currentStepCandidateCount={form.currentStepCandidateCount}
-                                            />
-                                        </div>
-                                    </td>
-                                    {mode === "my-forms" && <td className="px-3 py-2.5 align-top text-right">{renderEditButton(form)}</td>}
-                                </tr>
-                            ))}
+                                        <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm tabular-nums text-[#191c1e]">{formatDate(form.date)}</td>
+                                        <td className="whitespace-nowrap px-3 py-2.5 text-right align-top text-sm font-semibold tabular-nums text-[#191c1e]">{form.totalHour}h</td>
+                                        <td className="px-3 py-2.5 text-right align-top text-sm tabular-nums text-[#191c1e]">{form.numberOfEmployee}</td>
+                                        {showCreator && (
+                                            <td className="whitespace-nowrap px-3 py-2.5 align-top text-sm text-[#5e3f3a]">
+                                                {form.createdByFullName ?? form.createdByUserName}
+                                            </td>
+                                        )}
+                                        <td className="px-3 py-2.5 align-top">
+                                            <div className="space-y-1">
+                                                {!isPendingTab && renderStatus(form.status)}
+                                                <ApprovalSummaryCell
+                                                    summary={form.approvalSummary}
+                                                    status={form.status}
+                                                    currentStepCandidateCount={form.currentStepCandidateCount}
+                                                />
+                                            </div>
+                                        </td>
+                                        {showActions && <td className="px-3 py-2.5 text-right align-top">{renderEditButton(form)}</td>}
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </TableScroll>
 
                 <ul className="divide-y divide-[#f1f5f9] md:hidden">
-                    {!isLoading && forms.length === 0 && (
-                        <li className="flex flex-col items-center gap-2 px-4 py-12 text-center text-sm text-[#5e3f3a]">
-                            <Inbox className="h-8 w-8 text-[#c7ccd1]" />
-                            {t("noData")}
-                        </li>
-                    )}
-                    {forms.map((form) => (
-                        <li key={form.id} className="flex items-start gap-3 px-4 py-3">
-                            {canBulkApprove && <div className="pt-0.5">{renderSelectBox(form.id)}</div>}
-                            <button
-                                type="button"
-                                onClick={() => openForm(form.id)}
-                                className="min-w-0 flex-1 cursor-pointer text-left"
-                            >
-                                <span className="flex items-start justify-between gap-3">
-                                    <span className="min-w-0 text-sm font-semibold text-[#191c1e]">
-                                        {bilingualText(form.departmentNameVn, form.departmentNameJp)}
+                    {forms.length === 0 &&
+                        (isLoading ? (
+                            Array.from({ length: 5 }).map((_, index) => (
+                                <li key={index} className="space-y-2 px-4 py-3">
+                                    <Skeleton className="h-4 w-48" />
+                                    <Skeleton className="h-3 w-32" />
+                                </li>
+                            ))
+                        ) : (
+                            <li>
+                                <EmptyState icon={SearchX} title={t("noData")} />
+                            </li>
+                        ))}
+                    {forms.map((form) => {
+                        const [department, departmentOther] = localeName(locale, form.departmentNameVn, form.departmentNameJp);
+                        const [unit, unitOther] = subUnit(form);
+                        return (
+                            <li key={form.id} className="flex items-start gap-3 px-4 py-3">
+                                {canBulkApprove && <div className="pt-0.5">{renderSelectBox(form.id)}</div>}
+                                <button
+                                    type="button"
+                                    onClick={() => openForm(form.id)}
+                                    className="min-w-0 flex-1 cursor-pointer text-left"
+                                >
+                                    <span className="flex items-start justify-between gap-3">
+                                        <span className="min-w-0 text-sm font-semibold text-[#191c1e]" title={departmentOther}>
+                                            {department}
+                                        </span>
+                                        {!isPendingTab && renderStatus(form.status)}
                                     </span>
-                                    {renderStatus(form.status)}
-                                </span>
-                                <span className="mt-0.5 block truncate text-xs text-[#5e3f3a]">
-                                    {form.isProductionForm ? form.productionLineNames || "—" : bilingualText(form.groupNameVn, form.groupNameJp)}
-                                </span>
-                                <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[#5e3f3a]">
-                                    <span className="tabular-nums text-[#191c1e]">{formatDate(form.date)}</span>
-                                    <span className="font-semibold tabular-nums text-[#191c1e]">{form.totalHour}h</span>
-                                    <span className="inline-flex items-center gap-1 tabular-nums">
-                                        <Users size={12} />
-                                        {form.numberOfEmployee}
+                                    <span className="mt-0.5 block truncate text-xs text-[#5e3f3a]" title={unitOther}>
+                                        {unit}
                                     </span>
-                                    <span>{form.createdByFullName ?? form.createdByUserName}</span>
-                                </span>
-                            </button>
-                            {mode === "my-forms" && renderEditButton(form)}
-                        </li>
-                    ))}
+                                    <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[#5e3f3a]">
+                                        <span className="tabular-nums text-[#191c1e]">{formatDate(form.date)}</span>
+                                        <span className="font-semibold tabular-nums text-[#191c1e]">{form.totalHour}h</span>
+                                        <span className="inline-flex items-center gap-1 tabular-nums">
+                                            <Users size={12} />
+                                            {form.numberOfEmployee}
+                                        </span>
+                                        {showCreator && <span>{form.createdByFullName ?? form.createdByUserName}</span>}
+                                    </span>
+                                </button>
+                                {showActions && renderEditButton(form)}
+                            </li>
+                        );
+                    })}
                 </ul>
 
                 <Pagination
@@ -1004,48 +948,48 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                         <div className="space-y-4">
                             {/* View opens a popup and edit a new tab, so the selection and this dialog survive. */}
                             <div className="rounded-lg border border-[#e0e3e5] bg-[#f8fafc] p-3">
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
-                                    {t("bulkReviewTitle", { count: selectedIds.length })}
-                                </p>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">{t("bulkReviewTitle")}</p>
                                 <div className="max-h-40 space-y-1 overflow-y-auto">
                                     {forms
                                         .filter((form) => selectedIds.includes(form.id))
-                                        .map((form) => (
-                                            <div
-                                                key={form.id}
-                                                className="flex items-center justify-between gap-2 rounded-md border border-[#e0e3e5] bg-white px-2.5 py-1.5 text-xs"
-                                            >
-                                                <span className="text-[#191c1e]">
-                                                    #{form.id} — {bilingualText(form.departmentNameVn, form.departmentNameJp)}
-                                                    {form.groupNameVn ? ` / ${bilingualText(form.groupNameVn, form.groupNameJp)}` : ""}{" "}
-                                                    ({formatDate(form.date)})
-                                                </span>
-                                                <div className="flex shrink-0 items-center">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setPreviewFormId(form.id)}
-                                                        title={tCommon("viewDetail")}
-                                                        aria-label={tCommon("viewDetail")}
-                                                        className="cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                    >
-                                                        <Eye className="h-3.5 w-3.5" />
-                                                    </button>
-                                                    {form.isEditable && !form.isProductionForm && (
-                                                        <a
-                                                            href={getPathname({ href: { pathname: "/ot/forms/edit", query: { id: String(form.id) } }, locale })}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            onClick={(event) => event.stopPropagation()}
-                                                            title={tCommon("edit")}
-                                                            aria-label={tCommon("edit")}
+                                        .map((form) => {
+                                            const [department] = localeName(locale, form.departmentNameVn, form.departmentNameJp);
+                                            const [unit] = subUnit(form);
+                                            return (
+                                                <div
+                                                    key={form.id}
+                                                    className="flex items-center justify-between gap-2 rounded-md border border-[#e0e3e5] bg-white px-2.5 py-1.5 text-xs"
+                                                >
+                                                    <span className="text-[#191c1e]" title={`#${form.id}`}>
+                                                        <span className="tabular-nums">{formatDayMonth(form.date)}</span> · {department} / {unit}
+                                                    </span>
+                                                    <div className="flex shrink-0 items-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPreviewFormId(form.id)}
+                                                            title={tCommon("viewDetail")}
+                                                            aria-label={tCommon("viewDetail")}
                                                             className="cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
                                                         >
-                                                            <Pencil className="h-3.5 w-3.5" />
-                                                        </a>
-                                                    )}
+                                                            <Eye className="h-3.5 w-3.5" />
+                                                        </button>
+                                                        {form.isEditable && !form.isProductionForm && (
+                                                            <a
+                                                                href={getPathname({ href: { pathname: "/ot/forms/edit", query: { id: String(form.id) } }, locale })}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                onClick={(event) => event.stopPropagation()}
+                                                                title={t("editInNewTab")}
+                                                                aria-label={t("editInNewTab")}
+                                                                className="cursor-pointer rounded-md p-1 text-[#5e3f3a] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
+                                                            >
+                                                                <Pencil className="h-3.5 w-3.5" />
+                                                            </a>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                 </div>
                             </div>
 
@@ -1077,7 +1021,6 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                                 />
                             </label>
 
-
                             <div className="flex justify-end gap-3 pt-2">
                                 <button
                                     type="button"
@@ -1091,9 +1034,12 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                                     type="button"
                                     onClick={handleBulkSubmit}
                                     disabled={isBulkSubmitting}
-                                    className="cursor-pointer rounded-lg bg-[#e3000f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
+                                    className={`inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                        bulkAction === "approve" ? "bg-[#e3000f] hover:bg-[#b40009]" : "bg-[#930006] hover:bg-[#7a0005]"
+                                    }`}
                                 >
-                                    {isBulkSubmitting ? tCommon("processing") : tCommon("confirm")}
+                                    {bulkAction === "approve" ? <CheckCheck className="h-4 w-4" /> : <X className="h-4 w-4" />}
+                                    {isBulkSubmitting ? tCommon("processing") : bulkAction === "approve" ? t("approveConfirmButton") : t("bulkRejectButton")}
                                 </button>
                             </div>
                         </div>

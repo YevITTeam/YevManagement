@@ -48,10 +48,7 @@ export const approvalActionLabelsBilingual: Record<number, string> = {
 
 // Literal instead of createBilingualTranslator: it injects {value} into both translations, so an
 // already-bilingual value would be duplicated.
-export const processPartTitleBilingual = "Yêu cầu hỗ trợ khác / その他のご要望";
-
 export const processPartFieldLabelsBilingual = {
-    eat: "Ăn uống / 食事",
     transportation: "Xe đưa đón / 送迎",
     copyRoom: "Phòng copy / コピー室",
     anotherSuggestion: "Đề nghị khác / その他の要望",
