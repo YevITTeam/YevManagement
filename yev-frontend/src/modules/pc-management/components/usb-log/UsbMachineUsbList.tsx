@@ -14,7 +14,7 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbMachineUsbDto } from "@/modules/pc-management/types/usb-log.dto";
-import { ErrorBar, IconButton, IconFlag, StatusDot, TableStatusRows, rowClassName, theadRowClassName } from "./UsbListToolbar";
+import { ErrorBar, IconButton, IconFlag, StatusDot, TableStatusRows, rowClassName, theadRowClassName } from "@/components/ui/ListToolbar";
 import UsbLogList from "./UsbLogList";
 import { UsbFileCount } from "./UsbSessionFiles";
 import { POLICY_META, USB_ACCESS_LEVEL, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";

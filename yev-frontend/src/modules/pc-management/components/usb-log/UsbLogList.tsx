@@ -11,7 +11,7 @@ import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh"
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbSessionDto } from "@/modules/pc-management/types/usb-log.dto";
-import { ErrorBar, TableStatusRows, theadRowClassName } from "./UsbListToolbar";
+import { ErrorBar, TableStatusRows, theadRowClassName } from "@/components/ui/ListToolbar";
 import UsbSessionFiles, { UsbFileCount } from "./UsbSessionFiles";
 import { POLICY_META, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
 import { usePersistedState } from "@/modules/common/hooks/usePersistedState";

@@ -14,7 +14,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbAgentReleaseDto, UsbAgentSettingDto } from "@/modules/pc-management/types/usb-log.dto";
-import { IconButton, fieldClassName } from "./UsbListToolbar";
+import { IconButton, fieldClassName } from "@/components/ui/ListToolbar";
 import { formatBytes, formatDateTime } from "./usb-log-format";
 
 const linkButtonClassName = "cursor-pointer text-sm font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50";

@@ -22,6 +22,8 @@ interface SearchableSelectProps {
     value: number | "";
     onChange: (v: number | "") => void;
     placeholder: string;
+    /** Field name for screen readers and hover when no visible label sits above. */
+    ariaLabel?: string;
     disabled?: boolean;
     /** Overrides the trigger className (default size h-10). */
     triggerClassName?: string;
@@ -36,7 +38,7 @@ interface PanelPosition {
     maxHeight: number;
 }
 
-export function SearchableSelect({ options, value, onChange, placeholder, disabled, triggerClassName, onQueryChange }: SearchableSelectProps) {
+export function SearchableSelect({ options, value, onChange, placeholder, ariaLabel, disabled, triggerClassName, onQueryChange }: SearchableSelectProps) {
     const [query, setQueryState] = useState("");
     // Ref keeps the callback out of close()'s identity, which the outside-click effect depends on.
     const onQueryChangeRef = useRef(onQueryChange);
@@ -137,6 +139,8 @@ export function SearchableSelect({ options, value, onChange, placeholder, disabl
                 role="combobox"
                 aria-expanded={isOpen}
                 aria-controls={listboxId}
+                aria-label={ariaLabel}
+                title={ariaLabel}
                 className={`${triggerClassName ?? inputClassName} flex cursor-pointer items-center ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
                 onClick={open}
                 onKeyDown={(e) => {

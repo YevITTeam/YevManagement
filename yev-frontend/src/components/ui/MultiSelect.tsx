@@ -17,6 +17,7 @@ interface MultiSelectProps {
     values: number[];
     onChange: (values: number[]) => void;
     placeholder: string;
+    ariaLabel?: string;
     disabled?: boolean;
     // Caps rendered rows for lists of thousands; typing narrows the rest.
     maxVisible?: number;
@@ -34,7 +35,7 @@ const triggerClassName =
 
 // Searchable multi-select: ticking an option keeps the panel open, and every selected option is
 // shown as a removable chip under the trigger (same look as the IP chips in DeviceForm).
-export function MultiSelect({ options, values, onChange, placeholder, disabled, maxVisible }: MultiSelectProps) {
+export function MultiSelect({ options, values, onChange, placeholder, ariaLabel, disabled, maxVisible }: MultiSelectProps) {
     const [query, setQuery] = useState("");
     const [isOpen, setIsOpen] = useState(false);
     const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
@@ -123,6 +124,8 @@ export function MultiSelect({ options, values, onChange, placeholder, disabled, 
                     role="combobox"
                     aria-expanded={isOpen}
                     aria-controls={listboxId}
+                    aria-label={ariaLabel}
+                    title={ariaLabel}
                     className={`${triggerClassName} flex cursor-pointer items-center ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
                     onClick={open}
                     onKeyDown={(e) => {

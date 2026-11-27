@@ -64,7 +64,7 @@ export function SearchField({
     placeholder: string;
     wide?: boolean;
 }) {
-    const t = useTranslations("usbLog");
+    const t = useTranslations("Common");
     return (
         <div className={`relative w-full ${wide ? "sm:w-64" : "sm:w-48"}`}>
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8a8f94]" />
@@ -73,7 +73,7 @@ export function SearchField({
                 onChange={(event) => onChange(event.target.value)}
                 onKeyDown={(event) => event.key === "Enter" && onEnter()}
                 placeholder={placeholder}
-                aria-label={t("common.search")}
+                aria-label={t("search")}
                 className={`${fieldClassName} w-full pl-8`}
             />
         </div>
@@ -81,12 +81,12 @@ export function SearchField({
 }
 
 export function DateRange({ from, to, onChange, title }: { from: string; to: string; onChange: (next: { fromDate: string; toDate: string }) => void; title?: string }) {
-    const t = useTranslations("usbLog");
+    const t = useTranslations("Common");
     return (
-        <div className="flex items-center gap-1" title={title ?? t("common.dateRange")}>
-            <input type="date" value={from} onChange={(event) => onChange({ fromDate: event.target.value, toDate: to })} aria-label={t("common.fromDate")} className={`${fieldClassName} w-36`} />
+        <div className="flex items-center gap-1" title={title ?? t("dateRange")}>
+            <input type="date" value={from} onChange={(event) => onChange({ fromDate: event.target.value, toDate: to })} aria-label={t("fromDate")} className={`${fieldClassName} w-36`} />
             <span className="text-[#8a8f94]">–</span>
-            <input type="date" value={to} onChange={(event) => onChange({ fromDate: from, toDate: event.target.value })} aria-label={t("common.toDate")} className={`${fieldClassName} w-36`} />
+            <input type="date" value={to} onChange={(event) => onChange({ fromDate: from, toDate: event.target.value })} aria-label={t("toDate")} className={`${fieldClassName} w-36`} />
         </div>
     );
 }
@@ -124,14 +124,14 @@ export function ToggleChip({
     );
 }
 
-// Search / clear / refresh trio shared by every filtered USB list.
+// Search / clear / refresh trio shared by every filtered list.
 export function FilterActions({ onSearch, onReset, onRefresh, disabled }: { onSearch: () => void; onReset: () => void; onRefresh?: () => void; disabled: boolean }) {
-    const t = useTranslations("usbLog");
+    const t = useTranslations("Common");
     return (
         <div className="flex items-center gap-1.5">
-            <IconButton icon={Search} label={t("common.search")} onClick={onSearch} disabled={disabled} variant="primary" />
-            <IconButton icon={FilterX} label={t("common.clearFilter")} onClick={onReset} disabled={disabled} />
-            {onRefresh && <IconButton icon={RefreshCw} label={t("common.refresh")} onClick={onRefresh} disabled={disabled} />}
+            <IconButton icon={Search} label={t("search")} onClick={onSearch} disabled={disabled} variant="primary" />
+            <IconButton icon={FilterX} label={t("clearFilter")} onClick={onReset} disabled={disabled} />
+            {onRefresh && <IconButton icon={RefreshCw} label={t("refresh")} onClick={onRefresh} disabled={disabled} />}
         </div>
     );
 }
@@ -148,13 +148,13 @@ export function ListToolbar({ children, actions }: { children: ReactNode; action
 
 // Skeleton while the first page loads, empty state once it returns nothing.
 export function TableStatusRows({ loading, empty, columns, emptyText }: { loading: boolean; empty: boolean; columns: number; emptyText?: string }) {
-    const t = useTranslations("usbLog");
+    const t = useTranslations("Common");
     if (!empty) return null;
     if (loading) return <TableSkeletonRows rows={5} columns={columns} />;
     return (
         <tr>
             <td colSpan={columns}>
-                <EmptyState icon={SearchX} title={emptyText ?? t("common.noData")} />
+                <EmptyState icon={SearchX} title={emptyText ?? t("noData")} />
             </td>
         </tr>
     );

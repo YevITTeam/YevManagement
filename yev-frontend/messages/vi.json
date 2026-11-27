@@ -23,7 +23,15 @@
     "hourPlaceholder": "Giờ",
     "minutePlaceholder": "Phút",
     "rowsPerPage": "Số dòng",
-    "rowsPerPageTitle": "Số dòng mỗi trang (1–1000)"
+    "rowsPerPageTitle": "Số dòng mỗi trang (1–1000)",
+    "clearFilter": "Xoá lọc",
+    "noData": "Không có dữ liệu.",
+    "fromDate": "Từ ngày",
+    "toDate": "Đến ngày",
+    "dateRange": "Khoảng ngày",
+    "export": "Xuất Excel",
+    "import": "Import",
+    "downloadTemplate": "Tải file mẫu"
   },
   "Login": {
     "title": "Đăng nhập",
@@ -2784,10 +2792,6 @@
       "files": "Tra cứu file"
     },
     "common": {
-      "search": "Tìm kiếm",
-      "clearFilter": "Xoá lọc",
-      "refresh": "Làm mới",
-      "noData": "Không có dữ liệu.",
       "loadingData": "Đang tải...",
       "loading": "Đang tải...",
       "cancel": "Huỷ",
@@ -2795,8 +2799,6 @@
       "save": "Lưu",
       "close": "Đóng",
       "collapse": "Thu gọn",
-      "fromDate": "Từ ngày",
-      "toDate": "Đến ngày",
       "machine": "Máy",
       "user": "Người dùng",
       "branch": "Xưởng",

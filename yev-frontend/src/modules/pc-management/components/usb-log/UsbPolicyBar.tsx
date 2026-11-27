@@ -9,7 +9,7 @@ import InfoTooltip from "@/components/ui/InfoTooltip";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbPolicySettingDto } from "@/modules/pc-management/types/usb-log.dto";
-import { fieldClassName } from "./UsbListToolbar";
+import { fieldClassName } from "@/components/ui/ListToolbar";
 
 const MODES = [
     { value: 0, key: "off", activeClassName: "text-[#191c1e]" },

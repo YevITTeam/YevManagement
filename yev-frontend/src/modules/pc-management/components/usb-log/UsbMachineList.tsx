@@ -16,7 +16,7 @@ import type { UsbMachineDto } from "@/modules/pc-management/types/usb-log.dto";
 import { useRouter } from "@/navigation";
 import UsbAgentSettings from "./UsbAgentSettings";
 import UsbExportButton from "./UsbExportButton";
-import { DateRange, ErrorBar, FilterActions, IconFlag, ListToolbar, SearchField, StatusDot, TableStatusRows, ToggleChip, rowClassName, theadRowClassName } from "./UsbListToolbar";
+import { DateRange, ErrorBar, FilterActions, IconFlag, ListToolbar, SearchField, StatusDot, TableStatusRows, ToggleChip, rowClassName, theadRowClassName } from "@/components/ui/ListToolbar";
 import { UsbOwnerCell, UsbOwnerFilterFields, useUsbOwnerOptions } from "./UsbOwnerFilter";
 import { UsbFileCount } from "./UsbSessionFiles";
 import { AGENT_EVENT_META, formatDateTime } from "./usb-log-format";
@@ -123,7 +123,7 @@ export default function UsbMachineList() {
                 }
             >
                 <SearchField value={draft.keyword} onChange={(keyword) => setDraft({ ...draft, keyword })} onEnter={handleSearch} placeholder={t("machines.searchPlaceholder")} />
-                <DateRange from={draft.fromDate} to={draft.toDate} onChange={(range) => setDraft({ ...draft, ...range })} />
+                <DateRange from={draft.fromDate} to={draft.toDate} onChange={(range) => setDraft({ ...draft, ...range })} title={t("common.dateRange")} />
                 <UsbOwnerFilterFields options={owners} value={draft} onChange={(owner) => setDraft({ ...draft, ...owner })} />
                 <ToggleChip checked={draft.connectedNowOnly} onChange={(connectedNowOnly) => setDraft({ ...draft, connectedNowOnly })} icon={Plug} label={t("common.connectedNow")} compact />
                 <ToggleChip

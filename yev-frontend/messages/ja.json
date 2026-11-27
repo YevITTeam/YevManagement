@@ -23,7 +23,15 @@
     "hourPlaceholder": "時",
     "minutePlaceholder": "分",
     "rowsPerPage": "表示件数",
-    "rowsPerPageTitle": "1ページの表示件数（1～1000）"
+    "rowsPerPageTitle": "1ページの表示件数（1～1000）",
+    "clearFilter": "フィルター解除",
+    "noData": "データがありません。",
+    "fromDate": "開始日",
+    "toDate": "終了日",
+    "dateRange": "期間",
+    "export": "Excel出力",
+    "import": "インポート",
+    "downloadTemplate": "テンプレートをダウンロード"
   },
   "Login": {
     "title": "ログイン",
@@ -2784,10 +2792,6 @@
       "files": "ファイル検索"
     },
     "common": {
-      "search": "検索",
-      "clearFilter": "フィルター解除",
-      "refresh": "更新",
-      "noData": "データがありません。",
       "loadingData": "読み込み中...",
       "loading": "読み込み中...",
       "cancel": "キャンセル",
@@ -2795,8 +2799,6 @@
       "save": "保存",
       "close": "閉じる",
       "collapse": "折りたたむ",
-      "fromDate": "開始日",
-      "toDate": "終了日",
       "machine": "PC",
       "user": "ユーザー",
       "branch": "工場",

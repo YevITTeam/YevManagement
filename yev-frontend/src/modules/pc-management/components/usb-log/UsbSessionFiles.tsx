@@ -10,7 +10,7 @@ import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbFileEventDto } from "@/modules/pc-management/types/usb-log.dto";
 import { NO_SORT, SortableTh, type SortState } from "@/components/ui/SortableTh";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
-import { IconButton, ToggleChip } from "./UsbListToolbar";
+import { IconButton, ToggleChip } from "@/components/ui/ListToolbar";
 import { formatBytes, formatDateTime } from "./usb-log-format";
 
 const PAGE_SIZE = 50;

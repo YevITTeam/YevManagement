@@ -15,7 +15,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbAgentEventDto } from "@/modules/pc-management/types/usb-log.dto";
 import { Link, useRouter } from "@/navigation";
-import { IconButton } from "./UsbListToolbar";
+import { IconButton } from "@/components/ui/ListToolbar";
 import UsbMachineUsbList from "./UsbMachineUsbList";
 import { AGENT_EVENT_META, formatDateTime } from "./usb-log-format";
 

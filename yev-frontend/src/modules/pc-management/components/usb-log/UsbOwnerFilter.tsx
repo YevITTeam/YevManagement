@@ -7,7 +7,7 @@ import { toast } from "react-toastify";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
-import { fieldClassName } from "./UsbListToolbar";
+import { fieldClassName } from "@/components/ui/ListToolbar";
 
 type Option = { value: number; label: string };
 

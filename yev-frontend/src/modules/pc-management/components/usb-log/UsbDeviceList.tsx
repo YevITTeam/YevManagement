@@ -19,7 +19,7 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbDeviceDto } from "@/modules/pc-management/types/usb-log.dto";
 import UsbExportButton from "./UsbExportButton";
-import { ErrorBar, FilterActions, IconButton, IconFlag, ListToolbar, SearchField, TableStatusRows, fieldClassName, rowClassName, theadRowClassName } from "./UsbListToolbar";
+import { ErrorBar, FilterActions, IconButton, IconFlag, ListToolbar, SearchField, TableStatusRows, fieldClassName, rowClassName, theadRowClassName } from "@/components/ui/ListToolbar";
 import { UsbOwnerCell, UsbOwnerFilterFields, useUsbOwnerOptions } from "./UsbOwnerFilter";
 import UsbPolicyBar from "./UsbPolicyBar";
 import { ACCESS_LEVEL_OPTIONS, DEVICE_CLASSES, USB_ACCESS_LEVEL, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";

@@ -8,6 +8,7 @@ export interface ActionMenuItem {
     onClick: () => void;
     disabled?: boolean;
     icon?: ReactNode;
+    title?: string;
 }
 
 interface ActionMenuProps {
@@ -15,10 +16,12 @@ interface ActionMenuProps {
     icon?: ReactNode;
     items: ActionMenuItem[];
     disabled?: boolean;
+    /** Icon-only trigger sized for list toolbars; label moves to title. */
+    iconOnly?: boolean;
 }
 
 // No portal (unlike RowActionsMenu): it always sits in a toolbar, never clipped by table overflow.
-export default function ActionMenu({ label, icon, items, disabled }: ActionMenuProps) {
+export default function ActionMenu({ label, icon, items, disabled, iconOnly }: ActionMenuProps) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -44,10 +47,14 @@ export default function ActionMenu({ label, icon, items, disabled }: ActionMenuP
                 disabled={disabled}
                 aria-haspopup="menu"
                 aria-expanded={open}
-                className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-[#e0e3e5] bg-white px-4 text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label={label}
+                title={iconOnly ? label : undefined}
+                className={`flex cursor-pointer items-center gap-1.5 border border-[#e0e3e5] bg-white text-sm font-semibold text-[#191c1e] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50 ${
+                    iconOnly ? "h-9 rounded-md px-2 text-[#5e3f3a]" : "h-10 rounded-lg px-4"
+                }`}
             >
                 {icon}
-                {label}
+                {!iconOnly && label}
                 <ChevronDown className="h-3.5 w-3.5" />
             </button>
 
@@ -62,6 +69,7 @@ export default function ActionMenu({ label, icon, items, disabled }: ActionMenuP
                             role="menuitem"
                             type="button"
                             disabled={item.disabled}
+                            title={item.title}
                             onClick={() => {
                                 setOpen(false);
                                 item.onClick();
