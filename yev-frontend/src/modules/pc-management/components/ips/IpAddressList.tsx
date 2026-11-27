@@ -13,6 +13,7 @@ import { ipStatusClasses, ipStatusDotClasses, ipStatusLabels, ipStatusOptions } 
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 
 // 254 = all hosts of a /24, so one prefix fits a single page; the table scrolls internally.
 const PAGE_SIZE = 254;
@@ -28,6 +29,7 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
     const [statusFilter, setStatusFilter] = useState<string>("");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:pc-management/components/ips/IpAddressList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -44,11 +46,11 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
         () =>
             IpApi.getIpAddressPageNation({
                 pageIndex,
-                pageSize: PAGE_SIZE,
+                pageSize,
                 keyword: appliedKeyword || undefined,
                 status: statusFilter !== "" ? Number(statusFilter) : undefined,
             }),
-        [pageIndex, appliedKeyword, statusFilter],
+        [pageIndex, pageSize, appliedKeyword, statusFilter],
         (result) => {
             setIpAddresses(result.data);
             setTotalCount(result.totalCount);
@@ -316,6 +318,8 @@ const IpAddressList = forwardRef<ListHandle, ListToolbarProps>(function IpAddres
                 </div>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

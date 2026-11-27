@@ -20,6 +20,8 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
+import { readPersisted, usePersistOnChange, usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 
@@ -33,10 +35,14 @@ export default function FormDefinitionList() {
     const [formDefinitions, setFormDefinitions] = useState<FormDefinitionDto[]>([]);
     const [formCategories, setFormCategories] = useState<FormCategoryDto[]>([]);
 
-    const [keyword, setKeyword] = useState("");
-    const [appliedKeyword, setAppliedKeyword] = useState("");
+    // Search and page survive opening a form definition and coming back.
+    const [saved] = useState(() => readPersisted<{ keyword: string; appliedKeyword: string; pageIndex: number }>("list:workflow/form-definitions"));
+    const [keyword, setKeyword] = useState(saved?.keyword ?? "");
+    const [appliedKeyword, setAppliedKeyword] = useState(saved?.appliedKeyword ?? "");
 
-    const [pageIndex, setPageIndex] = useState(1);
+    const [pageIndex, setPageIndex] = useState(saved?.pageIndex ?? 1);
+    usePersistOnChange("list:workflow/form-definitions", { keyword, appliedKeyword, pageIndex });
+    const [pageSize, setPageSize] = usePersistedState("page-size:workflow/components/form-definitions/FormDefinitionList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -49,8 +55,8 @@ export default function FormDefinitionList() {
     const [isDeleting, setIsDeleting] = useState(false);
 
     const { isLoading, error, refetch: fetchFormDefinitions } = useFetchEffect(
-        () => FormDefinitionApi.getFormDefinitionPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-        [pageIndex, appliedKeyword],
+        () => FormDefinitionApi.getFormDefinitionPageNation({ pageIndex, pageSize, keyword: appliedKeyword || undefined }),
+        [pageIndex, pageSize, appliedKeyword],
         (result) => {
             setFormDefinitions(result.data);
             setTotalCount(result.totalCount);
@@ -195,7 +201,7 @@ export default function FormDefinitionList() {
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
@@ -261,9 +267,11 @@ export default function FormDefinitionList() {
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

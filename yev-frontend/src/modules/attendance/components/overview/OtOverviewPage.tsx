@@ -12,6 +12,7 @@ import type { WorkshopDto } from "@/modules/attendance/types/workshop.dto";
 import { useEnumLabels } from "@/modules/attendance/lib/useEnumLabels";
 import { formatHours } from "@/modules/attendance/lib/time";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 import { Pagination } from "@/components/ui/Pagination";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { BarChart, ChartCard, Donut, EmptyChart, HBarList } from "./OverviewCharts";
@@ -59,6 +60,7 @@ export default function OtOverviewPage() {
     const [workshops, setWorkshops] = useState<WorkshopDto[]>([]);
     const [data, setData] = useState<OtOverviewDto | null>(null);
     const [riskPage, setRiskPage] = useState(1);
+    const [riskPageSize, setRiskPageSize] = usePersistedState("page-size:attendance/overview/risk", RISK_PAGE_SIZE);
 
     const [year, month] = period.split("-").map(Number);
     const pick = (vn: string, jp: string | null | undefined) => (locale === "ja" && jp ? jp : vn);
@@ -75,9 +77,9 @@ export default function OtOverviewPage() {
     const delta = data && data.previousMonthHours > 0 ? Math.round(((data.monthHours - data.previousMonthHours) / data.previousMonthHours) * 100) : null;
 
     const riskEmployees = data?.riskEmployees ?? [];
-    const riskTotalPages = Math.max(1, Math.ceil(riskEmployees.length / RISK_PAGE_SIZE));
+    const riskTotalPages = Math.max(1, Math.ceil(riskEmployees.length / riskPageSize));
     const currentRiskPage = Math.min(riskPage, riskTotalPages);
-    const riskRows = riskEmployees.slice((currentRiskPage - 1) * RISK_PAGE_SIZE, currentRiskPage * RISK_PAGE_SIZE);
+    const riskRows = riskEmployees.slice((currentRiskPage - 1) * riskPageSize, currentRiskPage * riskPageSize);
 
     const renderRiskRow =(row: OtOverviewEmployeeRowDto) => (
         <tr key={row.employeeId} className="border-b border-[#f1f5f9] last:border-0">
@@ -219,8 +221,10 @@ export default function OtOverviewPage() {
                                 </table>
                             </div>
                         )}
-                        {data.riskEmployees.length > RISK_PAGE_SIZE && (
+                        {data.riskEmployees.length > Math.min(riskPageSize, RISK_PAGE_SIZE) && (
                             <Pagination
+                                pageSize={riskPageSize}
+                                onPageSizeChange={setRiskPageSize}
                                 pageIndex={currentRiskPage}
                                 totalPages={riskTotalPages}
                                 onPageChange={setRiskPage}

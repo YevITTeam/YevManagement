@@ -19,6 +19,8 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { usePersistedTab } from "@/modules/common/hooks/usePersistedTab";
 import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
+import { readPersisted, usePersistOnChange, usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 
@@ -48,20 +50,24 @@ export default function WorkflowRequestList() {
     const router = useRouter();
 
     const [tab, setTab] = usePersistedTab<TabKey>("workflow-requests-tab", ["mine", "pending", "all"], "mine");
-    const [statusFilter, setStatusFilter] = useState<number | "">("");
+    // Status and page survive opening a request and coming back; the page only for the tab it was on.
+    const [saved] = useState(() => readPersisted<{ tab: TabKey; statusFilter: number | ""; pageIndex: number }>("list:workflow/requests"));
+    const [statusFilter, setStatusFilter] = useState<number | "">(saved?.statusFilter ?? "");
     const [items, setItems] = useState<WorkflowRequestListItemDto[]>([]);
-    const [pageIndex, setPageIndex] = useState(1);
+    const [pageIndex, setPageIndex] = useState(saved?.tab === tab ? (saved.pageIndex ?? 1) : 1);
+    usePersistOnChange("list:workflow/requests", { tab, statusFilter, pageIndex });
+    const [pageSize, setPageSize] = usePersistedState("page-size:workflow/components/requests/WorkflowRequestList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
     const { isLoading, error, refetch } = useFetchEffect(
         () => {
-            const params = { pageIndex, pageSize: PAGE_SIZE, status: statusFilter === "" ? undefined : statusFilter };
-            if (tab === "pending") return WorkflowRequestApi.getPendingMyApproval({ pageIndex, pageSize: PAGE_SIZE });
+            const params = { pageIndex, pageSize, status: statusFilter === "" ? undefined : statusFilter };
+            if (tab === "pending") return WorkflowRequestApi.getPendingMyApproval({ pageIndex, pageSize });
             if (tab === "all") return WorkflowRequestApi.getVisibleToMe(params);
             return WorkflowRequestApi.getMyRequests(params);
         },
-        [tab, pageIndex, statusFilter],
+        [tab, pageIndex, pageSize, statusFilter],
         (result) => {
             setItems(result.data);
             setTotalCount(result.totalCount);
@@ -124,7 +130,7 @@ export default function WorkflowRequestList() {
     const renderCode = (item: WorkflowRequestListItemDto) =>
         item.requestCode ?? <span className="font-medium text-[#6b7075]">{t("draftLabel")}</span>;
 
-    const rangeFrom = (pageIndex - 1) * PAGE_SIZE + 1;
+    const rangeFrom = (pageIndex - 1) * pageSize + 1;
     const rangeTo = rangeFrom + items.length - 1;
     const isEmpty = !isLoading && items.length === 0;
 
@@ -172,7 +178,7 @@ export default function WorkflowRequestList() {
                     <EmptyState icon={Inbox} title={tab === "pending" ? t("noPending") : t("noData")} />
                 ) : (
                     <>
-                        <div className="hidden overflow-x-auto md:block">
+                        <TableScroll className="hidden md:block">
                             <table className="min-w-full border-collapse text-left text-sm">
                                 <thead>
                                     <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.15em] text-[#5e3f3a]">
@@ -209,7 +215,7 @@ export default function WorkflowRequestList() {
                                         ))}
                                 </tbody>
                             </table>
-                        </div>
+                        </TableScroll>
 
                         <ul className="divide-y divide-[#f1f5f9] md:hidden">
                             {isLoading
@@ -242,6 +248,8 @@ export default function WorkflowRequestList() {
 
                         {!isLoading && (
                             <Pagination
+                                pageSize={pageSize}
+                                onPageSizeChange={setPageSize}
                                 pageIndex={pageIndex}
                                 totalPages={totalPages}
                                 onPageChange={setPageIndex}

@@ -102,35 +102,6 @@ namespace Asset.Application.Dtos.UsbLogs
         public string? EnforceMachines { get; set; }
     }
 
-    public class UsbAgentFilterRequest
-    {
-        public int PageIndex { get; set; } = 1;
-        public int PageSize { get; set; } = 20;
-        public string? Keyword { get; set; }
-        public bool StaleOnly { get; set; }
-        public int? BranchId { get; set; }
-        public int? DepartmentId { get; set; }
-        public string? SortBy { get; set; }
-        public bool SortDesc { get; set; }
-    }
-
-    public class UsbAgentDto
-    {
-        public int Id { get; set; }
-        public string MachineName { get; set; } = null!;
-        public string? AgentVersion { get; set; }
-        public string? WindowsUser { get; set; }
-        public DateTime FirstSeenAt { get; set; }
-        public DateTime LastSeenAt { get; set; }
-        public bool IsStale { get; set; }
-        public string? DeviceCode { get; set; }
-        public string? BranchName { get; set; }
-        public string? DepartmentName { get; set; }
-        // UsbAgentEventType of the latest lifecycle event; null for agents before 1.3.
-        public int? LastEventType { get; set; }
-        public DateTime? LastEventAt { get; set; }
-    }
-
     public class UsbAgentEventDto
     {
         public int EventType { get; set; }

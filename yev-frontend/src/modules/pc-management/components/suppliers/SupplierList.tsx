@@ -11,6 +11,8 @@ import SupplierForm, { type SupplierFormValues } from "./SupplierForm";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 
@@ -23,6 +25,7 @@ export default function SupplierList() {
     const [appliedKeyword, setAppliedKeyword] = useState("");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:pc-management/components/suppliers/SupplierList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -35,8 +38,8 @@ export default function SupplierList() {
     const [isDeleting, setIsDeleting] = useState(false);
 
     const { isLoading, error, refetch: fetchSuppliers } = useFetchEffect(
-        () => SupplierApi.getSupplierPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-        [pageIndex, appliedKeyword],
+        () => SupplierApi.getSupplierPageNation({ pageIndex, pageSize, keyword: appliedKeyword || undefined }),
+        [pageIndex, pageSize, appliedKeyword],
         (result) => {
             setSuppliers(result.data);
             setTotalCount(result.totalCount);
@@ -157,7 +160,7 @@ export default function SupplierList() {
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
@@ -204,9 +207,11 @@ export default function SupplierList() {
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

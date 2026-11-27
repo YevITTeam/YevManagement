@@ -15,7 +15,7 @@ namespace Asset.Application.Services
     // USB write-block whitelist and agent sync (asset-module.md §1.24).
     public class UsbPolicyService : BaseService<IAssetUnitOfWork>, IUsbPolicyService
     {
-        private const int StaleAgentHours = 24;
+        internal const int StaleAgentHours = 24;
         private const int DefaultSyncSeconds = 60;
         private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromMinutes(5);
         private static readonly TimeSpan SnapshotTtl = TimeSpan.FromSeconds(30);
@@ -450,79 +450,6 @@ namespace Asset.Application.Services
             _snapshot = null;
 
             return new UsbPolicySettingDto { Mode = setting.UsbBlockMode, EnforceMachines = setting.UsbEnforceMachines };
-        }
-
-        public async Task<PagedResponse<UsbAgentDto>> GetAgentsPagedAsync(UsbAgentFilterRequest filter)
-        {
-            var staleBefore = DateTime.UtcNow.AddHours(7 - StaleAgentHours);
-            return await _unitOfWork.UsbAgents.ToPagedResponseAsync(
-                UsbSort.Apply(AgentQuery(filter, staleBefore), filter.SortBy, filter.SortDesc, AgentColumns,
-                    q => q.OrderBy(a => a.LastSeenAt < staleBefore ? 0 : 1).ThenBy(a => a.MachineName), a => a.Id),
-                filter.PageIndex,
-                filter.PageSize,
-                ToAgentDto(staleBefore));
-        }
-
-        public async Task<byte[]> ExportAgentsAsync(UsbAgentFilterRequest filter)
-        {
-            var staleBefore = DateTime.UtcNow.AddHours(7 - StaleAgentHours);
-            var rows = await _unitOfWork.UsbAgents.ToPagedResponseAsync(
-                AgentQuery(filter, staleBefore).OrderBy(a => a.MachineName).ThenBy(a => a.Id), 1, UsbExcel.MaxRows, ToAgentDto(staleBefore));
-
-            return UsbExcel.Build("Agent USB",
-                new[] { "Máy", "Mã thiết bị", "Xưởng", "Bộ phận", "Phiên bản", "Người dùng", "Lần đầu", "Lần cuối báo về", "Mất liên lạc", "Sự kiện gần nhất", "Lúc" },
-                rows.Data.Select(a => new object?[]
-                {
-                    a.MachineName, a.DeviceCode, a.BranchName, a.DepartmentName, a.AgentVersion, a.WindowsUser, a.FirstSeenAt, a.LastSeenAt,
-                    a.IsStale ? "Có" : null, UsbExcel.AgentEventText(a.LastEventType), a.LastEventAt
-                }),
-                rows.TotalCount);
-        }
-
-        private IQueryable<UsbAgent> AgentQuery(UsbAgentFilterRequest filter, DateTime staleBefore)
-        {
-            var query = _unitOfWork.UsbAgents.GetQueryable(false);
-
-            if (!string.IsNullOrWhiteSpace(filter.Keyword))
-            {
-                var keyword = filter.Keyword.Trim();
-                query = query.Where(a => a.MachineName.Contains(keyword)
-                    || (a.WindowsUser != null && a.WindowsUser.Contains(keyword))
-                    || (a.AgentVersion != null && a.AgentVersion.Contains(keyword)));
-            }
-
-            if (filter.StaleOnly)
-                query = query.Where(a => a.LastSeenAt < staleBefore);
-
-            if (filter.BranchId.HasValue)
-                query = query.Where(a => a.Device != null && a.Device.BranchId == filter.BranchId.Value);
-
-            if (filter.DepartmentId.HasValue)
-                query = query.Where(a => a.Device != null && a.Device.DepartmentId == filter.DepartmentId.Value);
-
-            return query;
-        }
-
-        private Expression<Func<UsbAgent, UsbAgentDto>> ToAgentDto(DateTime staleBefore)
-        {
-            var events = _unitOfWork.UsbAgentEvents.GetQueryable(false);
-            return a => new UsbAgentDto
-                {
-                    Id = a.Id,
-                    MachineName = a.MachineName,
-                    AgentVersion = a.AgentVersion,
-                    WindowsUser = a.WindowsUser,
-                    FirstSeenAt = a.FirstSeenAt,
-                    LastSeenAt = a.LastSeenAt,
-                    IsStale = a.LastSeenAt < staleBefore,
-                    DeviceCode = a.Device != null ? a.Device.DeviceCode : null,
-                    BranchName = a.Device != null ? a.Device.Branch.BranchName : null,
-                    DepartmentName = a.Device != null && a.Device.DeviceDepartment != null ? a.Device.DeviceDepartment.DepartmentName : null,
-                    LastEventType = events.Where(e => e.MachineName == a.MachineName)
-                        .OrderByDescending(e => e.OccurredAt).Select(e => (int?)e.EventType).FirstOrDefault(),
-                    LastEventAt = events.Where(e => e.MachineName == a.MachineName)
-                        .OrderByDescending(e => e.OccurredAt).Select(e => (DateTime?)e.OccurredAt).FirstOrDefault()
-                };
         }
 
         public async Task<List<UsbAgentEventDto>> GetAgentEventsAsync(string machineName)

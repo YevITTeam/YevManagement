@@ -11,6 +11,8 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Pencil, Trash2 } from "lucide-react";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 
@@ -21,6 +23,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
     const [appliedKeyword, setAppliedKeyword] = useState("");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:pc-management/components/ips/IpPrefixList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -33,8 +36,8 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
     const [isDeleting, setIsDeleting] = useState(false);
 
     const { isLoading, error, refetch: fetchPrefixes } = useFetchEffect(
-        () => IpApi.getIpPrefixPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-        [pageIndex, appliedKeyword],
+        () => IpApi.getIpPrefixPageNation({ pageIndex, pageSize, keyword: appliedKeyword || undefined }),
+        [pageIndex, pageSize, appliedKeyword],
         (result) => {
             setPrefixes(result.data);
             setTotalCount(result.totalCount);
@@ -155,7 +158,7 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
@@ -218,9 +221,11 @@ const IpPrefixList = forwardRef<ListHandle, ListToolbarProps>(function IpPrefixL
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

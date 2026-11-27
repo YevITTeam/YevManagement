@@ -21,6 +21,8 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { AuthApi } from "@/modules/auth/api/auth.api";
 import type { UserDto } from "@/modules/auth/types/auth.dto";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 
@@ -36,6 +38,7 @@ export default function EmployeeList() {
     const [appliedKeyword, setAppliedKeyword] = useState("");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:workflow/components/employees/EmployeeList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -64,8 +67,8 @@ export default function EmployeeList() {
     }));
 
     const { isLoading, error, refetch: fetchEmployees } = useFetchEffect(
-        () => EmployeeApi.getEmployeePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-        [pageIndex, appliedKeyword],
+        () => EmployeeApi.getEmployeePageNation({ pageIndex, pageSize, keyword: appliedKeyword || undefined }),
+        [pageIndex, pageSize, appliedKeyword],
         (result) => {
             setEmployees(result.data);
             setTotalCount(result.totalCount);
@@ -185,7 +188,7 @@ export default function EmployeeList() {
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
@@ -267,9 +270,11 @@ export default function EmployeeList() {
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

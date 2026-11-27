@@ -59,6 +59,21 @@ Ràng buộc của dự án — ưu tiên hơn mọi mặc định của skill:
 - Skill đề xuất hoặc dựng xong thì đối chiếu lại với `DESIGN_SYSTEM.md` §9; chỗ lệch **sửa theo doc**.
 - Ý hay từ skill mà doc chưa có → thêm vào `DESIGN_SYSTEM.md` (AGENTS.md §2 luật 4: cập nhật doc sau khi code), đừng chỉ áp dụng một lần rồi để mất.
 
+## Tra thêm `ui-ux-pro-max` — chỉ dùng như kho tra cứu UX
+
+`evon:ui-ux` lo bố cục và gu; `ui-ux-pro-max` chỉ để **tra luật UX cụ thể** cho chỗ đang làm (accessibility, form, bảng, điều hướng, biểu đồ, hiệu năng React).
+Chạy script tra cứu (bỏ qua nếu máy chưa cài plugin):
+
+```bash
+python "$HOME/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/"*/.claude/skills/ui-ux-pro-max/scripts/search.py "<2–5 từ, một ý>" --domain ux -n 3
+#   --domain chart (chọn biểu đồ) · --domain react (rerender, list lớn) · --stack react / --stack html-tailwind (cách cài đặt)
+```
+
+- Mỗi màn tra 1–3 câu đúng vấn đề đang gặp (vd `"inline form validation error"`, `"data table overflow mobile"`, `"icon button accessible label"`), không tra lan man.
+- **Không** dùng `--design-system`, `--persist`, `--tokens`, `--domain color/typography/style/landing`: bảng màu, font, phong cách đã chốt ở `DESIGN_SYSTEM.md`.
+- **Không** dùng `--stack nextjs`: nó khuyên Server Actions/SSR, còn FE ở đây là static export gọi API qua `*.api.ts`.
+- Kết quả là gợi ý; trái `DESIGN_SYSTEM.md` thì doc thắng. Luật đáng giữ → thêm vào `DESIGN_SYSTEM.md`.
+
 ## Khi xong
 
 - Chạy tại `yev-frontend/`: `npx tsc --noEmit` sạch; `pnpm lint` không thêm cảnh báo mới.

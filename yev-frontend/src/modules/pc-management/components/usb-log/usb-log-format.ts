@@ -1,6 +1,10 @@
+const pad = (n: number) => String(n).padStart(2, "0");
+
+// dd/MM/yyyy HH:mm in local time; seconds add width without helping anyone read the log.
 export function formatDateTime(value: string | null) {
     if (!value) return "-";
-    return new Date(value).toLocaleString("vi-VN");
+    const d = new Date(value);
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // UsbPolicyResult → badge; key points at usbLog.policy.<key>.label/title. Null (mode Off, phones) shows nothing.

@@ -61,17 +61,17 @@ export default function PasswordGeneratorCard() {
     };
 
     return (
-        <section className="max-w-2xl rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm md:p-6">
-            <h2 className="text-base font-semibold text-[#191c1e]">Tạo mật khẩu ngẫu nhiên</h2>
+        <section className="rounded-xl border border-[#e0e3e5] bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-[#191c1e]">Tạo mật khẩu ngẫu nhiên</h2>
 
-            <div className="mt-4 flex items-center gap-2">
+            <div className="mt-3 flex items-center gap-2">
                 <input
                     ref={inputRef}
                     readOnly
                     value={password}
                     aria-label="Mật khẩu"
                     onFocus={(event) => event.target.select()}
-                    className="h-9 min-w-0 flex-1 rounded-lg border border-[#e0e3e5] bg-[#f8fafc] px-3 font-mono text-sm text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
+                    className="h-9 min-w-0 flex-1 rounded-md border border-[#e0e3e5] bg-[#f8fafc] px-3 font-mono text-[15px]! tracking-wider text-[#191c1e] outline-none focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]"
                 />
                 <button type="button" onClick={handleCopy} disabled={!password} title="Sao chép" aria-label="Sao chép" className={iconButtonClassName}>
                     <Copy className="h-4 w-4" />
@@ -103,7 +103,7 @@ export default function PasswordGeneratorCard() {
             )}
             {!hasCharSet && <p className="mt-2 text-xs text-[#930006]">Chọn ít nhất một loại ký tự.</p>}
 
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2.5 text-sm text-[#191c1e]">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-[#f1f5f9] pt-3 text-sm text-[#191c1e]">
                 <label className="flex items-center gap-2">
                     <span className="text-[#5e3f3a]">Độ dài</span>
                     <input

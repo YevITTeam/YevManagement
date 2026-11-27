@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronRight, Layers, ShieldCheck, ShieldOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
 
@@ -14,6 +14,7 @@ import { hasPermission } from "@/modules/auth/lib/permissions";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbMachineUsbDto } from "@/modules/pc-management/types/usb-log.dto";
+import { ErrorBar, IconButton, IconFlag, StatusDot, TableStatusRows, rowClassName, theadRowClassName } from "./UsbListToolbar";
 import UsbLogList from "./UsbLogList";
 import { UsbFileCount } from "./UsbSessionFiles";
 import { POLICY_META, USB_ACCESS_LEVEL, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
@@ -81,35 +82,28 @@ export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineU
 
     return (
         <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-            {error && <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
+            <ErrorBar message={error} />
 
-            <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse text-left">
+            <div className="relative overflow-x-auto">
+                <table className="min-w-full border-collapse text-left text-sm">
                     <thead>
-                        <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
-                            <th className="w-8 px-3 py-2" />
-                            <SortableTh label="USB" sortKey="usb" sort={sort} onSort={setSort} className="whitespace-nowrap px-3 py-2" />
-                            <SortableTh label={t("common.sessionCount")} sortKey="sessionCount" sort={sort} onSort={setSort} className="whitespace-nowrap px-3 py-2" />
-                            <SortableTh label={t("common.file")} sortKey="fileEventCount" sort={sort} onSort={setSort} className="whitespace-nowrap px-3 py-2" />
-                            <SortableTh label={t("machineUsbs.lastConnected")} sortKey="lastConnectedAt" sort={sort} onSort={setSort} className="whitespace-nowrap px-3 py-2" />
-                            {canApprove && <th className="px-3 py-2 text-right">{t("common.actions")}</th>}
+                        <tr className={theadRowClassName}>
+                            <th className="w-8 py-2 pl-2">
+                                <span className="sr-only">{t("machineUsbs.viewSessions")}</span>
+                            </th>
+                            <SortableTh label="USB" sortKey="usb" sort={sort} onSort={setSort} className="px-3 py-2" />
+                            <SortableTh label={t("common.sessionCount")} sortKey="sessionCount" sort={sort} onSort={setSort} className="px-3 py-2 text-right" />
+                            <SortableTh label={t("common.file")} sortKey="fileEventCount" sort={sort} onSort={setSort} className="hidden px-3 py-2 sm:table-cell" />
+                            <SortableTh label={t("common.lastSeen")} sortKey="lastConnectedAt" sort={sort} onSort={setSort} className="hidden px-3 py-2 md:table-cell" />
+                            {canApprove && (
+                                <th className="w-10 px-2 py-2">
+                                    <span className="sr-only">{t("common.actions")}</span>
+                                </th>
+                            )}
                         </tr>
                     </thead>
                     <tbody>
-                        {isLoading && rows.length === 0 && (
-                            <tr>
-                                <td colSpan={columnCount} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                    {t("common.loadingData")}
-                                </td>
-                            </tr>
-                        )}
-                        {!isLoading && rows.length === 0 && (
-                            <tr>
-                                <td colSpan={columnCount} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                    {t("common.noData")}
-                                </td>
-                            </tr>
-                        )}
+                        <TableStatusRows loading={isLoading} empty={rows.length === 0} columns={columnCount} />
                         {sorted.map((row) => {
                             const expanded = expandedId === row.usbDeviceId;
                             // Approval is the current state; otherwise show what the agent did on the latest plug-in.
@@ -119,13 +113,7 @@ export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineU
                                 : row.lastPolicyResult && row.lastPolicyResult !== 1
                                   ? POLICY_META[row.lastPolicyResult]
                                   : undefined;
-                            const policy = meta && {
-                                variant: meta.variant,
-                                label: t(`policy.${meta.key}.label`),
-                                title: approved
-                                    ? t(row.isApproved ? "machineUsbs.approvedAll" : "machineUsbs.approvedHere")
-                                    : t(`policy.${meta.key}.title`),
-                            };
+                            const policyTitle = meta && (approved ? t(row.isApproved ? "machineUsbs.approvedAll" : "machineUsbs.approvedHere") : t(`policy.${meta.key}.title`));
                             const approvable = row.deviceClass === "DiskDrive" && row.serialNumber !== "" && !row.isApproved;
                             return (
                                 <Fragment key={row.usbDeviceId}>
@@ -136,38 +124,31 @@ export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineU
                                             if (!onButton && (event.detail > 1 || window.getSelection()?.toString())) return;
                                             setExpandedId(expanded ? null : row.usbDeviceId);
                                         }}
-                                        className="cursor-pointer border-b border-[#f1f5f9] align-top transition hover:bg-[#f8fafc]"
+                                        className={`${rowClassName} cursor-pointer align-top ${expanded ? "bg-[#f8fafc]" : ""}`}
                                     >
-                                        <td className="px-3 py-2">
+                                        <td className="py-2 pl-2">
                                             <button
                                                 type="button"
                                                 aria-expanded={expanded}
                                                 aria-label={expanded ? t("common.collapse") : t("machineUsbs.viewSessions")}
+                                                title={expanded ? t("common.collapse") : t("machineUsbs.viewSessions")}
                                                 className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-[#5e3f3a] hover:bg-[#f2f4f6]"
                                             >
-                                                {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
                                             </button>
                                         </td>
-                                        <td className="px-3 py-2 text-sm text-[#191c1e]">
-                                            <div className="flex flex-wrap items-center gap-2">
+                                        <td className="px-3 py-2 text-[#191c1e]">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <StatusDot tone={row.isConnectedNow ? "online" : "idle"} label={row.isConnectedNow ? t("common.connectedNow") : t("common.notConnected")} />
                                                 <span className="font-semibold">{usbName(row)}</span>
-                                                {row.isSharedSerial && (
-                                                    <span title={t("machineUsbs.sharedSerialTitle")}>
-                                                        <Badge variant="warning">{t("common.sharedSerial")}</Badge>
+                                                {row.isSharedSerial && <IconFlag icon={Layers} tone="warning" label={t("machineUsbs.sharedSerialTitle")} />}
+                                                {meta && (
+                                                    <span title={policyTitle}>
+                                                        <Badge variant={meta.variant}>{t(`policy.${meta.key}.label`)}</Badge>
                                                     </span>
-                                                )}
-                                                {policy && (
-                                                    <span title={policy.title}>
-                                                        <Badge variant={policy.variant}>{policy.label}</Badge>
-                                                    </span>
-                                                )}
-                                                {row.isConnectedNow && (
-                                                    <Badge variant="info" withDot>
-                                                        {t("common.connectedNow")}
-                                                    </Badge>
                                                 )}
                                             </div>
-                                            <div className="break-all text-xs text-[#5e3f3a]">
+                                            <div className="break-all pl-3.5 text-xs text-[#5e3f3a]">
                                                 {[
                                                     row.alias ? row.friendlyName : null,
                                                     row.deviceClass === "DiskDrive" ? null : deviceClassLabel(t, row.deviceClass),
@@ -179,37 +160,25 @@ export default function UsbMachineUsbList({ machineName, deviceId }: UsbMachineU
                                                     .join(" · ")}
                                             </div>
                                         </td>
-                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">{row.sessionCount}</td>
-                                        <td className="px-3 py-2 text-sm text-[#5e3f3a]">
+                                        <td className="px-3 py-2 text-right tabular-nums text-[#191c1e]">{row.sessionCount}</td>
+                                        <td className="hidden px-3 py-2 text-[#191c1e] sm:table-cell">
                                             <UsbFileCount total={row.fileEventCount} sensitive={row.sensitiveFileCount} />
                                         </td>
-                                        <td className="whitespace-nowrap px-3 py-2 text-sm text-[#5e3f3a]">{formatDateTime(row.lastConnectedAt)}</td>
+                                        <td className="hidden whitespace-nowrap px-3 py-2 tabular-nums text-[#5e3f3a] md:table-cell">{formatDateTime(row.lastConnectedAt)}</td>
                                         {canApprove && (
-                                            <td className="whitespace-nowrap px-3 py-2 text-right text-sm" onClick={(event) => event.stopPropagation()}>
+                                            <td className="px-2 py-1.5 text-right" onClick={(event) => event.stopPropagation()}>
                                                 {approvable &&
                                                     (row.approvedHere ? (
-                                                        <button
-                                                            onClick={() => setRevoking(row)}
-                                                            disabled={busy}
-                                                            className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#7a0005] disabled:cursor-not-allowed disabled:opacity-50"
-                                                        >
-                                                            {t("machineUsbs.revokeHere")}
-                                                        </button>
+                                                        <IconButton icon={ShieldOff} label={t("machineUsbs.revokeHere")} size="sm" variant="danger" disabled={busy} onClick={() => setRevoking(row)} />
                                                     ) : (
-                                                        <button
-                                                            onClick={() => setHere(row, true)}
-                                                            disabled={busy}
-                                                            className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e] disabled:cursor-not-allowed disabled:opacity-50"
-                                                        >
-                                                            {t("machineUsbs.approveHere")}
-                                                        </button>
+                                                        <IconButton icon={ShieldCheck} label={t("machineUsbs.approveHere")} size="sm" variant="ghost" disabled={busy} onClick={() => setHere(row, true)} />
                                                     ))}
                                             </td>
                                         )}
                                     </tr>
                                     {expanded && (
                                         <tr className="border-b border-[#f1f5f9] bg-[#f8fafc]">
-                                            <td colSpan={columnCount} className="px-3 py-3">
+                                            <td colSpan={columnCount} className="px-3 pb-3 pt-1 sm:pl-10">
                                                 <UsbLogList machineName={machineName} usbDeviceId={row.usbDeviceId} />
                                             </td>
                                         </tr>

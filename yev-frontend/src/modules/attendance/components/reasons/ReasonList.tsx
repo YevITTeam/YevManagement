@@ -13,6 +13,8 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Pagination } from "@/components/ui/Pagination";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 
@@ -25,6 +27,7 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
     const [appliedKeyword, setAppliedKeyword] = useState("");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:attendance/components/reasons/ReasonList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -37,8 +40,8 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
     const [isDeleting, setIsDeleting] = useState(false);
 
     const { isLoading, error, refetch: fetchReasons } = useFetchEffect(
-        () => ReasonApi.getReasonPageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-        [pageIndex, appliedKeyword],
+        () => ReasonApi.getReasonPageNation({ pageIndex, pageSize, keyword: appliedKeyword || undefined }),
+        [pageIndex, pageSize, appliedKeyword],
         (result) => {
             setReasons(result.data);
             setTotalCount(result.totalCount);
@@ -146,7 +149,7 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
@@ -194,9 +197,11 @@ const ReasonList = forwardRef<ListHandle, ListToolbarProps>(function ReasonList(
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

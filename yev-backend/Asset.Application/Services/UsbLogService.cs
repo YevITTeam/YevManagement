@@ -200,16 +200,35 @@ namespace Asset.Application.Services
 
         public async Task<PagedResponse<UsbMachineDto>> GetMachinesPagedAsync(UsbMachineFilterRequest filter)
         {
-            var query = _unitOfWork.UsbSessions.GetQueryable(false);
+            var machines = await LoadMachinesAsync(filter);
+            var page = machines.Skip((filter.PageIndex - 1) * filter.PageSize).Take(filter.PageSize).ToList();
+            return new PagedResponse<UsbMachineDto>(page, machines.Count, filter.PageIndex, filter.PageSize);
+        }
 
-            if (!string.IsNullOrWhiteSpace(filter.Keyword))
-            {
-                var keyword = filter.Keyword.Trim();
-                query = query.Where(s =>
-                    s.MachineName.Contains(keyword)
-                    || (s.WindowsUser != null && s.WindowsUser.Contains(keyword))
-                    || (s.Device != null && s.Device.DeviceCode.Contains(keyword)));
-            }
+        public async Task<byte[]> ExportMachinesAsync(UsbMachineFilterRequest filter)
+        {
+            var machines = await LoadMachinesAsync(filter);
+
+            return UsbExcel.Build("Máy tính USB",
+                new[]
+                {
+                    "Máy", "Mã thiết bị", "Xưởng", "Bộ phận", "Người dùng", "Phiên bản agent", "Kết nối cuối", "Mất kết nối",
+                    "Sự kiện agent gần nhất", "Lúc", "Số USB", "Lần cắm", "Thao tác file", "File cần chú ý", "Cắm USB gần nhất", "Đang cắm"
+                },
+                machines.Take(UsbExcel.MaxRows).Select(m => new object?[]
+                {
+                    m.MachineName, m.DeviceCode, m.BranchName, m.DepartmentName, m.LastWindowsUser, m.AgentVersion, m.AgentLastSeenAt,
+                    m.IsStale ? "Có" : null, UsbExcel.AgentEventText(m.LastEventType), m.LastEventAt,
+                    m.UsbDeviceCount, m.SessionCount, m.FileEventCount, m.SensitiveFileCount, m.LastConnectedAt, m.IsConnectedNow ? "Có" : null
+                }),
+                machines.Count);
+        }
+
+        // One row per PC: every agent row plus PCs that only have USB history. Bounded by the PC count, so the merge,
+        // keyword match, sort and paging run in memory.
+        private async Task<List<UsbMachineDto>> LoadMachinesAsync(UsbMachineFilterRequest filter)
+        {
+            var query = _unitOfWork.UsbSessions.GetQueryable(false);
 
             if (filter.FromDate.HasValue)
                 query = query.Where(s => s.ConnectedAt >= filter.FromDate.Value.Date);
@@ -225,7 +244,6 @@ namespace Asset.Application.Services
             if (filter.SensitiveOnly)
                 query = query.Where(s => s.FileEvents.Any(e => e.IsSensitive));
 
-            // One row per PC; the result is bounded by the number of PCs, so filtering/paging runs in memory.
             var groups = await _unitOfWork.UsbSessions.GroupCountAsync(
                 query, s => s.MachineName,
                 g => new UsbMachineDto
@@ -243,34 +261,86 @@ namespace Asset.Application.Services
                     // Only USBs blocked right now; past blocks stay visible per USB on the machine page.
                     BlockedCount = g.Count(s => s.PolicyResult == (int)UsbPolicyResult.Blocked && s.DisconnectedAt == null)
                 });
+            var byName = groups.ToDictionary(m => m.MachineName, StringComparer.OrdinalIgnoreCase);
+
+            // A USB-only filter (dates, sensitive, plugged in) means "PCs with matching USB use", so agent-only PCs stay out.
+            var usbFilter = filter.FromDate.HasValue || filter.ToDate.HasValue || filter.SensitiveOnly || filter.ConnectedNowOnly;
+            var staleBefore = DateTime.UtcNow.AddHours(7 - UsbPolicyService.StaleAgentHours);
+            var agentQuery = _unitOfWork.UsbAgents.GetQueryable(false);
+            if (filter.BranchId.HasValue) agentQuery = agentQuery.Where(a => a.Device != null && a.Device.BranchId == filter.BranchId.Value);
+            if (filter.DepartmentId.HasValue) agentQuery = agentQuery.Where(a => a.Device != null && a.Device.DepartmentId == filter.DepartmentId.Value);
+            var agents = await _unitOfWork.UsbAgents.ToListAsync(agentQuery, a => new { a.Id, a.MachineName, a.AgentVersion, a.WindowsUser, a.FirstSeenAt, a.LastSeenAt, a.DeviceId });
+            foreach (var agent in agents)
+            {
+                if (!byName.TryGetValue(agent.MachineName, out var machine))
+                {
+                    if (usbFilter) continue;
+                    machine = new UsbMachineDto { MachineName = agent.MachineName };
+                    byName[agent.MachineName] = machine;
+                }
+                machine.AgentId = agent.Id;
+                machine.AgentVersion = agent.AgentVersion;
+                machine.AgentFirstSeenAt = agent.FirstSeenAt;
+                machine.AgentLastSeenAt = agent.LastSeenAt;
+                machine.IsStale = agent.LastSeenAt < staleBefore;
+                machine.DeviceId ??= agent.DeviceId;
+                machine.LastWindowsUser ??= agent.WindowsUser;
+            }
+
+            var lastEvents = (await _unitOfWork.UsbAgentEvents.GroupCountAsync(
+                    _unitOfWork.UsbAgentEvents.GetQueryable(false), e => e.MachineName,
+                    g => new
+                    {
+                        MachineName = g.Key,
+                        Type = g.OrderByDescending(e => e.OccurredAt).Select(e => (int?)e.EventType).FirstOrDefault(),
+                        At = g.Max(e => (DateTime?)e.OccurredAt)
+                    }))
+                .ToDictionary(e => e.MachineName, StringComparer.OrdinalIgnoreCase);
 
             var live = await GetLiveMachinesAsync();
-            foreach (var m in groups)
+            foreach (var m in byName.Values)
             {
                 m.IsConnectedNow &= live.Contains(m.MachineName);
                 if (!m.IsConnectedNow) m.BlockedCount = 0;
+                if (lastEvents.TryGetValue(m.MachineName, out var ev))
+                {
+                    m.LastEventType = ev.Type;
+                    m.LastEventAt = ev.At;
+                }
             }
 
-            var machines = SortMachines(groups.Where(m => !filter.ConnectedNowOnly || m.IsConnectedNow), filter.SortBy, filter.SortDesc);
+            await FillOwnersAsync(byName.Values);
 
-            var page = machines.Skip((filter.PageIndex - 1) * filter.PageSize).Take(filter.PageSize).ToList();
+            IEnumerable<UsbMachineDto> rows = byName.Values;
+            if (!string.IsNullOrWhiteSpace(filter.Keyword))
+            {
+                var keyword = filter.Keyword.Trim();
+                bool Has(string? value) => value != null && value.Contains(keyword, StringComparison.OrdinalIgnoreCase);
+                rows = rows.Where(m => Has(m.MachineName) || Has(m.DeviceCode) || Has(m.LastWindowsUser) || Has(m.AgentVersion));
+            }
+            if (filter.ConnectedNowOnly) rows = rows.Where(m => m.IsConnectedNow);
+            if (filter.StaleOnly) rows = rows.Where(m => m.IsStale);
 
-            var deviceIds = page.Where(m => m.DeviceId != null).Select(m => m.DeviceId!.Value).Distinct().ToList();
+            return SortMachines(rows, filter.SortBy, filter.SortDesc);
+        }
+
+        private async Task FillOwnersAsync(IEnumerable<UsbMachineDto> machines)
+        {
+            var list = machines.ToList();
+            var deviceIds = list.Where(m => m.DeviceId != null).Select(m => m.DeviceId!.Value).Distinct().ToList();
             var owners = (await _unitOfWork.Devices.SelectAsync(d => deviceIds.Contains(d.Id), d => new
                 {
                     d.Id, d.DeviceCode, d.Branch.BranchName,
                     DepartmentName = d.DeviceDepartment != null ? d.DeviceDepartment.DepartmentName : null
                 }))
                 .ToDictionary(x => x.Id);
-            foreach (var machine in page)
+            foreach (var machine in list)
             {
                 if (machine.DeviceId == null || !owners.TryGetValue(machine.DeviceId.Value, out var owner)) continue;
                 machine.DeviceCode = owner.DeviceCode;
                 machine.BranchName = owner.BranchName;
                 machine.DepartmentName = owner.DepartmentName;
             }
-
-            return new PagedResponse<UsbMachineDto>(page, machines.Count, filter.PageIndex, filter.PageSize);
         }
 
         public async Task<PagedResponse<UsbSessionDto>> GetSessionsPagedAsync(UsbSessionFilterRequest filter)
@@ -290,7 +360,7 @@ namespace Asset.Application.Services
                 SessionQuery(filter).OrderByDescending(s => s.ConnectedAt).ThenBy(s => s.Id), 1, UsbExcel.MaxRows, ToSessionDto(new List<string>()));
 
             return UsbExcel.Build("Phiên cắm USB",
-                new[] { "Giờ cắm", "Giờ rút", "Máy", "Mã thiết bị", "Người dùng", "USB", "Tên thiết bị", "Serial", "Ổ", "Nhãn ổ", "Kết quả", "Số thao tác file", "File nhạy cảm" },
+                new[] { "Giờ cắm", "Giờ rút", "Máy", "Mã thiết bị", "Người dùng", "USB", "Tên thiết bị", "Serial", "Ổ", "Nhãn ổ", "Kết quả", "Số thao tác file", "File cần chú ý" },
                 rows.Data.Select(s => new object?[]
                 {
                     s.ConnectedAt, s.DisconnectedAt, s.MachineName, s.DeviceCode, s.WindowsUser, s.UsbAlias ?? s.FriendlyName, s.FriendlyName,
@@ -299,32 +369,98 @@ namespace Asset.Application.Services
                 rows.TotalCount);
         }
 
-        // File events of the sessions the same filter selects.
-        public async Task<byte[]> ExportFileEventsAsync(UsbSessionFilterRequest filter)
+        public async Task<PagedResponse<UsbFileSearchDto>> SearchFilesPagedAsync(UsbFileFilterRequest filter)
+            => await _unitOfWork.UsbFileEvents.ToPagedResponseAsync(
+                UsbSort.Apply(FileQuery(filter), filter.SortBy, filter.SortDesc, FileSearchColumns, q => q.OrderByDescending(e => e.OccurredAt).ThenByDescending(e => e.Id), e => e.Id),
+                filter.PageIndex,
+                filter.PageSize,
+                ToFileSearchDto);
+
+        public async Task<byte[]> ExportFileEventsAsync(UsbFileFilterRequest filter)
         {
-            var sessionIds = SessionQuery(filter).Select(s => s.Id);
-            var files = _unitOfWork.UsbFileEvents.GetQueryable(false).Where(e => sessionIds.Contains(e.SessionId));
-            if (filter.SensitiveOnly) files = files.Where(e => e.IsSensitive);
             var rows = await _unitOfWork.UsbFileEvents.ToPagedResponseAsync(
-                files
-                    .OrderByDescending(e => e.OccurredAt).ThenBy(e => e.Id),
-                1, UsbExcel.MaxRows,
-                e => new
-                {
-                    e.OccurredAt, e.Session.MachineName, e.Session.WindowsUser,
-                    Usb = e.Session.UsbDevice.Alias ?? e.Session.UsbDevice.FriendlyName, e.Session.UsbDevice.SerialNumber,
-                    e.Action, e.FilePath, e.OldFilePath, e.SizeBytes, e.IsSensitive
-                });
+                FileQuery(filter).OrderByDescending(e => e.OccurredAt).ThenByDescending(e => e.Id), 1, UsbExcel.MaxRows, ToFileSearchDto);
 
             return UsbExcel.Build("Thao tác file USB",
-                new[] { "Thời gian", "Máy", "Người dùng", "USB", "Serial", "Thao tác", "Đường dẫn", "Đường dẫn cũ / nguồn trên USB", "Kích thước (byte)", "Nhạy cảm" },
+                new[]
+                {
+                    "Thời gian", "Máy", "Mã thiết bị", "Xưởng", "Bộ phận", "Người dùng", "USB", "Serial", "Thao tác",
+                    "Đường dẫn", "Đường dẫn cũ / nguồn trên USB", "Kích thước (byte)", "Cần chú ý"
+                },
                 rows.Data.Select(e => new object?[]
                 {
-                    e.OccurredAt, e.MachineName, e.WindowsUser, e.Usb, e.SerialNumber, e.Action.GetUsbFileActionText(),
-                    e.FilePath, e.OldFilePath, e.SizeBytes, e.IsSensitive ? "Có" : null
+                    e.OccurredAt, e.MachineName, e.DeviceCode, e.BranchName, e.DepartmentName, e.WindowsUser, e.UsbAlias ?? e.FriendlyName,
+                    e.SerialNumber, e.ActionText, e.FilePath, e.OldFilePath, e.SizeBytes, e.IsSensitive ? "Có" : null
                 }),
                 rows.TotalCount);
         }
+
+        // ponytail: LIKE '%keyword%' scans UsbFileEvents; add a full-text index on FilePath if the table reaches millions of rows.
+        private IQueryable<UsbFileEvent> FileQuery(UsbFileFilterRequest filter)
+        {
+            var query = _unitOfWork.UsbFileEvents.GetQueryable(false);
+
+            if (!string.IsNullOrWhiteSpace(filter.Keyword))
+            {
+                var keyword = filter.Keyword.Trim();
+                query = query.Where(e => e.FilePath.Contains(keyword) || (e.OldFilePath != null && e.OldFilePath.Contains(keyword)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filter.Extension))
+            {
+                var extension = "." + filter.Extension.Trim().TrimStart('.');
+                query = query.Where(e => e.FilePath.EndsWith(extension) || (e.OldFilePath != null && e.OldFilePath.EndsWith(extension)));
+            }
+
+            if (filter.FromDate.HasValue)
+                query = query.Where(e => e.OccurredAt >= filter.FromDate.Value.Date);
+
+            if (filter.ToDate.HasValue)
+            {
+                var toExclusive = filter.ToDate.Value.Date.AddDays(1);
+                query = query.Where(e => e.OccurredAt < toExclusive);
+            }
+
+            query = filter.Direction?.ToLowerInvariant() switch
+            {
+                "out" => query.Where(e => e.Action == (int)UsbFileAction.Created || e.Action == (int)UsbFileAction.Modified || e.Action == (int)UsbFileAction.Renamed),
+                "in" => query.Where(e => e.Action == (int)UsbFileAction.CopiedIn),
+                "deleted" => query.Where(e => e.Action == (int)UsbFileAction.Deleted),
+                _ => query
+            };
+
+            if (filter.SensitiveOnly)
+                query = query.Where(e => e.IsSensitive);
+
+            if (filter.BranchId.HasValue)
+                query = query.Where(e => e.Session.Device != null && e.Session.Device.BranchId == filter.BranchId.Value);
+            if (filter.DepartmentId.HasValue)
+                query = query.Where(e => e.Session.Device != null && e.Session.Device.DepartmentId == filter.DepartmentId.Value);
+
+            return query;
+        }
+
+        private static readonly Expression<Func<UsbFileEvent, UsbFileSearchDto>> ToFileSearchDto = e => new UsbFileSearchDto
+        {
+            Id = e.Id,
+            Action = e.Action,
+            FilePath = e.FilePath,
+            OldFilePath = e.OldFilePath,
+            SizeBytes = e.SizeBytes,
+            OccurredAt = e.OccurredAt,
+            IsSensitive = e.IsSensitive,
+            SessionId = e.SessionId,
+            MachineName = e.Session.MachineName,
+            DeviceId = e.Session.DeviceId,
+            DeviceCode = e.Session.Device != null ? e.Session.Device.DeviceCode : null,
+            BranchName = e.Session.Device != null ? e.Session.Device.Branch.BranchName : null,
+            DepartmentName = e.Session.Device != null && e.Session.Device.DeviceDepartment != null ? e.Session.Device.DeviceDepartment.DepartmentName : null,
+            WindowsUser = e.Session.WindowsUser,
+            UsbDeviceId = e.Session.UsbDeviceId,
+            UsbAlias = e.Session.UsbDevice.Alias,
+            FriendlyName = e.Session.UsbDevice.FriendlyName,
+            SerialNumber = e.Session.UsbDevice.SerialNumber
+        };
 
         private IQueryable<UsbSession> SessionQuery(UsbSessionFilterRequest filter)
         {
@@ -500,6 +636,14 @@ namespace Asset.Application.Services
             ("filePath", e => e.FilePath),
             ("sizeBytes", e => e.SizeBytes));
 
+        private static readonly Dictionary<string, Expression<Func<UsbFileEvent, object?>>> FileSearchColumns = UsbSort.Columns<UsbFileEvent>(
+            ("occurredAt", e => e.OccurredAt),
+            ("action", e => e.Action),
+            ("filePath", e => e.FilePath),
+            ("sizeBytes", e => e.SizeBytes),
+            ("machineName", e => e.Session.MachineName),
+            ("windowsUser", e => e.Session.WindowsUser));
+
         // Machines are grouped and paged in memory, so they sort in memory too.
         private static List<UsbMachineDto> SortMachines(IEnumerable<UsbMachineDto> machines, string? sortBy, bool sortDesc)
         {
@@ -511,10 +655,13 @@ namespace Asset.Application.Services
                 "sessioncount" => m => m.SessionCount,
                 "fileeventcount" => m => m.FileEventCount,
                 "lastconnectedat" => m => m.LastConnectedAt,
+                "agentversion" => m => m.AgentVersion,
+                "agentlastseenat" => m => m.AgentLastSeenAt,
                 _ => null
             };
+            // Plugged in first, then most recent USB use; PCs that never used USB (null) sort last.
             if (key == null)
-                return machines.OrderByDescending(m => m.IsConnectedNow).ThenByDescending(m => m.LastConnectedAt).ToList();
+                return machines.OrderByDescending(m => m.IsConnectedNow).ThenByDescending(m => m.LastConnectedAt).ThenBy(m => m.MachineName).ToList();
 
             var ordered = sortDesc ? machines.OrderByDescending(key) : machines.OrderBy(key);
             return ordered.ThenBy(m => m.MachineName).ToList();

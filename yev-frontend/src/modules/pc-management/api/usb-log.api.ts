@@ -1,6 +1,5 @@
 import { api, getForBlob } from "@/lib/client";
 import type {
-    UsbAgentDto,
     UsbAgentEventDto,
     UsbAgentPurgeRequest,
     UsbAgentReleaseDto,
@@ -11,6 +10,7 @@ import type {
     UsbOwnerOptionsDto,
     UsbDeviceDto,
     UsbFileEventDto,
+    UsbFileSearchDto,
     UsbMachineDto,
     UsbMachineUsbDto,
     UsbPolicySettingDto,
@@ -24,6 +24,7 @@ const ENDPOINTS = {
     USB_LOG: {
         getMachines: "/UsbLog/machines",
         getSessions: "/UsbLog/sessions",
+        searchFiles: "/UsbLog/files",
         getSessionFiles: (id: string) => `/UsbLog/sessions/${id}/files`,
         getMachineUsbs: "/UsbLog/machine-usbs",
         getDevices: "/UsbLog/devices",
@@ -34,7 +35,6 @@ const ENDPOINTS = {
         machineOptions: "/UsbLog/machine-options",
         ownerOptions: "/UsbLog/owner-options",
         policy: "/UsbLog/policy",
-        getAgents: "/UsbLog/agents",
         agentEvents: (machineName: string) => `/UsbLog/agents/${encodeURIComponent(machineName)}/events`,
         agent: (id: number) => `/UsbLog/agents/${id}`,
         purgeAgents: "/UsbLog/agents/purge",
@@ -46,7 +46,7 @@ const ENDPOINTS = {
         exportDevices: "/UsbLog/devices/export",
         exportSessions: "/UsbLog/sessions/export",
         exportFiles: "/UsbLog/files/export",
-        exportAgents: "/UsbLog/agents/export",
+        exportMachines: "/UsbLog/machines/export",
     },
 } as const;
 
@@ -56,17 +56,6 @@ export interface GetUsbDevicesParams {
     keyword?: string;
     isApproved?: boolean;
     deviceClass?: string;
-    branchId?: number;
-    departmentId?: number;
-    sortBy?: string;
-    sortDesc?: boolean;
-}
-
-export interface GetUsbAgentsParams {
-    pageIndex?: number;
-    pageSize?: number;
-    keyword?: string;
-    staleOnly?: boolean;
     branchId?: number;
     departmentId?: number;
     sortBy?: string;
@@ -107,6 +96,23 @@ export interface GetUsbMachinesParams {
     toDate?: string;
     connectedNowOnly?: boolean;
     sensitiveOnly?: boolean;
+    staleOnly?: boolean;
+    branchId?: number;
+    departmentId?: number;
+    sortBy?: string;
+    sortDesc?: boolean;
+}
+
+export interface SearchUsbFilesParams {
+    pageIndex?: number;
+    pageSize?: number;
+    keyword?: string;
+    extension?: string;
+    fromDate?: string;
+    toDate?: string;
+    // "out" = written to the USB, "in" = copied onto the PC, "deleted".
+    direction?: string;
+    sensitiveOnly?: boolean;
     branchId?: number;
     departmentId?: number;
     sortBy?: string;
@@ -120,6 +126,10 @@ export const UsbLogApi = {
     },
     getSessions: async (params: GetUsbSessionsParams = {}) => {
         const response = await api.get<ApiResponseWithPageNation<UsbSessionDto>>(withQuery(ENDPOINTS.USB_LOG.getSessions, { ...params }));
+        return response.data;
+    },
+    searchFiles: async (params: SearchUsbFilesParams = {}) => {
+        const response = await api.get<ApiResponseWithPageNation<UsbFileSearchDto>>(withQuery(ENDPOINTS.USB_LOG.searchFiles, { ...params }));
         return response.data;
     },
     getSessionFiles: async (
@@ -173,10 +183,6 @@ export const UsbLogApi = {
         const response = await api.put<ApiResponse<UsbPolicySettingDto>>(ENDPOINTS.USB_LOG.policy, body);
         return response.data;
     },
-    getAgents: async (params: GetUsbAgentsParams) => {
-        const response = await api.get<ApiResponseWithPageNation<UsbAgentDto>>(withQuery(ENDPOINTS.USB_LOG.getAgents, { ...params }));
-        return response.data;
-    },
     getAgentEvents: async (machineName: string) => {
         const response = await api.get<ApiResponse<UsbAgentEventDto[]>>(ENDPOINTS.USB_LOG.agentEvents(machineName));
         return response.data;
@@ -223,10 +229,9 @@ export const UsbLogApi = {
         return response.data;
     },
     exportDevices: (params: GetUsbDevicesParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportDevices, { ...params })),
-    // Same filter as the session list; files = file operations of those sessions.
     exportSessions: (params: GetUsbSessionsParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportSessions, { ...params })),
-    exportFiles: (params: GetUsbSessionsParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportFiles, { ...params })),
-    exportAgents: (params: GetUsbAgentsParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportAgents, { ...params })),
+    exportFiles: (params: SearchUsbFilesParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportFiles, { ...params })),
+    exportMachines: (params: GetUsbMachinesParams) => getForBlob(withQuery(ENDPOINTS.USB_LOG.exportMachines, { ...params })),
 };
 
 export { ENDPOINTS };

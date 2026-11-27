@@ -28,6 +28,8 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import { Pagination } from "@/components/ui/Pagination";
+import { readPersisted, usePersistOnChange, usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 const advancedTriggerClassName =
@@ -106,6 +108,36 @@ function ApprovalSummaryCell({
 
 type FormTypeFilter = "" | "office" | "production";
 
+const emptyAppliedFilters = {
+    fromDate: "",
+    toDate: "",
+    status: "",
+    formType: "" as FormTypeFilter,
+    workshopId: "" as number | "",
+    departmentId: "" as number | "",
+    groupId: "" as number | "",
+    productionTeamId: "" as number | "",
+    productionLineId: "" as number | "",
+    productionShiftTeamId: "" as number | "",
+};
+
+// What a tab keeps across opening a form and coming back.
+type ListSnapshot = {
+    pageIndex: number;
+    showAdvancedFilter: boolean;
+    fromDateInput: string;
+    toDateInput: string;
+    statusInput: string;
+    formTypeInput: FormTypeFilter;
+    workshopId: number | "";
+    departmentId: number | "";
+    groupId: number | "";
+    productionTeamId: number | "";
+    productionLineId: number | "";
+    productionShiftTeamId: number | "";
+    appliedFilters: typeof emptyAppliedFilters;
+};
+
 export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFormListPageProps) {
     const t = useTranslations("Attendance.OtFormList");
     const tCommon = useTranslations("Common");
@@ -116,6 +148,8 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
     const canCreate = hasPermission(user, "Attendance.OTForm.Create");
     const canBulkApprove = mode === "pending-approvals" && hasPermission(user, "Attendance.OTForm.Approve");
     const [forms, setForms] = useState<OtFormListItemDto[]>([]);
+    const listKey = `list:ot/forms:${mode}`;
+    const [saved] = useState(() => readPersisted<ListSnapshot>(listKey));
 
     // FE doesn't filter by current-step candidate (same as single approve); BE rejects per form.
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -125,37 +159,42 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
     const [bulkSecondaryPassword, setBulkSecondaryPassword] = useState("");
     const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
-    const [pageIndex, setPageIndex] = useState(1);
+    const [pageIndex, setPageIndex] = useState(saved?.pageIndex ?? 1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:attendance/components/ot-form/OtFormListPage", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
     // Draft filters, applied only on "Search".
     // Advanced filters collapsed by default; most searches only use date/status.
-    const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
-    const [fromDateInput, setFromDateInput] = useState("");
-    const [toDateInput, setToDateInput] = useState("");
-    const [statusInput, setStatusInput] = useState("");
+    const [showAdvancedFilter, setShowAdvancedFilter] = useState(saved?.showAdvancedFilter ?? false);
+    const [fromDateInput, setFromDateInput] = useState(saved?.fromDateInput ?? "");
+    const [toDateInput, setToDateInput] = useState(saved?.toDateInput ?? "");
+    const [statusInput, setStatusInput] = useState(saved?.statusInput ?? "");
     // BE supports these filters on every list endpoint, so they show on all tabs.
     // "" = all; "production" = floor forms (by line), "office" = office forms (by group).
-    const [formTypeInput, setFormTypeInput] = useState<FormTypeFilter>("");
-    const [workshopId, setWorkshopId] = useState<number | "">("");
-    const [departmentId, setDepartmentId] = useState<number | "">("");
-    const [groupId, setGroupId] = useState<number | "">("");
-    const [productionTeamId, setProductionTeamId] = useState<number | "">("");
-    const [productionLineId, setProductionLineId] = useState<number | "">("");
-    const [productionShiftTeamId, setProductionShiftTeamId] = useState<number | "">("");
-    const [appliedFilters, setAppliedFilters] = useState({
-        fromDate: "",
-        toDate: "",
-        status: "",
-        formType: "" as FormTypeFilter,
-        workshopId: "" as number | "",
-        departmentId: "" as number | "",
-        groupId: "" as number | "",
-        productionTeamId: "" as number | "",
-        productionLineId: "" as number | "",
-        productionShiftTeamId: "" as number | "",
-    });
+    const [formTypeInput, setFormTypeInput] = useState<FormTypeFilter>(saved?.formTypeInput ?? "");
+    const [workshopId, setWorkshopId] = useState<number | "">(saved?.workshopId ?? "");
+    const [departmentId, setDepartmentId] = useState<number | "">(saved?.departmentId ?? "");
+    const [groupId, setGroupId] = useState<number | "">(saved?.groupId ?? "");
+    const [productionTeamId, setProductionTeamId] = useState<number | "">(saved?.productionTeamId ?? "");
+    const [productionLineId, setProductionLineId] = useState<number | "">(saved?.productionLineId ?? "");
+    const [productionShiftTeamId, setProductionShiftTeamId] = useState<number | "">(saved?.productionShiftTeamId ?? "");
+    const [appliedFilters, setAppliedFilters] = useState(saved?.appliedFilters ?? emptyAppliedFilters);
+    usePersistOnChange(listKey, {
+        pageIndex,
+        showAdvancedFilter,
+        fromDateInput,
+        toDateInput,
+        statusInput,
+        formTypeInput,
+        workshopId,
+        departmentId,
+        groupId,
+        productionTeamId,
+        productionLineId,
+        productionShiftTeamId,
+        appliedFilters,
+    } satisfies ListSnapshot);
 
     // Switching type drops the filters that no longer apply (snapshot compare in render, frontend-conventions.md §3).
     const [prevFormTypeInput, setPrevFormTypeInput] = useState(formTypeInput);
@@ -185,23 +224,12 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
         setProductionTeamId("");
         setProductionLineId("");
         setProductionShiftTeamId("");
-        setAppliedFilters({
-            fromDate: "",
-            toDate: "",
-            status: "",
-            formType: "",
-            workshopId: "",
-            departmentId: "",
-            groupId: "",
-            productionTeamId: "",
-            productionLineId: "",
-            productionShiftTeamId: "",
-        });
+        setAppliedFilters(emptyAppliedFilters);
     }
 
     const listParams = {
         pageIndex,
-        pageSize: PAGE_SIZE,
+        pageSize,
         fromDate: appliedFilters.fromDate || undefined,
         toDate: appliedFilters.toDate || undefined,
         status: appliedFilters.status !== "" ? Number(appliedFilters.status) : undefined,
@@ -338,7 +366,7 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                 : mode === "all-forms"
                 ? OtFormApi.getAllForms(listParams)
                 : OtFormApi.getMyParticipations(listParams),
-        [mode, pageIndex, appliedFilters],
+        [mode, pageIndex, pageSize, appliedFilters],
         (result) => {
             setForms(result.data);
             setTotalCount(result.totalCount);
@@ -377,18 +405,7 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
         setProductionLineId("");
         setProductionShiftTeamId("");
         setPageIndex(1);
-        setAppliedFilters({
-            fromDate: "",
-            toDate: "",
-            status: "",
-            formType: "",
-            workshopId: "",
-            departmentId: "",
-            groupId: "",
-            productionTeamId: "",
-            productionLineId: "",
-            productionShiftTeamId: "",
-        });
+        setAppliedFilters(emptyAppliedFilters);
     };
 
     // Clear the selection when the list changes, via render-time snapshot compare.
@@ -813,7 +830,7 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="hidden overflow-x-auto md:block">
+                <TableScroll className="hidden md:block">
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.1em] text-[#5e3f3a]">
@@ -908,7 +925,7 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <ul className="divide-y divide-[#f1f5f9] md:hidden">
                     {!isLoading && forms.length === 0 && (
@@ -950,6 +967,8 @@ export default function OtFormListPage({ mode, hideHeading = false, tabs }: OtFo
                 </ul>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

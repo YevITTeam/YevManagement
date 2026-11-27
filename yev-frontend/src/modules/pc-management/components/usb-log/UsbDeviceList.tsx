@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FilterX, Pencil, RefreshCw, Search } from "lucide-react";
+import { Layers, Lock, Pencil, ShieldCheck, ShieldOff, Tag } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "react-toastify";
 
@@ -19,24 +19,24 @@ import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
 import type { UsbDeviceDto } from "@/modules/pc-management/types/usb-log.dto";
 import UsbExportButton from "./UsbExportButton";
+import { ErrorBar, FilterActions, IconButton, IconFlag, ListToolbar, SearchField, TableStatusRows, fieldClassName, rowClassName, theadRowClassName } from "./UsbListToolbar";
 import { UsbOwnerCell, UsbOwnerFilterFields, useUsbOwnerOptions } from "./UsbOwnerFilter";
 import UsbPolicyBar from "./UsbPolicyBar";
 import { ACCESS_LEVEL_OPTIONS, DEVICE_CLASSES, USB_ACCESS_LEVEL, deviceClassLabel, formatBytes, formatDateTime, usbLabel } from "./usb-log-format";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 20;
 
 const fieldLabelClassName = "mb-1 block text-xs font-semibold text-[#5e3f3a]";
-const fieldClassName =
-    "h-9 w-full rounded-md border border-[#e0e3e5] bg-white px-3 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
-const iconButtonClassName =
-    "flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#e0e3e5] bg-white text-[#5e3f3a] transition hover:bg-[#f2f4f6] disabled:cursor-not-allowed disabled:opacity-50";
+const dialogFieldClassName = `${fieldClassName} w-full`;
 
 type ApprovalFilter = "" | "approved" | "notApproved";
 
 const emptyFilters = { keyword: "", approval: "" as ApprovalFilter, deviceClass: "", branchId: 0, departmentId: 0 };
 
 const APPROVAL_OPTIONS: { value: ApprovalFilter; key: string }[] = [
-    { value: "", key: "common.all" },
+    { value: "", key: "devices.allApproval" },
     { value: "approved", key: "devices.approved" },
     { value: "notApproved", key: "common.notApproved" },
 ];
@@ -58,6 +58,7 @@ export default function UsbDeviceList() {
     const [draft, setDraft] = useState(emptyFilters);
     const [applied, setApplied] = useState(emptyFilters);
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:pc-management/components/usb-log/UsbDeviceList", PAGE_SIZE);
     const [sort, setSort] = useState<SortState>(NO_SORT);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
@@ -77,7 +78,7 @@ export default function UsbDeviceList() {
     const owners = useUsbOwnerOptions();
     const approvalOptions = APPROVAL_OPTIONS.map(({ value, key }) => ({ value, label: t(key) }));
     const scopeOptions = SCOPE_OPTIONS.map(({ value, key }) => ({ value, label: t(key) }));
-    const classOptions = [{ value: "", label: t("common.all") }, ...DEVICE_CLASSES.map((value) => ({ value, label: deviceClassLabel(t, value) }))];
+    const classOptions = [{ value: "", label: t("devices.allClasses") }, ...DEVICE_CLASSES.map((value) => ({ value, label: deviceClassLabel(t, value) }))];
     const accessLevelOptions = ACCESS_LEVEL_OPTIONS.map(({ value, key }) => ({ value, label: t(`accessLevel.${key}`) }));
 
     const openAlias = (row: UsbDeviceDto) => {
@@ -105,7 +106,7 @@ export default function UsbDeviceList() {
         () =>
             UsbLogApi.getDevices({
                 pageIndex,
-                pageSize: PAGE_SIZE,
+                pageSize,
                 keyword: applied.keyword || undefined,
                 isApproved: applied.approval === "" ? undefined : applied.approval === "approved",
                 deviceClass: applied.deviceClass || undefined,
@@ -113,7 +114,7 @@ export default function UsbDeviceList() {
                 departmentId: applied.departmentId || undefined,
                 ...sort,
             }),
-        [pageIndex, applied, sort],
+        [pageIndex, pageSize, applied, sort],
         (result) => {
             setRows(result.data);
             setTotalCount(result.totalCount);
@@ -214,115 +215,69 @@ export default function UsbDeviceList() {
         }
     };
 
+    const summary = isLoading ? t("common.loadingData") : t("common.shownDevices", { shown: rows.length, total: totalCount });
+    const columns = canApprove ? 6 : 5;
+
     return (
-        <div className="space-y-4">
+        <div className="space-y-3">
             <UsbPolicyBar canEdit={canApprove} />
 
-            <section className="rounded-lg border border-[#e0e3e5] bg-white p-2.5 shadow-sm">
-                <div className="flex flex-wrap items-end gap-x-2 gap-y-2 [&>label]:w-[calc(50%-0.25rem)] sm:[&>label]:w-40">
-                    <label className="block max-sm:w-full! sm:w-64!">
-                        <span className={fieldLabelClassName}>{t("common.search")}</span>
-                        <input
-                            value={draft.keyword}
-                            onChange={(event) => setDraft({ ...draft, keyword: event.target.value })}
-                            onKeyDown={(event) => event.key === "Enter" && handleSearch()}
-                            placeholder={t("devices.searchPlaceholder")}
-                            className={fieldClassName}
-                        />
-                    </label>
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("common.approve")}</span>
+            <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
+                <ListToolbar
+                    actions={<UsbExportButton items={[{ label: t("devices.export"), fallbackFileName: "ThietBiUSB.xlsx", download: () => UsbLogApi.exportDevices(exportFilter()) }]} />}
+                >
+                    <SearchField value={draft.keyword} onChange={(keyword) => setDraft({ ...draft, keyword })} onEnter={handleSearch} placeholder={t("devices.searchPlaceholder")} />
+                    <div className="w-[calc(50%-0.25rem)] sm:w-40">
                         <StyledSelect
                             value={draft.approval}
                             onChange={(approval) => setDraft({ ...draft, approval })}
                             options={approvalOptions}
-                            triggerClassName={`${fieldClassName} pr-8`}
+                            ariaLabel={t("common.approve")}
+                            triggerClassName={`${dialogFieldClassName} pr-8`}
                         />
-                    </label>
-                    <label className="block">
-                        <span className={fieldLabelClassName}>{t("devices.class")}</span>
+                    </div>
+                    <div className="w-[calc(50%-0.25rem)] sm:w-36">
                         <StyledSelect
                             value={draft.deviceClass}
                             onChange={(deviceClass) => setDraft({ ...draft, deviceClass })}
                             options={classOptions}
-                            triggerClassName={`${fieldClassName} pr-8`}
+                            ariaLabel={t("devices.class")}
+                            triggerClassName={`${dialogFieldClassName} pr-8`}
                         />
-                    </label>
+                    </div>
                     <UsbOwnerFilterFields options={owners} value={draft} onChange={(owner) => setDraft({ ...draft, ...owner })} />
-                    <div className="flex items-center gap-1.5">
-                        <button
-                            onClick={handleSearch}
-                            disabled={isLoading}
-                            title={t("common.search")}
-                            aria-label={t("common.search")}
-                            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md bg-[#e3000f] text-white transition hover:bg-[#b40009] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <Search className="h-4 w-4" />
-                        </button>
-                        <button onClick={handleReset} disabled={isLoading} title={t("common.clearFilter")} aria-label={t("common.clearFilter")} className={iconButtonClassName}>
-                            <FilterX className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => refetch()} disabled={isLoading} title={t("common.refresh")} aria-label={t("common.refresh")} className={iconButtonClassName}>
-                            <RefreshCw className="h-4 w-4" />
-                        </button>
-                    </div>
-                    <div className="sm:ml-auto">
-                        <UsbExportButton
-                            label="Excel"
-                            title={t("devices.exportTitle")}
-                            fallbackFileName="ThietBiUSB.xlsx"
-                            download={() => UsbLogApi.exportDevices(exportFilter())}
-                        />
-                    </div>
-                </div>
-            </section>
+                    <FilterActions onSearch={handleSearch} onReset={handleReset} onRefresh={() => refetch()} disabled={isLoading} />
+                </ListToolbar>
 
-            <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
-                {error && <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
+                <ErrorBar message={error} />
 
-                <div className="overflow-x-auto">
-                    <table className="min-w-full border-collapse text-left">
+                <TableScroll className="relative">
+                    <table className="min-w-full border-collapse text-left text-sm">
                         <thead>
-                            <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
+                            <tr className={theadRowClassName}>
                                 <SortableTh label={t("devices.device")} sortKey="name" sort={sort} onSort={handleSort} className="px-3 py-2" />
-                                <th className="hidden whitespace-nowrap px-3 py-2 md:table-cell">{t("common.owner")}</th>
-                                <SortableTh label={t("common.approve")} sortKey="isApproved" sort={sort} onSort={handleSort} className="whitespace-nowrap px-3 py-2" />
-                                <SortableTh label={t("common.lastSeen")} sortKey="lastSeenAt" sort={sort} onSort={handleSort} className="hidden whitespace-nowrap px-3 py-2 lg:table-cell" />
-                                <SortableTh label={t("common.sessionCount")} sortKey="sessionCount" sort={sort} onSort={handleSort} className="hidden whitespace-nowrap px-3 py-2 text-right lg:table-cell" />
-                                {canApprove && <th className="whitespace-nowrap px-3 py-2 text-right">{t("common.actions")}</th>}
+                                <th className="hidden px-3 py-2 md:table-cell">{t("common.owner")}</th>
+                                <SortableTh label={t("common.approve")} sortKey="isApproved" sort={sort} onSort={handleSort} className="px-3 py-2" />
+                                <SortableTh label={t("common.lastSeen")} sortKey="lastSeenAt" sort={sort} onSort={handleSort} className="hidden px-3 py-2 lg:table-cell" />
+                                <SortableTh label={t("common.sessionCount")} sortKey="sessionCount" sort={sort} onSort={handleSort} className="hidden px-3 py-2 text-right lg:table-cell" />
+                                {canApprove && (
+                                    <th className="px-3 py-2">
+                                        <span className="sr-only">{t("common.actions")}</span>
+                                    </th>
+                                )}
                             </tr>
                         </thead>
                         <tbody>
-                            {!isLoading && rows.length === 0 && (
-                                <tr>
-                                    <td colSpan={canApprove ? 6 : 5} className="px-6 py-8 text-center text-sm text-[#5e3f3a]">
-                                        {t("common.noData")}
-                                    </td>
-                                </tr>
-                            )}
+                            <TableStatusRows loading={isLoading} empty={rows.length === 0} columns={columns} />
                             {rows.map((row) => {
                                 const isDisk = row.deviceClass === "DiskDrive";
                                 const isApproved = row.isApproved || row.approvedMachines.length > 0;
                                 return (
-                                    <tr key={row.id} className="border-b border-[#f1f5f9] align-top">
-                                        <td className="px-3 py-2 text-sm text-[#191c1e]">
-                                            <div className="flex items-center gap-1">
+                                    <tr key={row.id} className={`${rowClassName} align-top`}>
+                                        <td className="px-3 py-2 text-[#191c1e]">
+                                            <div className="flex items-center gap-1.5">
                                                 <span className="font-semibold">{usbLabel(row)}</span>
-                                                {row.isSharedSerial && (
-                                                    <span title={t("devices.sharedSerialTitle")}>
-                                                        <Badge variant="warning">{t("common.sharedSerial")}</Badge>
-                                                    </span>
-                                                )}
-                                                {canApprove && (
-                                                    <button
-                                                        onClick={() => openAlias(row)}
-                                                        title={t("devices.setAlias")}
-                                                        aria-label={t("devices.setAlias")}
-                                                        className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-[#8a8f94] transition hover:bg-[#f2f4f6] hover:text-[#191c1e]"
-                                                    >
-                                                        <Pencil className="h-3.5 w-3.5" />
-                                                    </button>
-                                                )}
+                                                {row.isSharedSerial && <IconFlag icon={Layers} tone="warning" label={t("devices.sharedSerialTitle")} />}
                                             </div>
                                             <div className="break-all text-xs text-[#5e3f3a]">
                                                 {[
@@ -336,21 +291,18 @@ export default function UsbDeviceList() {
                                                     .join(" · ")}
                                             </div>
                                         </td>
-                                        <td className="hidden px-3 py-2 text-sm text-[#191c1e] md:table-cell">
+                                        <td className="hidden px-3 py-2 text-[#191c1e] md:table-cell">
                                             <UsbOwnerCell branchName={row.branchName} departmentName={row.departmentName} />
                                         </td>
-                                        <td className="px-3 py-2 text-sm">
+                                        <td className="px-3 py-2">
                                             {isApproved ? (
-                                                <div title={row.approvedBy ? `${row.approvedBy}, ${formatDateTime(row.approvedAt)}` : undefined}>
-                                                    <div className="flex flex-wrap gap-1">
+                                                <div title={row.approvedBy ? `${row.approvedBy}, ${formatDateTime(row.approvedAt)}` : undefined} className="space-y-1">
+                                                    <div className="flex flex-wrap items-center gap-1">
                                                         <Badge variant="success">{row.isApproved ? t("devices.allMachines") : t("devices.machineCount", { count: row.approvedMachines.length })}</Badge>
-                                                        {row.accessLevel === USB_ACCESS_LEVEL.ReadOnly && <Badge variant="warning">{t("accessLevel.readOnly")}</Badge>}
+                                                        {row.accessLevel === USB_ACCESS_LEVEL.ReadOnly && <IconFlag icon={Lock} tone="warning" label={t("accessLevel.readOnly")} />}
                                                     </div>
                                                     {row.approvedMachines.length > 0 && (
-                                                        <div
-                                                            className="mt-1 text-xs text-[#191c1e]"
-                                                            title={row.approvedMachines.map((m) => m.deviceCode).join(", ")}
-                                                        >
+                                                        <div className="text-xs text-[#191c1e]" title={row.approvedMachines.map((m) => m.deviceCode).join(", ")}>
                                                             {row.approvedMachines
                                                                 .slice(0, 3)
                                                                 .map((m) => m.deviceCode)
@@ -358,7 +310,7 @@ export default function UsbDeviceList() {
                                                             {row.approvedMachines.length > 3 && ` +${row.approvedMachines.length - 3}`}
                                                         </div>
                                                     )}
-                                                    {row.approvalNote && <div className="mt-1 text-xs text-[#5e3f3a]">{row.approvalNote}</div>}
+                                                    {row.approvalNote && <div className="text-xs text-[#5e3f3a]">{row.approvalNote}</div>}
                                                 </div>
                                             ) : isDisk ? (
                                                 <Badge variant="neutral">{t("common.notApproved")}</Badge>
@@ -366,36 +318,26 @@ export default function UsbDeviceList() {
                                                 <span className="text-xs text-[#8a8f94]">{t("devices.logOnly")}</span>
                                             )}
                                         </td>
-                                        <td className="hidden px-3 py-2 text-sm text-[#5e3f3a] lg:table-cell">
-                                            <div className="whitespace-nowrap">{formatDateTime(row.lastSeenAt)}</div>
+                                        <td className="hidden px-3 py-2 text-[#5e3f3a] lg:table-cell">
+                                            <div className="whitespace-nowrap tabular-nums">{formatDateTime(row.lastSeenAt)}</div>
                                             {row.lastMachineName && <div className="text-xs">{row.lastMachineName}</div>}
                                         </td>
-                                        <td className="hidden px-3 py-2 text-right text-sm text-[#191c1e] lg:table-cell">{row.sessionCount}</td>
+                                        <td className="hidden px-3 py-2 text-right tabular-nums text-[#191c1e] lg:table-cell">{row.sessionCount}</td>
                                         {canApprove && (
-                                            <td className="whitespace-nowrap px-3 py-2 text-right text-sm">
-                                                {isApproved ? (
-                                                    <div className="flex justify-end gap-3">
-                                                        <button
-                                                            onClick={() => openApprove(row)}
-                                                            className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                        >
-                                                            {t("devices.edit")}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setRevoking(row)}
-                                                            className="cursor-pointer font-semibold text-[#930006] transition hover:text-[#7a0005]"
-                                                        >
-                                                            {t("common.revoke")}
-                                                        </button>
-                                                    </div>
-                                                ) : isDisk && row.serialNumber ? (
-                                                    <button
-                                                        onClick={() => openApprove(row)}
-                                                        className="cursor-pointer font-semibold text-[#5e3f3a] transition hover:text-[#191c1e]"
-                                                    >
-                                                        {t("common.approve")}
-                                                    </button>
-                                                ) : null}
+                                            <td className="px-2 py-1.5">
+                                                {/* Alias last: it exists on every row, so it stays in one column while the approval icons vary. */}
+                                                <div className="flex justify-end gap-0.5">
+                                                    {isApproved ? (
+                                                        <>
+                                                            <IconButton icon={Pencil} label={t("devices.edit")} size="sm" variant="ghost" onClick={() => openApprove(row)} />
+                                                            <IconButton icon={ShieldOff} label={t("common.revoke")} size="sm" variant="danger" onClick={() => setRevoking(row)} />
+                                                        </>
+                                                    ) : (
+                                                        isDisk &&
+                                                        row.serialNumber && <IconButton icon={ShieldCheck} label={t("common.approve")} size="sm" variant="ghost" onClick={() => openApprove(row)} />
+                                                    )}
+                                                    <IconButton icon={Tag} label={t("devices.setAlias")} size="sm" variant="ghost" onClick={() => openAlias(row)} />
+                                                </div>
                                             </td>
                                         )}
                                     </tr>
@@ -403,16 +345,9 @@ export default function UsbDeviceList() {
                             })}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
-                <Pagination
-                    pageIndex={pageIndex}
-                    totalPages={totalPages}
-                    onPageChange={setPageIndex}
-                    disabled={isLoading}
-                    summary={isLoading ? t("common.loadingData") : t("common.shownDevices", { shown: rows.length, total: totalCount })}
-                    compactSummary={isLoading ? t("common.loadingData") : t("common.shownDevices", { shown: rows.length, total: totalCount })}
-                />
+                <Pagination pageSize={pageSize} onPageSizeChange={setPageSize} pageIndex={pageIndex} totalPages={totalPages} onPageChange={setPageIndex} disabled={isLoading} summary={summary} compactSummary={summary} />
             </section>
 
             <FormDialog
@@ -434,7 +369,7 @@ export default function UsbDeviceList() {
                             value={branchId}
                             onChange={setBranchId}
                             options={[{ value: 0, label: t("devices.pickBranch") }, ...owners.branches]}
-                            triggerClassName={`${fieldClassName} pr-8`}
+                            triggerClassName={`${dialogFieldClassName} pr-8`}
                         />
                     </label>
                     <label className="block">
@@ -443,17 +378,17 @@ export default function UsbDeviceList() {
                             value={departmentId}
                             onChange={setDepartmentId}
                             options={[{ value: 0, label: t("devices.pickDepartment") }, ...owners.departments]}
-                            triggerClassName={`${fieldClassName} pr-8`}
+                            triggerClassName={`${dialogFieldClassName} pr-8`}
                         />
                     </label>
                 </div>
                 <label className="block">
                     <span className={fieldLabelClassName}>{t("devices.scope")}</span>
-                    <StyledSelect value={scope} onChange={setScope} options={scopeOptions} triggerClassName={`${fieldClassName} pr-8`} />
+                    <StyledSelect value={scope} onChange={setScope} options={scopeOptions} triggerClassName={`${dialogFieldClassName} pr-8`} />
                 </label>
                 <label className="block">
                     <span className={fieldLabelClassName}>{t("devices.access")}</span>
-                    <StyledSelect value={accessLevel} onChange={setAccessLevel} options={accessLevelOptions} triggerClassName={`${fieldClassName} pr-8`} />
+                    <StyledSelect value={accessLevel} onChange={setAccessLevel} options={accessLevelOptions} triggerClassName={`${dialogFieldClassName} pr-8`} />
                 </label>
                 {scope === "machines" && (
                     <div>
@@ -475,7 +410,7 @@ export default function UsbDeviceList() {
                         onChange={(event) => setNote(event.target.value)}
                         maxLength={255}
                         placeholder={t("devices.notePlaceholder")}
-                        className={fieldClassName}
+                        className={dialogFieldClassName}
                     />
                 </label>
             </FormDialog>
@@ -499,7 +434,7 @@ export default function UsbDeviceList() {
                     autoFocus
                     aria-label={t("devices.alias")}
                     placeholder={t("devices.aliasPlaceholder")}
-                    className={fieldClassName}
+                    className={dialogFieldClassName}
                 />
             </FormDialog>
 

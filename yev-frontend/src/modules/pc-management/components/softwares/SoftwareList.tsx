@@ -14,6 +14,8 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 const PRIORITY_FILTER_ALL = "all";
@@ -31,6 +33,7 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
     const [prioritySort, setPrioritySort] = useState<PrioritySort>("none");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:pc-management/components/softwares/SoftwareList", PAGE_SIZE);
 
     const [formOpen, setFormOpen] = useState(false);
     const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -111,15 +114,15 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
     }, [allSoftwares, appliedKeyword, priorityFilter, prioritySort]);
 
     const totalCount = filteredSoftwares.length;
-    const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
     useEffect(() => {
         if (pageIndex > totalPages) setPageIndex(totalPages);
-    }, [pageIndex, totalPages]);
+    }, [pageIndex, pageSize, totalPages]);
 
     const pagedSoftwares = useMemo(
-        () => filteredSoftwares.slice((pageIndex - 1) * PAGE_SIZE, pageIndex * PAGE_SIZE),
-        [filteredSoftwares, pageIndex]
+        () => filteredSoftwares.slice((pageIndex - 1) * pageSize, pageIndex * pageSize),
+        [filteredSoftwares, pageIndex, pageSize]
     );
 
 
@@ -240,7 +243,7 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
@@ -306,9 +309,11 @@ const SoftwareList = forwardRef<ListHandle, ListToolbarProps>(function SoftwareL
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

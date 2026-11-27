@@ -21,7 +21,9 @@
     "to": "から",
     "viewDetail": "詳細を見る",
     "hourPlaceholder": "時",
-    "minutePlaceholder": "分"
+    "minutePlaceholder": "分",
+    "rowsPerPage": "表示件数",
+    "rowsPerPageTitle": "1ページの表示件数（1～1000）"
   },
   "Login": {
     "title": "ログイン",
@@ -2779,14 +2781,14 @@
     "tabs": {
       "machines": "PC",
       "devices": "USBデバイス",
-      "agents": "エージェント"
+      "files": "ファイル検索"
     },
     "common": {
       "search": "検索",
       "clearFilter": "フィルター解除",
       "refresh": "更新",
       "noData": "データがありません。",
-      "loadingData": "データを読み込んでいます...",
+      "loadingData": "読み込み中...",
       "loading": "読み込み中...",
       "cancel": "キャンセル",
       "delete": "削除",
@@ -2800,12 +2802,10 @@
       "branch": "工場",
       "department": "部署",
       "owner": "工場 · 部署",
-      "all": "すべて",
       "note": "備考",
       "lastSeen": "最終日時",
       "sessionCount": "接続回数",
       "file": "ファイル",
-      "fileEvents": "ファイル操作",
       "actions": "操作",
       "connectedNow": "接続中",
       "stale": "通信途絶",
@@ -2815,14 +2815,18 @@
       "revokeTitle": "許可の取消",
       "approveFailed": "USBの許可に失敗しました。",
       "revokeFailed": "USB許可の取消に失敗しました。",
-      "sharedSerial": "共通シリアル",
       "noSerial": "シリアルなし",
-      "unpermittedMachine": "USB未有効のPC",
       "unpermittedMachineTitle": "接続時、機器管理で「USB使用」が有効になっていなかったPC",
       "exportFailed": "Excel出力に失敗しました。",
       "shownMachines": "{total}台中{shown}台を表示",
       "shownDevices": "{total}件中{shown}件を表示",
-      "shownSessions": "{total}件中{shown}件を表示"
+      "shownSessions": "{total}件中{shown}件を表示",
+      "allBranches": "全工場",
+      "allDepartments": "全部署",
+      "dateRange": "USB接続期間",
+      "export": "Excel出力",
+      "notConnected": "未接続",
+      "online": "オンライン"
     },
     "policy": {
       "approved": {
@@ -2866,41 +2870,40 @@
     },
     "stats": {
       "loadError": "USB統計を読み込めませんでした。",
-      "agentOnline": "オンラインのエージェント",
+      "agentOnline": "オンライン",
       "agentOnlineTitle": "直近15分以内に通信あり",
       "staleTitle": "24時間通信なし",
-      "machinesConnectedNow": "USB接続中のPC",
-      "blockedNow": "接続中のブロックUSB",
+      "machinesConnectedNow": "USB接続中",
+      "blockedNow": "ブロック中",
       "sessionsToday": "本日の接続回数",
       "blockedToday": "本日のブロック",
       "approvedUsb": "許可済みUSB",
       "approvedUsbTitle": "これまでに接続されたストレージUSBの総数に対して",
-      "sensitiveToday": "本日の要注意ファイル"
+      "sensitiveToday": "本日の要注意",
+      "blockedNowTitle": "接続中でブロックされている未許可USB"
     },
     "owner": {
       "loadError": "工場・部署一覧を読み込めませんでした。"
     },
     "machines": {
       "loadError": "USB使用PC一覧を読み込めませんでした。",
-      "searchPlaceholder": "PCコード、PC名、ユーザー",
+      "searchPlaceholder": "PCコード、PC名、ユーザー、バージョン",
       "exportSessions": "接続履歴",
-      "exportSessionsTitle": "フィルター条件でUSB接続履歴をExcel出力",
-      "exportFilesTitle": "フィルター条件でUSB上のファイル操作（USBからPCへのコピーを含む）をExcel出力",
-      "lastUser": "最終ユーザー",
-      "empty": "USBを使用したPCはまだありません。",
-      "writeBlocked": "書き込みブロック",
-      "writeBlockedTitle": "書き込みがブロックされたUSBが接続中のPC"
+      "empty": "該当するPCはありません。",
+      "writeBlockedTitle": "書き込みがブロックされたUSBが接続中のPC",
+      "exportMachines": "PC一覧",
+      "lastConnected": "最終USB接続",
+      "noAgent": "エージェントなし"
     },
     "machineDetail": {
       "back": "戻る",
-      "title": "PC {machine} のUSB",
-      "viewDevice": "機器を表示"
+      "title": "PCのUSBデバイス",
+      "viewDevice": "機器管理で表示"
     },
     "machineUsbs": {
       "loadError": "USB一覧を読み込めませんでした。",
       "approveHereSuccess": "このPCでUSBを許可しました。",
       "revokeHereSuccess": "このPCでのUSB許可を取り消しました。",
-      "lastConnected": "最終接続",
       "approvedAll": "全PCで許可",
       "approvedHere": "このPCのみ許可",
       "viewSessions": "接続履歴を表示",
@@ -2911,16 +2914,13 @@
     },
     "sessions": {
       "loadError": "USBログを読み込めませんでした。",
-      "title": "USBログ",
-      "searchPlaceholder": "PCコード、ユーザー、USB名/シリアル",
       "connectedAt": "接続日時",
       "disconnectedAt": "取り外し日時",
       "drive": "ドライブ",
       "detail": "詳細",
       "unknown": "不明",
       "unknownTitle": "PCのエージェントから通信がない（PCの電源オフ、エージェントの停止またはアンインストール）ため、取り外し日時は不明です",
-      "hide": "閉じる",
-      "view": "表示"
+      "view": "ファイル操作を表示"
     },
     "files": {
       "loadError": "ファイル一覧を読み込めませんでした。",
@@ -2931,7 +2931,6 @@
       "next": "次へ",
       "sensitive": "要注意",
       "sensitiveOnly": "要注意ファイルのみ",
-      "sensitiveCount": "要注意 {count}",
       "sensitiveTitle": "文書・図面・DB・圧縮・鍵ファイルまたは10 MB以上のファイルをUSBへ書き込み、またはUSBから実行可能ファイルをPCへコピー"
     },
     "devices": {
@@ -2949,14 +2948,13 @@
       "revokeSuccess": "USBの許可を取り消しました。",
       "searchPlaceholder": "名前、シリアル、VID/PID、備考",
       "class": "種類",
-      "exportTitle": "フィルター条件でUSB一覧をExcel出力",
       "device": "デバイス",
       "sharedSerialTitle": "USBケースが製品シリーズ共通のシリアルしか返さず、エージェントが内部ドライブのシリアルを読めません：許可すると同型のケースすべてが許可されます",
       "alias": "表示名",
       "setAlias": "表示名を設定",
       "aliasPlaceholder": "例：経理用電子署名トークン",
       "logOnly": "ログのみ",
-      "edit": "編集",
+      "edit": "許可を編集",
       "approveTitle": "USBの許可",
       "pickBranch": "工場を選択",
       "pickDepartment": "部署を選択",
@@ -2964,7 +2962,10 @@
       "access": "権限",
       "machinesPlaceholder": "PCコード、PC名で検索",
       "notePlaceholder": "保管者、用途",
-      "revokeMessage": "ブロックモード中は、USB {usb} は再びブロックされます。"
+      "revokeMessage": "ブロックモード中は、USB {usb} は再びブロックされます。",
+      "allApproval": "全ステータス",
+      "allClasses": "全種類",
+      "export": "USB一覧をExcel出力"
     },
     "policyBar": {
       "modes": {
@@ -2976,32 +2977,25 @@
       "loadError": "USBブロックモードを読み込めませんでした。",
       "saveSuccess": "USBブロックモードを保存しました。",
       "saveFailed": "USBブロックモードの保存に失敗しました。",
-      "label": "USBブロック",
+      "label": "USBブロックモード",
       "modeAria": "USBブロックモード",
       "machinesPlaceholder": "テスト対象PC、空欄 = 全PC",
       "machinesTitle": "PC名またはPCコードをカンマ区切りで入力。一覧にないPCはテストモードで動作します。",
       "machinesAria": "ブロック適用PC"
     },
     "agents": {
-      "loadError": "エージェント一覧を読み込めませんでした。",
       "deleteSuccess": "PCを一覧から削除しました。",
       "deleteFailed": "PCの削除に失敗しました。",
       "purgeSelectType": "削除するPCの種類を選択してください。",
       "purgeSuccess": "{count}台のPCを一覧から削除しました。",
       "purgeFailed": "一覧の整理に失敗しました。",
       "eventsLoadError": "エージェントログを読み込めませんでした。",
-      "searchPlaceholder": "PC名、ユーザー、バージョン",
       "staleTitle": "24時間通信なし：PCの電源オフ、エージェントの停止またはアンインストール",
-      "purge": "一覧を整理",
       "purgeButtonTitle": "エージェントをアンインストールしたPCや長期間通信のないPCを一覧から削除",
-      "expand": "展開",
       "version": "バージョン",
-      "firstSeen": "導入日",
       "lastSeen": "最終通信",
       "events": "イベント",
-      "viewEvents": "エージェントログを表示",
       "noEvents": "ログはありません（エージェント1.3より前は送信しません）。",
-      "removeFromList": "一覧から削除",
       "removeMachineAria": "{machine} を一覧から削除",
       "deleteTitle": "PCを一覧から削除",
       "deleteMessage": "{machine} をエージェント一覧から削除しますか？USB履歴は残ります。エージェントが稼働中のPCは自動的に再表示されます。",
@@ -3011,7 +3005,7 @@
       "purgeOfflineDays": "日を超えたPC",
       "offlineDaysAria": "通信なしの日数",
       "purgeNote": "USB履歴とエージェントログは残ります。",
-      "exportTitle": "フィルター条件でエージェント一覧をExcel出力"
+      "logTitle": "エージェントログ"
     },
     "settings": {
       "loadError": "エージェント設定を読み込めませんでした。",
@@ -3028,7 +3022,7 @@
       "noAutoUpdate": "自動更新しない",
       "trackCopyIn": "USBからPCへのコピーを記録",
       "trackCopyInTitle": "USBからPCのディスクへコピーされたファイルをエージェントが記録します（サイズと更新日時から推定。USB上で直接開いたファイルや解凍は検出できません）",
-      "syncSeconds": "同期（秒）",
+      "syncSeconds": "同期間隔",
       "syncTitle": "エージェントはこの間隔（15～600秒）でサーバーに問い合わせます：許可やブロックモードの変更は最大1周期でPCに反映されます。エージェント1.4より前は常に60秒。",
       "purgeAfter": "アンインストール済みPCの削除",
       "purgeAfterTitle": "エージェントをアンインストールしたPCはこの日数後に一覧から外れます。空欄 = 保持。USB履歴は残ります。",
@@ -3058,7 +3052,22 @@
       "rolling": "配布中",
       "deleteReleaseAria": "バージョン {version} を削除",
       "deleteReleaseTitle": "エージェント版の削除",
-      "deleteReleaseMessage": "バージョン {version} をサーバーから削除しますか？"
+      "deleteReleaseMessage": "バージョン {version} をサーバーから削除しますか？",
+      "title": "エージェント設定",
+      "seconds": "秒",
+      "days": "日"
+    },
+    "fileSearch": {
+      "searchPlaceholder": "ファイル名・パス",
+      "extension": "拡張子",
+      "dateRange": "操作期間",
+      "allDirections": "すべての操作",
+      "out": "USBへ書き込み",
+      "in": "PCへコピー",
+      "deleted": "USB上で削除",
+      "empty": "該当するファイル操作はありません。",
+      "loadError": "ファイル検索結果を読み込めません。",
+      "shown": "{total}件中{shown}件を表示"
     }
   }
 }

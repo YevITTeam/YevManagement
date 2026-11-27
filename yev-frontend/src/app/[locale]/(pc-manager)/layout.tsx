@@ -20,7 +20,7 @@ export default function PcManagerLayout({ children }: { children: ReactNode }) {
           style={{ marginLeft: "var(--sidebar-w, 13.75rem)" }}
         >
           <div className="min-h-full bg-[#f8fafc] px-3 pb-4 pt-3 md:px-4 lg:px-5">
-            <div className="mx-auto max-w-[1600px]">{children}</div>
+            {children}
           </div>
         </div>
       </div>

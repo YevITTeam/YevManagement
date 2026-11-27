@@ -18,6 +18,8 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Pagination } from "@/components/ui/Pagination";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 
@@ -44,6 +46,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
     const [workshopFilter, setWorkshopFilter] = useState<string>("");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:attendance/components/groups/GroupList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -69,11 +72,11 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                               group.groupNameVn.toLowerCase().includes(appliedKeyword.toLowerCase())
                       )
                     : all;
-                const computedTotalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+                const computedTotalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
                 const safePageIndex = Math.min(pageIndex, computedTotalPages);
-                const start = (safePageIndex - 1) * PAGE_SIZE;
+                const start = (safePageIndex - 1) * pageSize;
                 return {
-                    data: filtered.slice(start, start + PAGE_SIZE),
+                    data: filtered.slice(start, start + pageSize),
                     totalCount: filtered.length,
                     totalPages: computedTotalPages,
                     hasPreviousPage: safePageIndex > 1,
@@ -83,13 +86,13 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
             }
             const result = await GroupApi.getGroupPageNation({
                 pageIndex,
-                pageSize: PAGE_SIZE,
+                pageSize,
                 keyword: appliedKeyword || undefined,
                 workshopId: workshopFilter ? Number(workshopFilter) : undefined,
             });
             return { ...result, safePageIndex: pageIndex };
         },
-        [pageIndex, appliedKeyword, departmentFilter, workshopFilter],
+        [pageIndex, pageSize, appliedKeyword, departmentFilter, workshopFilter],
         (result) => {
             setGroups(result.data);
             setTotalCount(result.totalCount);
@@ -263,7 +266,7 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
@@ -323,9 +326,11 @@ const GroupList = forwardRef<ListHandle, ListToolbarProps>(function GroupList({ 
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

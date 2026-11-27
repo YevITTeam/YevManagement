@@ -18,7 +18,7 @@ export default function WorkflowManagerLayout({ children }: { children: ReactNod
           style={{ marginLeft: "var(--sidebar-w, 13.75rem)" }}
         >
           <div className="min-h-full bg-[#f8fafc] px-3 pb-4 pt-3 md:px-4 lg:px-5 print:p-0">
-            <div className="mx-auto max-w-[1600px] print:max-w-none">{children}</div>
+            {children}
           </div>
         </div>
       </div>

@@ -14,6 +14,8 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Pagination } from "@/components/ui/Pagination";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 10;
 
@@ -27,6 +29,7 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
     const [appliedKeyword, setAppliedKeyword] = useState("");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:attendance/components/ot-cases/OtCaseList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -39,8 +42,8 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
     const [isDeleting, setIsDeleting] = useState(false);
 
     const { isLoading, error, refetch: fetchOtCases } = useFetchEffect(
-        () => OtCaseApi.getOtCasePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-        [pageIndex, appliedKeyword],
+        () => OtCaseApi.getOtCasePageNation({ pageIndex, pageSize, keyword: appliedKeyword || undefined }),
+        [pageIndex, pageSize, appliedKeyword],
         (result) => {
             setOtCases(result.data);
             setTotalCount(result.totalCount);
@@ -148,7 +151,7 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
@@ -218,9 +221,11 @@ const OtCaseList = forwardRef<ListHandle, ListToolbarProps>(function OtCaseList(
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

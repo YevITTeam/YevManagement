@@ -132,25 +132,12 @@ namespace Asset.Api.Controllers
         }
 
         [RequirePermission("Asset.UsbLog.View")]
-        [HttpGet("agents")]
-        public async Task<ActionResult<ApiResponse<PagedResponse<UsbAgentDto>>>> GetAgents([FromQuery] UsbAgentFilterRequest filter)
-        {
-            var result = await _usbPolicyService.GetAgentsPagedAsync(filter);
-            return Success(result);
-        }
-
-        [RequirePermission("Asset.UsbLog.View")]
         [HttpGet("agents/{machineName}/events")]
         public async Task<ActionResult<ApiResponse<List<UsbAgentEventDto>>>> GetAgentEvents(string machineName)
         {
             var result = await _usbPolicyService.GetAgentEventsAsync(machineName);
             return Success(result);
         }
-
-        [RequirePermission("Asset.UsbLog.View")]
-        [HttpGet("agents/export")]
-        public async Task<IActionResult> ExportAgents([FromQuery] UsbAgentFilterRequest filter)
-            => File(await _usbPolicyService.ExportAgentsAsync(filter), XlsxType, $"AgentUSB_{Stamp()}.xlsx");
 
         [RequirePermission("Asset.UsbLog.Approve")]
         [HttpDelete("agents/{id:int}")]
@@ -251,6 +238,11 @@ namespace Asset.Api.Controllers
         }
 
         [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("machines/export")]
+        public async Task<IActionResult> ExportMachines([FromQuery] UsbMachineFilterRequest filter)
+            => File(await _usbLogService.ExportMachinesAsync(filter), XlsxType, $"MayTinhUSB_{Stamp()}.xlsx");
+
+        [RequirePermission("Asset.UsbLog.View")]
         [HttpGet("sessions")]
         public async Task<ActionResult<ApiResponse<PagedResponse<UsbSessionDto>>>> GetSessions([FromQuery] UsbSessionFilterRequest filter)
         {
@@ -264,8 +256,16 @@ namespace Asset.Api.Controllers
             => File(await _usbLogService.ExportSessionsAsync(filter), XlsxType, $"PhienCamUSB_{Stamp()}.xlsx");
 
         [RequirePermission("Asset.UsbLog.View")]
+        [HttpGet("files")]
+        public async Task<ActionResult<ApiResponse<PagedResponse<UsbFileSearchDto>>>> SearchFiles([FromQuery] UsbFileFilterRequest filter)
+        {
+            var result = await _usbLogService.SearchFilesPagedAsync(filter);
+            return Success(result);
+        }
+
+        [RequirePermission("Asset.UsbLog.View")]
         [HttpGet("files/export")]
-        public async Task<IActionResult> ExportFileEvents([FromQuery] UsbSessionFilterRequest filter)
+        public async Task<IActionResult> ExportFileEvents([FromQuery] UsbFileFilterRequest filter)
             => File(await _usbLogService.ExportFileEventsAsync(filter), XlsxType, $"ThaoTacFileUSB_{Stamp()}.xlsx");
 
         [RequirePermission("Asset.UsbLog.View")]

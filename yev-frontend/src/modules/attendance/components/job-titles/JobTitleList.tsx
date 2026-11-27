@@ -15,6 +15,8 @@ import type { ListHandle, ListToolbarProps } from "../list-toolbar";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { Pagination } from "@/components/ui/Pagination";
 import { useDragReorder } from "./useDragReorder";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 20;
 
@@ -28,6 +30,7 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
     const [appliedKeyword, setAppliedKeyword] = useState("");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:attendance/components/job-titles/JobTitleList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
     const [hasNextPage, setHasNextPage] = useState(false);
@@ -48,8 +51,8 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
     const [isSavingOrder, setIsSavingOrder] = useState(false);
 
     const { isLoading, error, refetch: fetchJobTitles } = useFetchEffect(
-        () => JobTitleApi.getJobTitlePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-        [pageIndex, appliedKeyword],
+        () => JobTitleApi.getJobTitlePageNation({ pageIndex, pageSize, keyword: appliedKeyword || undefined }),
+        [pageIndex, pageSize, appliedKeyword],
         (result) => {
             setJobTitles(result.data);
             setTotalCount(result.totalCount);
@@ -194,7 +197,7 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                 )}
 
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
@@ -270,9 +273,11 @@ const JobTitleList = forwardRef<ListHandle, ListToolbarProps>(function JobTitleL
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

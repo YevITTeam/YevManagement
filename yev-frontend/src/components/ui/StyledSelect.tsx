@@ -21,6 +21,8 @@ interface StyledSelectProps<T extends string | number> {
     disabled?: boolean;
     triggerClassName?: string;
     ariaLabel?: string;
+    /** Trigger text while the "" option is selected (e.g. the field name in a label-less filter); the list keeps the option's own label. */
+    emptyLabel?: string;
 }
 
 export function StyledSelect<T extends string | number>({
@@ -30,6 +32,7 @@ export function StyledSelect<T extends string | number>({
     disabled,
     triggerClassName,
     ariaLabel,
+    emptyLabel,
 }: StyledSelectProps<T>) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -57,7 +60,7 @@ export function StyledSelect<T extends string | number>({
                 className={`${triggerClassName ?? triggerBaseClassName} flex cursor-pointer items-center text-left ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
             >
                 {selected?.dotClassName && <span className={`mr-2 h-2 w-2 shrink-0 rounded-full ${selected.dotClassName}`} />}
-                <span className="flex-1 truncate">{selected?.label ?? ""}</span>
+                <span className="flex-1 truncate">{value === "" && emptyLabel ? emptyLabel : (selected?.label ?? "")}</span>
                 <ChevronDown
                     className={`pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94] transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`}
                 />

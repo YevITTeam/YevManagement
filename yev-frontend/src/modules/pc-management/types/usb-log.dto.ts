@@ -1,4 +1,4 @@
-// Read-only USB log sent by the PC agent, grouped by machine name; deviceId null = name matches no device.
+// One PC: every agent row plus PCs that only have USB history; deviceId null = name matches no device.
 export interface UsbMachineDto {
     machineName: string;
     deviceId: number | null;
@@ -10,10 +10,20 @@ export interface UsbMachineDto {
     usbDeviceCount: number;
     fileEventCount: number;
     sensitiveFileCount: number;
-    lastConnectedAt: string;
+    // null = never plugged a USB.
+    lastConnectedAt: string | null;
     isConnectedNow: boolean;
     unpermittedCount: number;
     blockedCount: number;
+    // null = no agent row (never installed or removed from the list).
+    agentId: number | null;
+    agentVersion: string | null;
+    agentFirstSeenAt: string | null;
+    agentLastSeenAt: string | null;
+    isStale: boolean;
+    // AGENT_EVENT_META key of the latest lifecycle event; null for agents before 1.3.
+    lastEventType: number | null;
+    lastEventAt: string | null;
 }
 
 export interface UsbSessionDto {
@@ -132,22 +142,6 @@ export interface UsbPolicySettingDto {
     enforceMachines: string | null;
 }
 
-export interface UsbAgentDto {
-    id: number;
-    machineName: string;
-    agentVersion: string | null;
-    windowsUser: string | null;
-    firstSeenAt: string;
-    lastSeenAt: string;
-    isStale: boolean;
-    deviceCode: string | null;
-    branchName: string | null;
-    departmentName: string | null;
-    // AGENT_EVENT_META key of the latest lifecycle event; null for agents before 1.3.
-    lastEventType: number | null;
-    lastEventAt: string | null;
-}
-
 export interface UsbAgentEventDto {
     eventType: number;
     occurredAt: string;
@@ -214,4 +208,19 @@ export interface UsbFileEventDto {
     occurredAt: string;
     // Sensitive type or >= 10 MB written to USB, or an executable copied in.
     isSensitive: boolean;
+}
+
+// One file operation found by the cross-PC file search, with the machine, user and USB it happened on.
+export interface UsbFileSearchDto extends UsbFileEventDto {
+    sessionId: string;
+    machineName: string;
+    deviceId: number | null;
+    deviceCode: string | null;
+    branchName: string | null;
+    departmentName: string | null;
+    windowsUser: string | null;
+    usbDeviceId: number;
+    usbAlias: string | null;
+    friendlyName: string | null;
+    serialNumber: string;
 }

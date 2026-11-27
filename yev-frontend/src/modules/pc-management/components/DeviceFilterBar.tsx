@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { AtSign, Building2, Calendar, ChevronDown, ChevronUp, Filter, Layers, Mail, MapPin, QrCode, Search, Tag, Truck, User, Users, X } from "lucide-react";
+import { AtSign, Building2, CalendarClock, CalendarPlus, CircleDot, Filter, Hash, Layers, Mail, MapPin, QrCode, Search, Tag, Truck, Usb, User, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BranchApi } from "@/modules/pc-management/api/branch.api";
 import type { BranchDto } from "@/modules/pc-management/types/branch.dto";
@@ -39,6 +39,8 @@ export interface DeviceFilters {
 
 export interface DeviceFilterBarProps {
     onFilter: (filters: DeviceFilters) => void;
+    // Filters the list already applies (kept across a detail-page round trip), so the inputs show them.
+    initialFilters?: DeviceFilters;
 }
 
 const defaultFilters: DeviceFilters = {
@@ -94,12 +96,14 @@ const advancedFields: (keyof DeviceFilters)[] = [
     "departmentId",
 ];
 
-const fieldClassName =
-    "h-9 w-full rounded-md border border-[#e0e3e5] bg-white px-2.5 text-sm! text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
+// Filled filters take the accent tint of an "on" chip so the applied ones stand out from the empty grid.
+const fieldClass = (active: boolean, withIcon = true) =>
+    `h-9 w-full rounded-md border px-2.5 text-sm! text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3] ${
+        withIcon ? "pl-8" : ""
+    } ${active ? "border-[#e9bcb6] bg-[#fff4f2]" : "border-[#e0e3e5] bg-white"}`;
 
-const fieldWithIconClassName = `${fieldClassName} pl-8`;
-
-const fieldLabelClassName = "mb-1 flex items-center gap-1 text-xs font-semibold text-[#5e3f3a]";
+const iconClass = (active: boolean) =>
+    `pointer-events-none absolute left-2.5 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 ${active ? "text-[#e3000f]" : "text-[#8a8f94]"}`;
 
 // Chip labels only; the API value is 0-4 or the "outsourced" sentinel (filters IsOutsourced).
 const statusChipLabels: Record<string, string> = {
@@ -111,15 +115,15 @@ const statusChipLabels: Record<string, string> = {
     outsourced: "Thuê ngoài",
 };
 
-export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
+export default function DeviceFilterBar({ onFilter, initialFilters = defaultFilters }: DeviceFilterBarProps) {
     const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
-    const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
+    const [filters, setFilters] = useState<DeviceFilters>(initialFilters);
     const [branches, setBranches] = useState<BranchDto[]>([]);
     const [deviceTypes, setDeviceTypes] = useState<DeviceTypeDto[]>([]);
     const [deviceGroups, setDeviceGroups] = useState<DeviceGroupDto[]>([]);
     const [deviceDepartments, setDeviceDepartments] = useState<DeviceDepartmentDto[]>([]);
     const isFirstRender = useRef(true);
-    const lastSubmitted = useRef<string>(JSON.stringify(defaultFilters));
+    const lastSubmitted = useRef<string>(JSON.stringify(initialFilters));
 
     useEffect(() => {
         let isCancelled = false;
@@ -211,23 +215,20 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
         onFilter(next);
     };
 
-    // On phones only the code search stays open; the other filters join the "Lọc thêm" panel.
-    const secondaryFilterClassName = `order-1 max-sm:w-full sm:order-none ${isAdvancedOpen ? "" : "max-sm:hidden"}`;
+    // The main row and the "Lọc thêm" panel share one column grid so every field lines up.
+    // Columns follow the space left beside the sidebar: 2 below lg, 4 up to 2xl, 6 on wide screens (fields stay >= ~200px).
+    const gridClassName = "grid gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-6";
+    // On phones only the code search and the buttons stay on top; the other main filters open with "Lọc thêm".
+    const secondaryClassName = `max-sm:order-1 max-sm:col-span-2 ${isAdvancedOpen ? "" : "max-sm:hidden"}`;
 
     return (
         <div>
-            <div className="flex flex-col gap-2.5">
-                <div className="flex flex-wrap items-center gap-2 sm:[&>*]:w-44">
-                    <IconInput
-                        icon={Search}
-                        value={filters.deviceCode}
-                        onChange={(value) => handleChange("deviceCode", value)}
-                        placeholder="Mã thiết bị..."
-                        className="min-w-0 flex-1 sm:w-56! sm:flex-none"
-                    />
+            <div className="flex flex-col gap-2">
+                <div className={`${gridClassName} grid-cols-[minmax(0,1fr)_auto]`}>
+                    <IconInput icon={Search} value={filters.deviceCode} onChange={(value) => handleChange("deviceCode", value)} placeholder="Mã thiết bị" />
                     <IconSelect
                         icon={Building2}
-                        className={secondaryFilterClassName}
+                        className={secondaryClassName}
                         options={branches.map((b) => ({ value: b.id, label: b.branchName, searchText: b.branchName.toLowerCase() }))}
                         value={filters.branch}
                         onChange={(value) => handleChange("branch", value)}
@@ -235,23 +236,20 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                     />
                     <IconSelect
                         icon={Tag}
-                        className={secondaryFilterClassName}
+                        className={secondaryClassName}
                         options={deviceTypes.map((dt) => ({ value: dt.id, label: dt.typeName, searchText: dt.typeName.toLowerCase() }))}
                         value={filters.deviceType}
                         onChange={(value) => handleChange("deviceType", value)}
                         placeholder="Loại thiết bị"
                     />
-                    <IconInput
-                        icon={MapPin}
-                        className={secondaryFilterClassName}
-                        value={filters.ipAddress}
-                        onChange={(value) => handleChange("ipAddress", value)}
-                        placeholder="Địa chỉ IP"
-                    />
-                    <div className={secondaryFilterClassName}>
-                    <NativeSelect
+                    <IconInput icon={MapPin} className={secondaryClassName} value={filters.ipAddress} onChange={(value) => handleChange("ipAddress", value)} placeholder="Địa chỉ IP" />
+                    <IconStyledSelect
+                        icon={CircleDot}
+                        className={secondaryClassName}
                         value={filters.status}
                         onChange={(value) => handleChange("status", value)}
+                        ariaLabel="Trạng thái"
+                        emptyLabel="Trạng thái"
                         options={[
                             { value: "", label: "Tất cả trạng thái" },
                             { value: "0", label: "Chưa sử dụng", dotClassName: "bg-[#94a3b8]" },
@@ -263,13 +261,16 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                             { value: "outsourced", label: "Thuê ngoài", dotClassName: "bg-[#2563eb]" },
                         ]}
                     />
-                    </div>
 
-                    <div className="flex items-center gap-2 sm:ml-auto! sm:w-auto!">
+                    {/* Always the last column of its row (col 2 / 4 / 6). */}
+                    <div className="flex items-center justify-end gap-2 lg:col-start-4 2xl:col-start-6">
                         <button
                             type="button"
                             onClick={() => setIsAdvancedOpen((current) => !current)}
-                            className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-[#e0e3e5] bg-white px-3 text-sm! font-semibold! text-[#191c1e] transition hover:bg-[#f8fafc] max-sm:px-2.5"
+                            aria-expanded={isAdvancedOpen}
+                            className={`flex h-9 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-3 text-sm! font-semibold! transition max-sm:px-2.5 ${
+                                isAdvancedOpen ? "border-[#e9bcb6] bg-[#fff4f2] text-[#e3000f]" : "border-[#e0e3e5] bg-white text-[#191c1e] hover:bg-[#f8fafc]"
+                            }`}
                         >
                             <Filter className="h-3.5 w-3.5" />
                             <span className="max-sm:sr-only">Lọc thêm</span>
@@ -278,7 +279,6 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                                     {advancedActiveCount}
                                 </span>
                             )}
-                            {isAdvancedOpen ? <ChevronUp className="h-3.5 w-3.5 max-sm:hidden" /> : <ChevronDown className="h-3.5 w-3.5 max-sm:hidden" />}
                         </button>
                         <button
                             type="button"
@@ -294,69 +294,58 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
                 </div>
 
                 {isAdvancedOpen && (
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-2.5 border-t border-[#e0e3e5] pt-2.5 sm:gap-x-3 lg:grid-cols-3 xl:grid-cols-5">
-                        <Field label="Người quản lý" icon={User}>
-                            <IconInput icon={User} value={filters.manager} onChange={(value) => handleChange("manager", value)} placeholder="Tên người quản lý" />
-                        </Field>
-                        <Field label="Tài khoản domain" icon={AtSign}>
-                            <IconInput icon={AtSign} value={filters.managerDomainAccount} onChange={(value) => handleChange("managerDomainAccount", value)} placeholder="YEV\nam.nguyen" />
-                        </Field>
-                        <Field label="Bộ phận" icon={Users}>
-                            <IconSelect
-                                icon={Users}
-                                options={deviceDepartments.map((d) => ({ value: d.id, label: d.departmentName, searchText: d.departmentName.toLowerCase() }))}
-                                value={filters.departmentId}
-                                onChange={(value) => handleChange("departmentId", value)}
-                                placeholder="Tất cả bộ phận"
-                            />
-                        </Field>
-                        <Field label="Nhóm" icon={Layers}>
-                            <IconSelect
-                                icon={Layers}
-                                options={deviceGroups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
-                                value={filters.groupId}
-                                onChange={(value) => handleChange("groupId", value)}
-                                placeholder="Tất cả nhóm"
-                            />
-                        </Field>
-                        <Field label="Nhà cung cấp" icon={Truck}>
-                            <IconInput icon={Truck} value={filters.supplierName} onChange={(value) => handleChange("supplierName", value)} placeholder="Tên nhà cung cấp" />
-                        </Field>
-                        <Field label="Email" icon={Mail}>
-                            <IconInput icon={Mail} value={filters.email} onChange={(value) => handleChange("email", value)} placeholder="Email" />
-                        </Field>
-                        <Field label="Số Serial" icon={Tag}>
-                            <IconInput icon={Tag} value={filters.serialNumber} onChange={(value) => handleChange("serialNumber", value)} placeholder="Số Serial" />
-                        </Field>
-                        <Field label="Ngày mua" icon={Calendar}>
-                            <input type="date" value={filters.purchaseDate} onChange={(event) => handleChange("purchaseDate", event.target.value)} className={fieldClassName} />
-                        </Field>
-                        <Field label="Hết hạn trước" icon={Calendar}>
-                            <input type="date" value={filters.expiryDate} onChange={(event) => handleChange("expiryDate", event.target.value)} className={fieldClassName} />
-                        </Field>
-
-                        <Field label="Cho phép dùng USB">
-                            <NativeSelect
-                                value={filters.isUseUsb}
-                                onChange={(value) => handleChange("isUseUsb", value)}
-                                options={[
-                                    { value: "", label: "Tất cả" },
-                                    { value: "true", label: "Có" },
-                                    { value: "false", label: "Không" },
-                                ]}
-                            />
-                        </Field>
-                        <Field label="Kiểm tra hằng ngày (QR)" icon={QrCode}>
-                            <NativeSelect
-                                value={filters.requiresDailyCheck}
-                                onChange={(value) => handleChange("requiresDailyCheck", value)}
-                                options={[
-                                    { value: "", label: "Tất cả" },
-                                    { value: "true", label: "Có — cần quét QR" },
-                                    { value: "false", label: "Không" },
-                                ]}
-                            />
-                        </Field>
+                    // White panel over the grey toolbar; -mx-2 px-2 keeps its columns aligned with the main row. 11 fields = 6 + 5 on 2xl, 4 + 4 + 3 on lg.
+                    <div className={`${gridClassName} -mx-2 grid-cols-2 rounded-lg border border-[#e0e3e5] bg-white px-2 py-2 shadow-sm`}>
+                        <IconInput icon={User} value={filters.manager} onChange={(value) => handleChange("manager", value)} placeholder="Người quản lý" />
+                        <IconInput
+                            icon={AtSign}
+                            value={filters.managerDomainAccount}
+                            onChange={(value) => handleChange("managerDomainAccount", value)}
+                            placeholder="Tài khoản domain"
+                        />
+                        <IconInput icon={Mail} value={filters.email} onChange={(value) => handleChange("email", value)} placeholder="Email" />
+                        <IconSelect
+                            icon={Users}
+                            options={deviceDepartments.map((d) => ({ value: d.id, label: d.departmentName, searchText: d.departmentName.toLowerCase() }))}
+                            value={filters.departmentId}
+                            onChange={(value) => handleChange("departmentId", value)}
+                            placeholder="Bộ phận"
+                        />
+                        <IconSelect
+                            icon={Layers}
+                            options={deviceGroups.map((g) => ({ value: g.id, label: g.groupName, searchText: g.groupName.toLowerCase() }))}
+                            value={filters.groupId}
+                            onChange={(value) => handleChange("groupId", value)}
+                            placeholder="Nhóm"
+                        />
+                        <IconInput icon={Truck} value={filters.supplierName} onChange={(value) => handleChange("supplierName", value)} placeholder="Nhà cung cấp" />
+                        <IconInput icon={Hash} value={filters.serialNumber} onChange={(value) => handleChange("serialNumber", value)} placeholder="Số serial" />
+                        <IconDate icon={CalendarPlus} placeholder="Ngày mua" value={filters.purchaseDate} onChange={(value) => handleChange("purchaseDate", value)} />
+                        <IconDate icon={CalendarClock} placeholder="Hết hạn trước" value={filters.expiryDate} onChange={(value) => handleChange("expiryDate", value)} />
+                        <IconStyledSelect
+                            icon={Usb}
+                            value={filters.isUseUsb}
+                            onChange={(value) => handleChange("isUseUsb", value)}
+                            ariaLabel="Cho phép dùng USB"
+                            emptyLabel="Quyền USB"
+                            options={[
+                                { value: "", label: "Tất cả quyền USB" },
+                                { value: "true", label: "Được dùng USB" },
+                                { value: "false", label: "Không dùng USB" },
+                            ]}
+                        />
+                        <IconStyledSelect
+                            icon={QrCode}
+                            value={filters.requiresDailyCheck}
+                            onChange={(value) => handleChange("requiresDailyCheck", value)}
+                            ariaLabel="Kiểm tra hằng ngày (QR)"
+                            emptyLabel="Kiểm tra QR"
+                            options={[
+                                { value: "", label: "Tất cả kiểm tra QR" },
+                                { value: "true", label: "Cần quét QR hằng ngày" },
+                                { value: "false", label: "Không quét QR" },
+                            ]}
+                        />
                     </div>
                 )}
 
@@ -403,15 +392,20 @@ export default function DeviceFilterBar({ onFilter }: DeviceFilterBarProps) {
 
 // Small presentational helpers so every filter cell looks identical (height, font, icon, chevron).
 
-function Field({ label, icon: Icon, children }: { label: string; icon?: LucideIcon; children: React.ReactNode }) {
+// Empty native date inputs show "mm/dd/yyyy"; hide it behind a placeholder until focused so the box reads like the others.
+function IconDate({ icon: Icon, placeholder, value, onChange }: { icon: LucideIcon; placeholder: string; value: string; onChange: (value: string) => void }) {
     return (
-        <label className="block min-w-0">
-            <span className={fieldLabelClassName}>
-                {Icon && <Icon className="h-3 w-3" />}
-                {label}
-            </span>
-            {children}
-        </label>
+        <div className="relative" title={placeholder}>
+            <Icon className={iconClass(!!value)} />
+            <input
+                type="date"
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                aria-label={placeholder}
+                className={`peer ${fieldClass(!!value)} ${value ? "" : "text-transparent! focus:text-[#191c1e]!"}`}
+            />
+            {!value && <span className="pointer-events-none absolute left-8 top-1/2 -translate-y-1/2 text-sm text-[#8a8f94] peer-focus:hidden">{placeholder}</span>}
+        </div>
     );
 }
 
@@ -430,13 +424,13 @@ function IconInput({
 }) {
     return (
         <div className={`relative ${className}`}>
-            <Icon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
+            <Icon className={iconClass(!!value)} />
             <input
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 placeholder={placeholder}
                 title={placeholder}
-                className={fieldWithIconClassName}
+                className={fieldClass(!!value)}
             />
         </div>
     );
@@ -459,26 +453,51 @@ function IconSelect({
 }) {
     return (
         <div className={`relative ${className}`}>
-            <Icon className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 text-[#8a8f94]" />
+            <Icon className={iconClass(!!value)} />
             <SearchableSelect
                 options={options}
                 value={value === "" ? "" : Number(value)}
                 onChange={(v) => onChange(v === "" ? "" : String(v))}
                 placeholder={placeholder}
-                triggerClassName={fieldWithIconClassName}
+                triggerClassName={fieldClass(!!value)}
             />
         </div>
     );
 }
 
-function NativeSelect({
+// "All" reads as a placeholder (grey) like the empty text inputs.
+function IconStyledSelect({
+    icon: Icon,
     value,
     onChange,
     options,
+    ariaLabel,
+    emptyLabel,
+    className = "",
 }: {
+    icon: LucideIcon;
     value: string;
     onChange: (value: string) => void;
     options: { value: string; label: string; dotClassName?: string }[];
+    ariaLabel: string;
+    emptyLabel: string;
+    className?: string;
 }) {
-    return <StyledSelect value={value} onChange={onChange} triggerClassName={`${fieldClassName} pr-8`} options={options} />;
+    // A picked status shows its colour dot instead of the icon, leaving room for the label.
+    const showIcon = !options.find((option) => option.value === value)?.dotClassName;
+    const baseClassName = fieldClass(!!value, showIcon);
+    const triggerClassName = value ? baseClassName : baseClassName.replace("text-[#191c1e]", "text-[#8a8f94]");
+    return (
+        <div className={`relative ${className}`}>
+            {showIcon && <Icon className={iconClass(!!value)} />}
+            <StyledSelect
+                value={value}
+                onChange={onChange}
+                options={options}
+                ariaLabel={ariaLabel}
+                emptyLabel={emptyLabel}
+                triggerClassName={`${triggerClassName} pr-8`}
+            />
+        </div>
+    );
 }

@@ -12,6 +12,8 @@ import AuditTrailDiffView from "./AuditTrailDiffView";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import type { ApiResponseWithPageNation } from "@/types/api";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { TableScroll } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 20;
 
@@ -64,6 +66,7 @@ export default function AuditTrailList({
     });
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:pc-management/components/audit-trail/AuditTrailList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -71,7 +74,7 @@ export default function AuditTrailList({
         () =>
             fetchPage({
                 pageIndex,
-                pageSize: PAGE_SIZE,
+                pageSize,
                 tableName: appliedFilters.tableName || undefined,
                 recordId: appliedFilters.recordId ? Number(appliedFilters.recordId) : undefined,
                 recordName: appliedFilters.recordName || undefined,
@@ -80,7 +83,7 @@ export default function AuditTrailList({
                 fromDate: appliedFilters.fromDate || undefined,
                 toDate: appliedFilters.toDate || undefined,
             }),
-        [pageIndex, appliedFilters],
+        [pageIndex, pageSize, appliedFilters],
         (result) => {
             setRows(result.data);
             setTotalCount(result.totalCount);
@@ -218,7 +221,7 @@ export default function AuditTrailList({
 
                 {error && <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>}
 
-                <div className="overflow-x-auto">
+                <TableScroll>
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.2em] text-[#5e3f3a]">
@@ -286,9 +289,11 @@ export default function AuditTrailList({
                             ))}
                         </tbody>
                     </table>
-                </div>
+                </TableScroll>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

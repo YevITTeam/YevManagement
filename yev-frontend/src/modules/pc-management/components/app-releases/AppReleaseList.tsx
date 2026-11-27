@@ -25,6 +25,7 @@ import { getApiErrorMessage } from "@/lib/apiError";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 
 const PAGE_SIZE = 10;
 
@@ -62,6 +63,7 @@ export default function AppReleaseList() {
     const [appliedKeyword, setAppliedKeyword] = useState("");
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:pc-management/components/app-releases/AppReleaseList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -81,8 +83,8 @@ export default function AppReleaseList() {
     );
 
     const { isLoading: isLoadingList, error, refetch: fetchReleases } = useFetchEffect(
-        () => AppReleaseApi.getAppReleasePageNation({ pageIndex, pageSize: PAGE_SIZE, keyword: appliedKeyword || undefined }),
-        [pageIndex, appliedKeyword],
+        () => AppReleaseApi.getAppReleasePageNation({ pageIndex, pageSize, keyword: appliedKeyword || undefined }),
+        [pageIndex, pageSize, appliedKeyword],
         (result) => {
             setReleases(result.data);
             setTotalCount(result.totalCount);
@@ -101,7 +103,7 @@ export default function AppReleaseList() {
     const history = releases.filter((release) => release.id !== latest?.id);
     const hiddenLatest = !appliedKeyword && latest && history.length < releases.length ? 1 : 0;
     const historyTotal = totalCount - hiddenLatest;
-    const rangeFrom = history.length === 0 ? 0 : (pageIndex - 1) * PAGE_SIZE + 1 - (pageIndex > 1 ? hiddenLatest : 0);
+    const rangeFrom = history.length === 0 ? 0 : (pageIndex - 1) * pageSize + 1 - (pageIndex > 1 ? hiddenLatest : 0);
     const rangeTo = history.length === 0 ? 0 : rangeFrom + history.length - 1;
 
     const handleSearch = () => {
@@ -329,6 +331,8 @@ export default function AppReleaseList() {
 
     const renderPager = () => (
         <Pagination
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
             pageIndex={pageIndex}
             totalPages={totalPages}
             onPageChange={setPageIndex}

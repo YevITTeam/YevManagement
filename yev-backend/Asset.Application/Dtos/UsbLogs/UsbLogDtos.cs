@@ -55,13 +55,15 @@ namespace Asset.Application.Dtos.UsbLogs
         public DateTime? ToDate { get; set; }
         public bool ConnectedNowOnly { get; set; }
         public bool SensitiveOnly { get; set; }
+        // Agents silent for 24h; PCs without an agent row never match.
+        public bool StaleOnly { get; set; }
         public int? BranchId { get; set; }
         public int? DepartmentId { get; set; }
         public string? SortBy { get; set; }
         public bool SortDesc { get; set; }
     }
 
-    // One PC that has USB activity. Grouped by MachineName so PCs that match no Device still appear.
+    // One PC: every agent row plus PCs that only have USB history. Grouped by MachineName so PCs matching no Device still appear.
     public class UsbMachineDto
     {
         public string MachineName { get; set; } = null!;
@@ -74,10 +76,20 @@ namespace Asset.Application.Dtos.UsbLogs
         public int UsbDeviceCount { get; set; }
         public int FileEventCount { get; set; }
         public int SensitiveFileCount { get; set; }
-        public DateTime LastConnectedAt { get; set; }
+        // Null = never plugged a USB.
+        public DateTime? LastConnectedAt { get; set; }
         public bool IsConnectedNow { get; set; }
         public int UnpermittedCount { get; set; }
         public int BlockedCount { get; set; }
+        // Agent side; AgentId null = no agent row (never installed or removed from the list).
+        public int? AgentId { get; set; }
+        public string? AgentVersion { get; set; }
+        public DateTime? AgentFirstSeenAt { get; set; }
+        public DateTime? AgentLastSeenAt { get; set; }
+        public bool IsStale { get; set; }
+        // UsbAgentEventType of the latest lifecycle event; null for agents before 1.3.
+        public int? LastEventType { get; set; }
+        public DateTime? LastEventAt { get; set; }
     }
 
     public class UsbSessionDto
@@ -118,5 +130,39 @@ namespace Asset.Application.Dtos.UsbLogs
         public long? SizeBytes { get; set; }
         public DateTime OccurredAt { get; set; }
         public bool IsSensitive { get; set; }
+    }
+
+    // File search across every PC: start from a leaked file, end at the machine, user and USB.
+    public class UsbFileFilterRequest
+    {
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+        // Part of the file name or path; also matches the old path of a rename/copy-in.
+        public string? Keyword { get; set; }
+        public string? Extension { get; set; }
+        public DateTime? FromDate { get; set; }
+        public DateTime? ToDate { get; set; }
+        // "out" = written to the USB (create/modify/rename), "in" = copied onto the PC, "deleted".
+        public string? Direction { get; set; }
+        public bool SensitiveOnly { get; set; }
+        public int? BranchId { get; set; }
+        public int? DepartmentId { get; set; }
+        public string? SortBy { get; set; }
+        public bool SortDesc { get; set; }
+    }
+
+    public class UsbFileSearchDto : UsbFileEventDto
+    {
+        public Guid SessionId { get; set; }
+        public string MachineName { get; set; } = null!;
+        public int? DeviceId { get; set; }
+        public string? DeviceCode { get; set; }
+        public string? BranchName { get; set; }
+        public string? DepartmentName { get; set; }
+        public string? WindowsUser { get; set; }
+        public int UsbDeviceId { get; set; }
+        public string? UsbAlias { get; set; }
+        public string? FriendlyName { get; set; }
+        public string SerialNumber { get; set; } = null!;
     }
 }

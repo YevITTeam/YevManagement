@@ -1,7 +1,7 @@
 "use client";
 
 import { Pagination } from "@/components/ui/Pagination";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ArrowDownAZ, ArrowUpAZ, ArrowRightLeft, ArrowUpDown, ChevronDown, Copy, Eye, Pencil, FileBarChart, Plus, Printer, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import RowActionsMenu, { type RowAction } from "@/components/ui/RowActionsMenu";
@@ -18,6 +18,8 @@ import type { DeviceDto, DeviceGetDto, SkippedDeviceDto } from "@/modules/pc-man
 import { getApiErrorMessage } from "@/lib/apiError";
 import { useRouter } from '@/navigation';
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { useFitViewport } from "@/components/ui/TableScroll";
 const statusLabels: Record<number, string> = {
   0: "Chưa sử dụng",
   1: "Đang sử dụng",
@@ -72,10 +74,11 @@ function incrementDeviceCode(code: string): string {
 
 
 export default function DeviceList() {
-  const [filters, setFilters] = useState<DeviceFilters>(defaultFilters);
+  // Filters, sort, page and page size survive opening a device and coming back.
+  const [filters, setFilters] = usePersistedState<DeviceFilters>("list:pc/devices:filters", defaultFilters);
   const [devices, setDevices] = useState<DeviceDto[]>([]);
-  const [pageIndex, setPageIndex] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageIndex, setPageIndex] = usePersistedState("list:pc/devices:page", 1);
+  const [pageSize, setPageSize] = usePersistedState("list:pc/devices:pageSize", 50);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -118,10 +121,10 @@ export default function DeviceList() {
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
-  // undefined = BE default (purchaseDate desc); true/false = deviceCode asc/desc.
-  const [sortDeviceCodeAscending, setSortDeviceCodeAscending] = useState<boolean | undefined>(undefined);
+  // null = BE default (purchaseDate desc); true/false = deviceCode asc/desc. null, not undefined, so it survives JSON.
+  const [sortDeviceCodeAscending, setSortDeviceCodeAscending] = usePersistedState<boolean | null>("list:pc/devices:sortCode", null);
   // Numeric IP sort; only one sort mode is active at a time.
-  const [sortIpAddressAscending, setSortIpAddressAscending] = useState<boolean | undefined>(undefined);
+  const [sortIpAddressAscending, setSortIpAddressAscending] = usePersistedState<boolean | null>("list:pc/devices:sortIp", null);
   const [transferringDevice, setTransferringDevice] = useState<{ id: number; deviceCode: string; deviceName: string } | null>(null);
   // Prefills the new device when opening Transfer from an Excel import's pendingTransfers.
   const [transferPresetNewDeviceId, setTransferPresetNewDeviceId] = useState<number | null>(null);
@@ -131,17 +134,29 @@ export default function DeviceList() {
   const [qrPrintDeviceIds, setQrPrintDeviceIds] = useState<number[] | null>(null);
 
   const toggleSortDeviceCode = () => {
-    setSortIpAddressAscending(undefined);
-    setSortDeviceCodeAscending((current) => (current === undefined ? true : current === true ? false : undefined));
+    setPageIndex(1);
+    setSortIpAddressAscending(null);
+    setSortDeviceCodeAscending((current) => (current === null ? true : current === true ? false : null));
   };
 
   const toggleSortIpAddress = () => {
-    setSortDeviceCodeAscending(undefined);
-    setSortIpAddressAscending((current) => (current === undefined ? true : current === true ? false : undefined));
+    setPageIndex(1);
+    setSortDeviceCodeAscending(null);
+    setSortIpAddressAscending((current) => (current === null ? true : current === true ? false : null));
   };
+
+  // Page reset lives in the handlers: persisted state must not be written during render.
+  const changeFilters = useCallback(
+    (next: DeviceFilters) => {
+      setPageIndex(1);
+      setFilters(next);
+    },
+    [setFilters, setPageIndex]
+  );
 
   // The table is usually wider than the screen (multi-line IP/email), so allow mouse drag to scroll horizontally.
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const tableMaxHeight = useFitViewport(scrollContainerRef);
   const [isDragScrolling, setIsDragScrolling] = useState(false);
   const dragStateRef = useRef({ startX: 0, scrollLeft: 0 });
 
@@ -166,7 +181,6 @@ export default function DeviceList() {
 
   const handleDragEnd = () => setIsDragScrolling(false);
 
-  // Reset to page 1 on filter change; snapshot compared during render instead of an effect.
   const filtersKey = JSON.stringify([
     filters.deviceCode,
     filters.manager,
@@ -187,11 +201,6 @@ export default function DeviceList() {
     sortDeviceCodeAscending,
     sortIpAddressAscending,
   ]);
-  const [prevFiltersKey, setPrevFiltersKey] = useState(filtersKey);
-  if (prevFiltersKey !== filtersKey) {
-    setPrevFiltersKey(filtersKey);
-    setPageIndex(1);
-  }
 
   // Every filter maps to a Device/grid-list query param, so filtering and paging stay server-side.
   const { isLoading, error, refetch: refetchDevices } = useFetchEffect(
@@ -217,8 +226,8 @@ export default function DeviceList() {
         status: filters.status === "" || filters.status === "outsourced" ? undefined : Number(filters.status),
         isOutsourced: filters.status === "outsourced" ? true : undefined,
         expiryDate: filters.expiryDate || undefined,
-        sortDeviceCodeAscending,
-        sortIpAddressAscending,
+        sortDeviceCodeAscending: sortDeviceCodeAscending ?? undefined,
+        sortIpAddressAscending: sortIpAddressAscending ?? undefined,
       }),
     [pageIndex, pageSize, filtersKey],
     (result) => {
@@ -476,7 +485,7 @@ export default function DeviceList() {
 
       <section className="overflow-hidden rounded-xl border border-[#e0e3e5] bg-white shadow-sm">
         <div className="border-b border-[#e0e3e5] bg-[#f8fafc] p-2.5">
-          <DeviceFilterBar onFilter={setFilters} />
+          <DeviceFilterBar initialFilters={filters} onFilter={changeFilters} />
         </div>
 
         {selectedIds.length > 0 && (
@@ -602,7 +611,7 @@ export default function DeviceList() {
           onMouseUp={handleDragEnd}
           onMouseLeave={handleDragEnd}
           className={`hidden overflow-x-auto overflow-y-auto lg:block ${isDragScrolling ? "cursor-grabbing select-none" : "cursor-grab"}`}
-          style={{ maxHeight: "calc(100vh - 250px)", minHeight: 320 }}
+          style={{ maxHeight: tableMaxHeight, minHeight: 320 }}
         >
           <table className="w-auto border-collapse text-left">
             <thead className="sticky top-0 z-10">
@@ -624,7 +633,7 @@ export default function DeviceList() {
                     title="Sắp xếp theo mã thiết bị"
                   >
                     Thiết bị
-                    {sortDeviceCodeAscending === undefined && <ArrowUpDown className="h-3.5 w-3.5" />}
+                    {sortDeviceCodeAscending === null && <ArrowUpDown className="h-3.5 w-3.5" />}
                     {sortDeviceCodeAscending === true && <ArrowDownAZ className="h-3.5 w-3.5" />}
                     {sortDeviceCodeAscending === false && <ArrowUpAZ className="h-3.5 w-3.5" />}
                   </button>
@@ -639,7 +648,7 @@ export default function DeviceList() {
                     title="Sắp xếp theo địa chỉ IP"
                   >
                     Địa chỉ IP
-                    {sortIpAddressAscending === undefined && <ArrowUpDown className="h-3.5 w-3.5" />}
+                    {sortIpAddressAscending === null && <ArrowUpDown className="h-3.5 w-3.5" />}
                     {sortIpAddressAscending === true && <ArrowDownAZ className="h-3.5 w-3.5" />}
                     {sortIpAddressAscending === false && <ArrowUpAZ className="h-3.5 w-3.5" />}
                   </button>
@@ -761,6 +770,8 @@ export default function DeviceList() {
           </table>
         </div>
         <Pagination
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
             pageIndex={pageIndex}
             totalPages={totalPages}
             onPageChange={setPageIndex}

@@ -52,6 +52,8 @@ import { ProductionEmployeeApi } from "@/modules/attendance/api/production-emplo
 import type { ProductionOptionDto } from "@/modules/attendance/types/production-employee.dto";
 import { useAuth } from "@/modules/auth/context/AuthContext";
 import { hasPermission } from "@/modules/auth/lib/permissions";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
+import { useFitViewport } from "@/components/ui/TableScroll";
 
 const PAGE_SIZE = 15;
 const filterTrigger = (width: string) =>
@@ -107,6 +109,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const showDepartmentFilter = scope === null || scope.companyWide || scope.departments.length > 0;
 
     const [pageIndex, setPageIndex] = useState(1);
+    const [pageSize, setPageSize] = usePersistedState("page-size:attendance/components/employees/EmployeeList", PAGE_SIZE);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -129,6 +132,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
     const [monthlyAccumulationImportOpen, setMonthlyAccumulationImportOpen] = useState(false);
     const { setting } = useAttendanceSetting();
     const [tableScrollRef, onTableScrollMouseDown] = useDragScroll<HTMLDivElement>();
+    const tableMaxHeight = useFitViewport(tableScrollRef);
 
     useEffect(() => {
         ProductionEmployeeApi.getTeamOptions().then(setTeamOptions).catch((err) => console.error(err));
@@ -253,7 +257,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
         () =>
             EmployeeApi.getEmployeePageNation({
                 pageIndex,
-                pageSize: PAGE_SIZE,
+                pageSize,
                 keyword: appliedKeyword || undefined,
                 departmentId: departmentId || undefined,
                 groupId: groupId || undefined,
@@ -264,7 +268,7 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 congDoan: selectedCongDoan,
                 resigned,
             }),
-        [pageIndex, appliedKeyword, departmentId, groupId, workshopId, productionLineId, teamId, shiftTeamId, selectedCongDoan, resigned],
+        [pageIndex, pageSize, appliedKeyword, departmentId, groupId, workshopId, productionLineId, teamId, shiftTeamId, selectedCongDoan, resigned],
         (result) => {
             setEmployees(result.data);
             setSelectedIds([]);
@@ -550,7 +554,12 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                     <div className="border-b border-[#e9bcb6] bg-[#fff4f2] px-4 py-3 text-sm text-[#930006]">{error}</div>
                 )}
 
-                <div ref={tableScrollRef} onMouseDown={onTableScrollMouseDown} className="cursor-grab overflow-x-auto">
+                <div
+                    ref={tableScrollRef}
+                    onMouseDown={onTableScrollMouseDown}
+                    style={{ maxHeight: tableMaxHeight }}
+                    className="cursor-grab overflow-auto [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-20"
+                >
                     <table className="min-w-full border-collapse text-left">
                         <thead>
                             <tr className="whitespace-nowrap border-b border-[#e0e3e5] bg-[#f8fafc] text-xs font-semibold uppercase tracking-[0.06em] text-[#5e3f3a]">
@@ -678,6 +687,8 @@ const EmployeeList = forwardRef<ListHandle, ListToolbarProps>(function EmployeeL
                 </div>
 
                 <Pagination
+                    pageSize={pageSize}
+                    onPageSizeChange={setPageSize}
                     pageIndex={pageIndex}
                     totalPages={totalPages}
                     onPageChange={setPageIndex}

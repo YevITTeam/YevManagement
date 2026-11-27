@@ -9,6 +9,7 @@ import { Computer, Monitor, HardDrive, Clock, RefreshCw, Download, ArrowLeft } f
 import { ReportApi } from "@/modules/pc-management/api/report.api";
 import type { DeviceReportSummaryDto } from "@/modules/pc-management/types/report.dto";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
+import { usePersistedState } from "@/modules/common/hooks/usePersistedState";
 
 // jsPDF is a few hundred KB and only needed for PDF export, so it is code-split out of the report bundle.
 const DeviceListReportPrintDialog = dynamic(() => import("./DeviceListReportPrintDialog"), { ssr: false });
@@ -185,15 +186,16 @@ export default function DeviceReport() {
 
     // Reset to page 1 on new data; snapshot compared during render instead of an effect.
     const [expiringPageIndex, setExpiringPageIndex] = useState(1);
+    const [expiringPageSize, setExpiringPageSize] = usePersistedState("page-size:pc-management/report/expiring", EXPIRING_PAGE_SIZE);
     const [prevExpiringDevices, setPrevExpiringDevices] = useState(summary.expiringDevices);
     if (prevExpiringDevices !== summary.expiringDevices) {
         setPrevExpiringDevices(summary.expiringDevices);
         setExpiringPageIndex(1);
     }
-    const expiringTotalPages = Math.max(1, Math.ceil(summary.expiringDevices.length / EXPIRING_PAGE_SIZE));
+    const expiringTotalPages = Math.max(1, Math.ceil(summary.expiringDevices.length / expiringPageSize));
     const pagedExpiringDevices = summary.expiringDevices.slice(
-        (expiringPageIndex - 1) * EXPIRING_PAGE_SIZE,
-        expiringPageIndex * EXPIRING_PAGE_SIZE
+        (expiringPageIndex - 1) * expiringPageSize,
+        expiringPageIndex * expiringPageSize
     );
 
     const kpis = [
@@ -350,8 +352,10 @@ export default function DeviceReport() {
                     </table>
                 </div>
 
-                {expiringTotalPages > 1 && (
+                {summary.expiringDevices.length > Math.min(expiringPageSize, EXPIRING_PAGE_SIZE) && (
                     <Pagination
+                        pageSize={expiringPageSize}
+                        onPageSizeChange={setExpiringPageSize}
                         pageIndex={expiringPageIndex}
                         totalPages={expiringTotalPages}
                         onPageChange={setExpiringPageIndex}

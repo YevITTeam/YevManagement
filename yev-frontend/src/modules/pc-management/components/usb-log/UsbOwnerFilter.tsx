@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import { useFetchEffect } from "@/modules/common/hooks/useFetchEffect";
 import { UsbLogApi } from "@/modules/pc-management/api/usb-log.api";
+import { fieldClassName } from "./UsbListToolbar";
 
 type Option = { value: number; label: string };
 
@@ -14,10 +15,6 @@ export type UsbOwnerOptions = { branches: Option[]; departments: Option[] };
 
 // 0 = all.
 export type UsbOwnerFilterValue = { branchId: number; departmentId: number };
-
-const fieldLabelClassName = "mb-1 block text-xs font-semibold text-[#5e3f3a]";
-const fieldClassName =
-    "h-9 w-full rounded-md border border-[#e0e3e5] bg-white px-3 pr-8 text-sm text-[#191c1e] outline-none transition focus:border-[#e3000f] focus:ring-2 focus:ring-[#ffe0e3]";
 
 // Workshops (asset Branches) and the company-wide department catalog.
 export function useUsbOwnerOptions(): UsbOwnerOptions {
@@ -37,6 +34,7 @@ export function useUsbOwnerOptions(): UsbOwnerOptions {
     return options;
 }
 
+// No label row: the "all" option carries the field name, as in the other toolbar filters.
 export function UsbOwnerFilterFields({
     options,
     value,
@@ -49,30 +47,31 @@ export function UsbOwnerFilterFields({
     const t = useTranslations("usbLog");
     return (
         <>
-            <label className="block w-[calc(50%-0.25rem)] sm:w-40">
-                <span className={fieldLabelClassName}>{t("common.branch")}</span>
+            <div className="w-[calc(50%-0.25rem)] sm:w-36">
                 <StyledSelect
                     value={value.branchId}
                     onChange={(branchId) => onChange({ ...value, branchId })}
-                    options={[{ value: 0, label: t("common.all") }, ...options.branches]}
-                    triggerClassName={fieldClassName}
+                    options={[{ value: 0, label: t("common.allBranches") }, ...options.branches]}
+                    ariaLabel={t("common.branch")}
+                    triggerClassName={`${fieldClassName} w-full pr-8`}
                 />
-            </label>
-            <label className="block w-[calc(50%-0.25rem)] sm:w-40">
-                <span className={fieldLabelClassName}>{t("common.department")}</span>
+            </div>
+            <div className="w-[calc(50%-0.25rem)] sm:w-36">
                 <StyledSelect
                     value={value.departmentId}
                     onChange={(departmentId) => onChange({ ...value, departmentId })}
-                    options={[{ value: 0, label: t("common.all") }, ...options.departments]}
-                    triggerClassName={fieldClassName}
+                    options={[{ value: 0, label: t("common.allDepartments") }, ...options.departments]}
+                    ariaLabel={t("common.department")}
+                    triggerClassName={`${fieldClassName} w-full pr-8`}
                 />
-            </label>
+            </div>
         </>
     );
 }
 
 // Workshop on top, department below; used by the USB, machine and agent tables.
 export function UsbOwnerCell({ branchName, departmentName }: { branchName: string | null; departmentName: string | null }) {
+    if (!branchName && !departmentName) return <span className="text-[#8a8f94]">-</span>;
     return (
         <>
             {branchName && <div className="whitespace-nowrap">{branchName}</div>}
